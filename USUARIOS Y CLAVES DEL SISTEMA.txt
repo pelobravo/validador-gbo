@@ -1,0 +1,54 @@
+USUARIOS = 
+    	"analista1": 
+        "nombre": "Marian Guaipo",
+        "email": "marianguaipo@grupobodeguita.com",
+        "rol": "analista",
+        "password": "cambiar123"  # CAMBIAR en primera ejecución
+    
+    	"analista2": 
+        "nombre": "Francia Mota",
+        "email": "franciamota@grupobodeguita.com",
+        "rol": "analista",
+        "password": "cambiar123"
+    
+    	"analista3": 
+        "nombre": "Carmen Villahermosa",
+        "email": "carmenvillahermosa@grupobodeguita.com",
+        "rol": "analista",
+        "password": "cambiar123"
+    
+    	"analista4": 
+        "nombre": "Aura Galán",
+        "email": "auragalan@grupobodeguita.com",
+        "rol": "analista",
+        "password": "cambiar123"
+    
+    	"analista5": 
+        "nombre": "Ismariely Gómez",
+        "email": "ismarielygomez@grupobodeguita.com",
+        "rol": "analista",
+        "password": "cambiar123"
+    
+    	"analista6": 
+        "nombre": "Mayerlin Rondón",
+        "email": "mayerlinrondon@grupobodeguita.com",
+        "rol": "analista",
+        "password": "cambiar123"
+    
+    	"supervisor1": 
+        "nombre": "Mayerlin Rondón",
+        "email": "mayerlinrondon@grupobodeguita.com",
+        "rol": "supervisor",
+        "password": "cambiar123"
+    
+    	"auditor1": 
+        "nombre": "Gabriel Palomo",
+        "email": "gabrielpalomo@grupobodeguita.com",
+        "rol": "auditor",
+        "password": "cambiar123"
+    
+    	"admin": 
+        "nombre": "Administrador",
+        "email": "carlos.marcano@grupobodeguita.com",
+        "rol": "admin",
+        "password": "admin123"  # CAMBIAR después de la primera ejecución

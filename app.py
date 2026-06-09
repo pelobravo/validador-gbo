@@ -1,0 +1,780 @@
+# app.py
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+import os
+import base64
+from PIL import Image
+import io
+
+# Importar módulos del sistema
+from config import USUARIOS, validar_carpetas
+from database import Database
+from logger import Logger
+from procesadores import ProcesadorArchivos
+from api_bcv import obtener_tasa_bcv  # NUEVA IMPORTACIÓN
+
+# Inicializar componentes
+validar_carpetas()
+db = Database()
+logger = Logger()
+
+st.set_page_config(
+    page_title="Validador de Trazabilidad Diaria",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ============================================================
+# CSS PERSONALIZADO - DISEÑO MODERNO
+# ============================================================
+st.markdown("""
+<style>
+    /* Fuente principal */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
+    
+    /* KPI cards */
+    .kpi-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 20px;
+        padding: 25px 20px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 10px 25px -5px rgba(102, 126, 234, 0.3);
+    }
+    
+    .kpi-card .label {
+        font-size: 0.85rem;
+        opacity: 0.9;
+        letter-spacing: 0.5px;
+    }
+    
+    .kpi-card .value {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-top: 8px;
+    }
+    
+    /* Tablas modernas */
+    .dataframe {
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    
+    .dataframe th {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        font-weight: 600;
+        padding: 12px;
+    }
+    
+    /* Botones principales */
+    .stButton > button {
+        border-radius: 12px;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    /* Sidebar moderna - Fondo oscuro */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+    }
+    
+    [data-testid="stSidebar"] * {
+        color: #e0e0e0;
+    }
+    
+    [data-testid="stSidebar"] .stMarkdown h1,
+    [data-testid="stSidebar"] .stMarkdown h2,
+    [data-testid="stSidebar"] .stMarkdown h3 {
+        color: white;
+    }
+    
+    /* Botones en sidebar */
+    [data-testid="stSidebar"] .stButton > button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white !important;
+        font-weight: 600;
+        border: none;
+        border-radius: 12px;
+        padding: 10px 16px;
+    }
+    
+    [data-testid="stSidebar"] .stButton > button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        color: white !important;
+    }
+    
+    /* File uploaders en sidebar */
+    [data-testid="stSidebar"] .stFileUploader label {
+        color: #e0e0e0 !important;
+    }
+    
+    [data-testid="stSidebar"] .stFileUploader p {
+        color: #a0a0a0 !important;
+    }
+    
+    /* Date input en sidebar */
+    [data-testid="stSidebar"] .stDateInput label {
+        color: #e0e0e0 !important;
+    }
+    
+    /* Subheaders en sidebar */
+    [data-testid="stSidebar"] .stSubheader {
+        color: white !important;
+    }
+    
+    /* Metric cards */
+    [data-testid="stMetric"] {
+        background: rgba(255,255,255,0.05);
+        border-radius: 16px;
+        padding: 15px;
+    }
+    
+    hr {
+        margin: 25px 0;
+        background: linear-gradient(90deg, transparent, #667eea, transparent);
+        height: 2px;
+        border: none;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ============================================================
+# SESION STATE
+# ============================================================
+if 'saldos' not in st.session_state:
+    st.session_state.saldos = {
+        'fecha_actual': None,
+        'inventario': 0,
+        'cx_c': 0,
+        'bancos': 0,
+        'cx_p': 0,
+        'transito': 0,
+        'capital_anterior': 0,
+        'historico': []
+    }
+
+if 'saldos_reportados' not in st.session_state:
+    st.session_state.saldos_reportados = {
+        'inventario': None,
+        'cx_c': None,
+        'cx_p': None,
+        'bancos': None,
+        'transito': None
+    }
+
+if 'usuario_actual' not in st.session_state:
+    st.session_state.usuario_actual = None
+
+# ============================================================
+# FUNCIONES AUXILIARES
+# ============================================================
+def cargar_ultimo_saldo_automatico():
+    """Carga automáticamente el último saldo guardado al iniciar sesión"""
+    ultimo = db.obtener_ultimo_saldo()
+    if ultimo:
+        st.session_state.saldos['inventario'] = ultimo['inventario']
+        st.session_state.saldos['cx_c'] = ultimo['cx_c']
+        st.session_state.saldos['bancos'] = ultimo['bancos']
+        st.session_state.saldos['cx_p'] = ultimo['cx_p']
+        st.session_state.saldos['transito'] = ultimo['transito']
+        st.session_state.saldos['capital_anterior'] = ultimo['capital']
+        return True
+    return False
+
+def formatear_diferencia(valor_calculado, valor_reportado):
+    if valor_reportado is None:
+        return "N/A"
+    diferencia = valor_calculado - valor_reportado
+    if abs(diferencia) < 0.01:
+        return "✅ 0,00"
+    elif diferencia > 0:
+        return f"📈 +{diferencia:,.2f}"
+    else:
+        return f"📉 {diferencia:,.2f}"
+
+def extraer_transito_reportado(df, transito_inicial):
+    try:
+        if 'Crédito' in df.columns:
+            total_ingresos = df['Crédito'].sum()
+            return transito_inicial + total_ingresos
+        else:
+            return None
+    except:
+        return None
+
+def mostrar_tabla_activos_pasivos(inventario, cx_c, bancos, cx_p, transito, capital):
+    total_activos = inventario + cx_c + bancos
+    total_pasivos = cx_p + transito
+    
+    html = f"""
+    <style>
+        .activos-pasivos-table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-family: 'Inter', sans-serif;
+        }}
+        .activos-pasivos-table th {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            text-align: center;
+            font-size: 1rem;
+        }}
+        .activos-pasivos-table td {{
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+        }}
+        .activos-pasivos-table .activos-col {{
+            background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+            vertical-align: top;
+            width: 50%;
+            border-radius: 12px 0 0 12px;
+        }}
+        .activos-pasivos-table .pasivos-col {{
+            background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+            vertical-align: top;
+            width: 50%;
+            border-radius: 0 12px 12px 0;
+        }}
+        .activos-pasivos-table .capital-row {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: white;
+        }}
+        .valor {{
+            font-weight: bold;
+            text-align: right;
+        }}
+        .titulo-cuenta {{
+            font-weight: 500;
+        }}
+    </style>
+    
+    <table class="activos-pasivos-table">
+        <tr><th colspan="2">📊 ACTIVOS</th><th colspan="2">📋 PASIVOS</th></tr>
+        <tr>
+            <td class="activos-col" style="width: 50%;">
+                <table style="width: 100%; border: none;">
+                    <tr><td class="titulo-cuenta">📦 Inventario</td><td class="valor">{inventario:,.2f}</td></tr>
+                    <tr><td class="titulo-cuenta">💰 Cuentas por cobrar</td><td class="valor">{cx_c:,.2f}</td></tr>
+                    <tr><td class="titulo-cuenta">🏦 Bancos</td><td class="valor">{bancos:,.2f}</td></tr>
+                    <tr style="border-top: 2px solid #a5d6a7;">
+                        <td class="titulo-cuenta"><strong>📌 TOTAL ACTIVOS</strong></td>
+                        <td class="valor"><strong>{total_activos:,.2f}</strong></td>
+                    </tr>
+                </table>
+            </td>
+            <td class="pasivos-col" style="width: 50%;">
+                <table style="width: 100%; border: none;">
+                    <tr><td class="titulo-cuenta">📋 Cuentas por pagar</td><td class="valor">{cx_p:,.2f}</td></tr>
+                    <tr><td class="titulo-cuenta">🔄 Transferencias en tránsito</td><td class="valor">{transito:,.2f}</td></tr>
+                    <tr style="border-top: 2px solid #ffe0b2;">
+                        <td class="titulo-cuenta"><strong>📌 TOTAL PASIVOS</strong></td>
+                        <td class="valor"><strong>{total_pasivos:,.2f}</strong></td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        <tr class="capital-row">
+            <td colspan="4" style="text-align: center; padding: 15px;">
+                🏁 CAPITAL DE TRABAJO NETO = {capital:,.2f}
+            </td>
+        </tr>
+    </table>
+    """
+    return html
+
+# ============================================================
+# LOGIN CON LOGO Y TÍTULO CENTRADO
+# ============================================================
+def mostrar_login():
+    with st.container():
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        
+        # Logo centrado
+        try:
+            img = Image.open("auditoria.jpeg")
+            img.thumbnail((200, 200))
+            buffered = io.BytesIO()
+            img.save(buffered, format="JPEG")
+            img_str = base64.b64encode(buffered.getvalue()).decode()
+            
+            st.markdown(
+                f"""
+                <div style="display: flex; justify-content: center; margin-bottom: 20px;">
+                    <img src="data:image/jpeg;base64,{img_str}" style="width: 160px; height: auto;">
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+        except:
+            st.markdown("<h1 style='text-align: center;'>AUDITORÍA</h1>", unsafe_allow_html=True)
+        
+        # Título principal
+        st.markdown("""
+        <div style="text-align: center;">
+            <h1 style="font-size: 2.2rem; font-weight: 700; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                       -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                SISTEMA CONTABLE DE VALIDACIÓN
+            </h1>
+            <h3 style="color: #666; font-weight: 400;">GRUPO BODEGUITA ORIENTE</h3>
+            <hr style="margin: 25px auto; width: 80px; height: 3px; background: linear-gradient(90deg, #667eea, #764ba2); border: none;">
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Formulario de login
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown("""
+            <div style="background: white; border-radius: 24px; padding: 30px; box-shadow: 0 20px 35px -10px rgba(0,0,0,0.1);">
+                <h3 style="text-align: center; color: #333; margin-bottom: 25px;">🔐 Iniciar Sesión</h3>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            with st.container():
+                usuario_id = st.text_input("Usuario", key="login_usuario", placeholder="Ingrese su usuario")
+                password = st.text_input("Contraseña", type="password", key="login_password", placeholder="Ingrese su contraseña")
+                
+                if st.button("Ingresar", use_container_width=True):
+                    if usuario_id in USUARIOS and USUARIOS[usuario_id]["password"] == password:
+                        st.session_state.usuario_actual = usuario_id
+                        st.rerun()
+                    else:
+                        st.error("Usuario o contraseña incorrectos")
+        
+        st.markdown("<br><br>", unsafe_allow_html=True)
+
+if st.session_state.usuario_actual is None:
+    mostrar_login()
+    st.stop()
+
+# ============================================================
+# CARGAR AUTOMÁTICAMENTE EL ÚLTIMO SALDO GUARDADO
+# ============================================================
+if cargar_ultimo_saldo_automatico():
+    st.sidebar.success("✅ Saldos del día anterior cargados automáticamente")
+else:
+    st.sidebar.info("📌 No hay saldos previos. Guarde los saldos al finalizar el día.")
+
+# ============================================================
+# SIDEBAR MODERNA
+# ============================================================
+with st.sidebar:
+    st.markdown("""
+    <div style="text-align: center; margin-bottom: 20px;">
+        <h3 style="color: white;">📊 VALIDADOR</h3>
+        <p style="font-size: 0.8rem; opacity: 0.7;">Trazabilidad Diaria</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    st.markdown(f"**👤 Usuario:** {USUARIOS[st.session_state.usuario_actual]['nombre']}")
+    st.markdown(f"**📋 Rol:** {USUARIOS[st.session_state.usuario_actual]['rol']}")
+    
+    st.markdown("---")
+    
+    if st.button("🚪 Cerrar Sesión", use_container_width=True):
+        st.session_state.usuario_actual = None
+        st.rerun()
+    
+    st.markdown("---")
+    
+    # Título de carga
+    st.markdown("### 📁 Carga de Archivos")
+    
+    fecha_procesar = st.date_input("📅 Fecha a procesar", datetime.now())
+    
+    # ============================================================
+    # GUARDAR Y MOSTRAR TASA BCV
+    # ============================================================
+    fecha_str = fecha_procesar.strftime("%Y-%m-%d")
+    
+    tasa_guardada = db.obtener_tasa_bcv(fecha_str)
+    
+    tasa_bcv = st.sidebar.number_input(
+        "💵 Tasa BCV",
+        value=float(tasa_guardada or 1),  # Cambiado: usa 1 como valor por defecto si no hay tasa
+        step=0.0001,
+        format="%.4f"
+    )
+    
+    db.guardar_tasa_bcv(
+        fecha_str,
+        tasa_bcv
+    )
+    
+    # Mostrar mensaje cuando no existe tasa
+    if tasa_guardada is None:
+        st.sidebar.warning(
+            "No hay tasa BCV registrada para esta fecha"
+        )
+    
+    st.markdown("---")
+    
+    st.markdown("#### 📂 Archivos del día")
+    
+    archivo_facturacion = st.file_uploader("Facturación diaria", type=["xlsx", "xls"], key="fact")
+    archivo_cobranzas = st.file_uploader("Cobranzas procesadas", type=["xlsx", "xls"], key="cob")
+    archivo_recepciones = st.file_uploader("Recepciones del día", type=["xlsx", "xls"], key="rec")
+    archivo_egresos = st.file_uploader("Egresos iPago", type=["xlsx", "xls"], key="egr")
+    archivo_estado_cuenta = st.file_uploader("Estado de cuenta bancario", type=["xlsx", "xls"], key="estado")
+    archivo_notas_credito_cliente = st.file_uploader("Notas de crédito (clientes)", type=["xlsx", "xls"], key="notas_cliente")
+    archivo_notas_credito_proveedor = st.file_uploader("Notas de crédito (proveedores)", type=["xlsx", "xls"], key="notas_proveedor")
+    
+    st.markdown("#### 📂 Archivos de verificación")
+    
+    archivo_cxc_reportado = st.file_uploader("CxC final reportado", type=["xlsx", "xls"], key="cxc_rep")
+    archivo_cxp_reportado = st.file_uploader("CxP final reportado", type=["xlsx", "xls"], key="cxp_rep")
+    archivo_inventario_reportado = st.file_uploader("Inventario final reportado", type=["xlsx", "xls"], key="inv_rep")
+    archivo_tb = st.file_uploader("TB.xlsx (Transferencias)", type=["xlsx", "xls"], key="tb")
+    
+    st.markdown("---")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Cargar Día Anterior", use_container_width=True):
+            ultimo = db.obtener_ultimo_saldo()
+            if ultimo:
+                st.session_state.saldos['inventario'] = ultimo['inventario']
+                st.session_state.saldos['cx_c'] = ultimo['cx_c']
+                st.session_state.saldos['bancos'] = ultimo['bancos']
+                st.session_state.saldos['cx_p'] = ultimo['cx_p']
+                st.session_state.saldos['transito'] = ultimo['transito']
+                st.success("✅ Saldos cargados del día anterior")
+            else:
+                st.warning("No hay historial de días anteriores")
+    
+    with col2:
+        if st.button("🧹 Resetear", use_container_width=True):
+            st.session_state.saldos['inventario'] = 0
+            st.session_state.saldos['cx_c'] = 0
+            st.session_state.saldos['bancos'] = 0
+            st.session_state.saldos['cx_p'] = 0
+            st.session_state.saldos['transito'] = 0
+            st.success("✅ Saldos reseteados a 0")
+
+# ============================================================
+# INTERFAZ PRINCIPAL
+# ============================================================
+st.markdown("""
+<div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="font-size: 2rem; font-weight: 700;">📊 Validador de Trazabilidad Diaria</h1>
+    <p style="color: #666; font-size: 1rem;">Capital de Trabajo Neto Operativo</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ============================================================
+# PROCESAMIENTO PRINCIPAL
+# ============================================================
+if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo_egresos and archivo_estado_cuenta:
+    
+    st.markdown(f"### 📈 Resultados de la Validación")
+    st.markdown(f"**📅 Fecha procesada:** {fecha_procesar.strftime('%Y-%m-%d')}")
+    
+    # Saldos iniciales
+    st.markdown("#### 📌 Saldos Iniciales")
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        st.metric("📦 Inventario", f"{st.session_state.saldos['inventario']:,.2f}")
+    with col2:
+        st.metric("💰 CxC", f"{st.session_state.saldos['cx_c']:,.2f}")
+    with col3:
+        st.metric("🏦 Bancos", f"{st.session_state.saldos['bancos']:,.2f}")
+    with col4:
+        st.metric("📋 CxP", f"{st.session_state.saldos['cx_p']:,.2f}")
+    with col5:
+        st.metric("🔄 Tránsito", f"{st.session_state.saldos['transito']:,.2f}")
+    
+    st.markdown("---")
+    
+    # Leer archivos de movimientos
+    df_facturacion = pd.read_excel(archivo_facturacion)
+    df_cobranzas = pd.read_excel(archivo_cobranzas)
+    df_recepciones = pd.read_excel(archivo_recepciones)
+    df_egresos = pd.read_excel(archivo_egresos)
+    df_estado_cuenta = pd.read_excel(archivo_estado_cuenta)
+    
+    # Archivos de verificación
+    saldos_reportados = {}
+    
+    if archivo_cxc_reportado:
+        df_cxc_rep = pd.read_excel(archivo_cxc_reportado)
+        saldos_reportados['Cuentas por cobrar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxc_rep, 'cxc')
+    
+    if archivo_cxp_reportado:
+        df_cxp_rep = pd.read_excel(archivo_cxp_reportado)
+        saldos_reportados['Cuentas por pagar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxp_rep, 'cxp')
+    
+    if archivo_inventario_reportado:
+        df_inv_rep = pd.read_excel(archivo_inventario_reportado)
+        saldos_reportados['Inventario'] = ProcesadorArchivos.extraer_saldo_reportado(df_inv_rep, 'inventario')
+    
+    if archivo_tb:
+        df_tb = pd.read_excel(archivo_tb)
+        transito_reportado = extraer_transito_reportado(df_tb, st.session_state.saldos['transito'])
+        if transito_reportado is not None:
+            saldos_reportados['Transferencias en tránsito'] = transito_reportado
+    
+    # Notas de crédito
+    notas_credito_cliente = 0
+    if archivo_notas_credito_cliente:
+        df_notas_cliente = pd.read_excel(archivo_notas_credito_cliente)
+        notas_credito_cliente, _, _ = ProcesadorArchivos.procesar_notas_credito(df_notas_cliente)
+    
+    notas_credito_proveedor = 0
+    if archivo_notas_credito_proveedor:
+        df_notas_proveedor = pd.read_excel(archivo_notas_credito_proveedor)
+        notas_credito_proveedor, _, _ = ProcesadorArchivos.procesar_notas_credito(df_notas_proveedor)
+    
+    # Procesar movimientos
+    facturacion, costo_facturacion, _, _ = ProcesadorArchivos.procesar_facturacion(df_facturacion)
+    cobranzas, _, _ = ProcesadorArchivos.procesar_cobranzas(df_cobranzas)
+    recepcion_total, compras_credito, _, _ = ProcesadorArchivos.procesar_recepciones(df_recepciones)
+    pagos_proveedores, pagos_gastos, _, _ = ProcesadorArchivos.procesar_egresos(df_egresos)
+    ingresos_id, ingresos_no_id, egresos_bancarios, saldo_bancario_reportado, _, _ = ProcesadorArchivos.procesar_estado_cuenta(
+        df_estado_cuenta, st.session_state.saldos['bancos']
+    )
+    
+    ingresos_totales = ingresos_id + ingresos_no_id
+    saldos_reportados['Bancos'] = saldo_bancario_reportado
+    
+    # ============================================================
+    # TABLA 1: MOVIMIENTOS DEL DÍA
+    # ============================================================
+    st.markdown("#### 📋 Movimientos del día procesados")
+    
+    mov_data = {
+        "Concepto": ["Facturación", "Costo de facturación", "Cobranzas", "Notas crédito (clientes)",
+                     "Recepción mercancía", "Compras a crédito", "Pagos a proveedores", "Pagos de gastos",
+                     "Notas crédito (proveedores)", "Ingresos identificados", "Ingresos no identificados"],
+        "Monto": [f"{facturacion:,.2f}", f"{costo_facturacion:,.2f}", f"{cobranzas:,.2f}", f"{notas_credito_cliente:,.2f}",
+                  f"{recepcion_total:,.2f}", f"{compras_credito:,.2f}", f"{pagos_proveedores:,.2f}", f"{pagos_gastos:,.2f}",
+                  f"{notas_credito_proveedor:,.2f}", f"{ingresos_id:,.2f}", f"{ingresos_no_id:,.2f}"]
+    }
+    st.dataframe(pd.DataFrame(mov_data), use_container_width=True, hide_index=True)
+    
+    st.markdown("---")
+    
+    # ============================================================
+    # CÁLCULOS Y VALIDACIONES
+    # ============================================================
+    inventario_calculado = st.session_state.saldos['inventario'] + recepcion_total - costo_facturacion
+    cx_c_calculado = st.session_state.saldos['cx_c'] + facturacion - cobranzas - notas_credito_cliente
+    bancos_calculado = st.session_state.saldos['bancos'] + ingresos_totales - pagos_proveedores - pagos_gastos
+    cx_p_calculado = st.session_state.saldos['cx_p'] + compras_credito - pagos_proveedores - notas_credito_proveedor
+    transito_calculado = st.session_state.saldos['transito'] + ingresos_totales - cobranzas
+    capital_calculado = (inventario_calculado + cx_c_calculado + bancos_calculado) - (cx_p_calculado + transito_calculado)
+    
+    # ============================================================
+    # ACTIVOS vs PASIVOS
+    # ============================================================
+    st.markdown("#### 📊 Estructura del Capital de Trabajo")
+    html_table = mostrar_tabla_activos_pasivos(
+        inventario_calculado, cx_c_calculado, bancos_calculado, 
+        cx_p_calculado, transito_calculado, capital_calculado
+    )
+    st.markdown(html_table, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # ============================================================
+    # TABLA COMPARATIVA CON REPORTADOS
+    # ============================================================
+    st.markdown("#### 📋 Comparación vs Valores Reportados")
+    
+    resultados_data = []
+    cuentas = ["Inventario", "Cuentas por cobrar", "Bancos", "Cuentas por pagar", "Transferencias en tránsito", "Capital de Trabajo Neto"]
+    valores_calc = [inventario_calculado, cx_c_calculado, bancos_calculado, cx_p_calculado, transito_calculado, capital_calculado]
+    formulas = [
+        "Inv. inicial + Recepción - Costo facturación",
+        "CxC inicial + Facturación - Cobranzas - Notas crédito clientes",
+        "Bancos inicial + Ingresos - (Pagos proveedores + Gastos)",
+        "CxP inicial + Compras crédito - Pagos proveedores - Notas crédito proveedores",
+        "Tránsito inicial + Ingresos del día - Cobranzas",
+        "(Inv + CxC + Bancos) - (CxP + Tránsito)"
+    ]
+    
+    for cuenta, calc, formula in zip(cuentas, valores_calc, formulas):
+        rep = saldos_reportados.get(cuenta)
+        diff = formatear_diferencia(calc, rep)
+        resultados_data.append({
+            "Cuenta": cuenta,
+            "Fórmula": formula,
+            "Calculado": f"{calc:,.2f}",
+            "Reportado": f"{rep:,.2f}" if rep is not None else "-",
+            "Diferencia": diff
+        })
+    
+    st.dataframe(pd.DataFrame(resultados_data), use_container_width=True, hide_index=True)
+    
+    st.markdown("---")
+    
+    # ============================================================
+    # VALIDACIONES CRUZADAS
+    # ============================================================
+    st.markdown("#### ✅ Validaciones Cruzadas")
+    
+    diff_bancos = bancos_calculado - saldo_bancario_reportado
+    if abs(diff_bancos) > 0.01:
+        st.error(f"❌ **Bancos**: Diferencia de {abs(diff_bancos):,.2f} Bs.")
+    else:
+        st.success(f"✅ **Bancos**: Coincide")
+    
+    if cobranzas > st.session_state.saldos['cx_c'] + facturacion:
+        st.warning(f"⚠️ **CxC**: Cobranzas ({cobranzas:,.2f}) superan saldo disponible")
+    
+    if pagos_proveedores > st.session_state.saldos['cx_p'] + compras_credito:
+        st.warning(f"⚠️ **CxP**: Pagos ({pagos_proveedores:,.2f}) superan saldo disponible")
+    
+    if transito_calculado >= 0:
+        st.success(f"✅ **Transferencias**: Saldo positivo ({transito_calculado:,.2f})")
+    else:
+        st.error(f"❌ **Transferencias**: Saldo negativo ({transito_calculado:,.2f})")
+    
+    st.info(f"ℹ️ **Ingresos bancarios totales**: {ingresos_totales:,.2f} Bs. (Identificados: {ingresos_id:,.2f})")
+    
+    st.markdown("---")
+    
+    # ============================================================
+    # KPI - RESUMEN DEL DÍA
+    # ============================================================
+    st.markdown("#### 📊 Resumen del Día")
+    
+    capital_anterior = st.session_state.saldos.get('capital_anterior', capital_calculado)
+    var_capital = capital_calculado - capital_anterior
+    
+    col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
+    
+    with col_kpi1:
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="label">🏁 CAPITAL DE TRABAJO NETO</div>
+            <div class="value">{capital_calculado:,.2f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col_kpi2:
+        arrow = "📉" if var_capital < 0 else "📈"
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="label">{arrow} VARIACIÓN DEL CAPITAL</div>
+            <div class="value">{var_capital:,.2f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col_kpi3:
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="label">🔄 TRANSFERENCIAS EN TRÁNSITO</div>
+            <div class="value">{transito_calculado:,.2f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # ============================================================
+    # BOTONES DE ACCIÓN
+    # ============================================================
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if st.button("💾 Guardar saldos calculados", use_container_width=True):
+            saldos_guardar = {
+                'inventario': inventario_calculado,
+                'cx_c': cx_c_calculado,
+                'bancos': bancos_calculado,
+                'cx_p': cx_p_calculado,
+                'transito': transito_calculado,
+                'capital': capital_calculado
+            }
+            db.guardar_saldos(fecha_procesar.strftime('%Y-%m-%d'), saldos_guardar)
+            st.session_state.saldos['inventario'] = inventario_calculado
+            st.session_state.saldos['cx_c'] = cx_c_calculado
+            st.session_state.saldos['bancos'] = bancos_calculado
+            st.session_state.saldos['cx_p'] = cx_p_calculado
+            st.session_state.saldos['transito'] = transito_calculado
+            st.session_state.saldos['capital_anterior'] = capital_calculado
+            st.success("✅ Saldos guardados correctamente")
+    
+    with col_btn2:
+        if st.button("📜 Ver historial", use_container_width=True):
+            historial = db.obtener_historial_saldos(10)
+            if not historial.empty:
+                st.dataframe(historial, use_container_width=True)
+            else:
+                st.info("No hay historial aún")
+    
+    # ============================================================
+    # REGLAS DE NEGOCIO
+    # ============================================================
+    with st.expander("📌 Reglas de negocio aplicadas"):
+        st.markdown("""
+        | Movimiento | Efecto |
+        |------------|--------|
+        | Recepción de mercancía | Aumenta inventario |
+        | Costo de facturación | Disminuye inventario |
+        | Cobranzas | Disminuye CxC / Aumenta bancos |
+        | Notas de crédito (clientes) | Disminuye CxC |
+        | Notas de crédito (proveedores) | Disminuye CxP |
+        | Pagos a proveedores | Disminuye CxP / Disminuye bancos |
+        | Pagos de gastos | Disminuye bancos (NO afecta CxP) |
+        | Ingreso no identificado | Aumenta bancos / Aumenta transferencias en tránsito |
+        
+        **Fórmulas clave:**  
+        🔄 Transferencias en tránsito = Tránsito inicial + Ingresos del día - Cobranzas  
+        📋 Cuentas por pagar = CxP inicial + Compras crédito - Pagos proveedores - Notas crédito proveedores
+        """)
+
+else:
+    st.info("👈 Carga todos los archivos del día en la barra lateral para comenzar la validación")
+    
+    with st.expander("📋 Formatos esperados de los archivos"):
+        st.markdown("""
+        ### Facturación diaria
+        | documento | cliente | monto_factura | costo_venta |
+        |-----------|---------|---------------|-------------|
+        | FAC001 | Cliente A | 1000.00 | 600.00 |
+        
+        ### Cobranzas procesadas
+        | documento | cliente | monto_cobranza | fecha_aplicacion |
+        |-----------|---------|----------------|------------------|
+        | COB001 | Cliente A | 500.00 | 2026-06-05 |
+        
+        ### Recepciones del día
+        | documento | proveedor | monto_recepcion | fecha | tipo_compra |
+        |-----------|-----------|-----------------|-------|-------------|
+        | REC001 | Proveedor X | 2000.00 | 2026-06-05 | credito |
+        
+        ### Egresos iPago
+        | documento | beneficiario | monto | tipo |
+        |-----------|--------------|-------|------|
+        | PAG001 | Proveedor X | 1000.00 | proveedor |
+        | PAG002 | Electricidad | 150.00 | gasto |
+        
+        ### Estado de cuenta bancario
+        | fecha | descripcion | ingreso | egreso | saldo_final |
+        |-------|-------------|---------|--------|-------------|
+        | 2026-06-05 | Cobro cliente | 500.00 | 0 | 5000.00 |
+        | 2026-06-05 | Pago proveedor | 0 | 1000.00 | 4000.00 |
+        
+        ### TB.xlsx (Transferencias en tránsito)
+        Archivo con los movimientos bancarios para calcular ingresos no identificados.
+        """)
+
+st.markdown("---")
+st.caption("✨ Validador de Trazabilidad Diaria - Capital de Trabajo Neto Operativo | Grupo Bodeguita Oriente")

@@ -1,0 +1,10 @@
+USUARIO,ROL,NOMBRE_COMPLETO,EMAIL
+analista1,analista,Marian Guaipo,marianguaipo@grupobodeguita.com
+analista2,analista,Francia Mota,franciamota@grupobodeguita.com
+analista3,analista,Carmen Villahermosa,carmenvillahermosa@grupobodeguita.com
+analista4,analista,Aura Galán,auragalan@grupobodeguita.com
+analista5,analista,Ismariely Gómez,ismarielygomez@grupobodeguita.com
+analista6,analista,Mayerlin Rondón,mayerlinrondon@grupobodeguita.com
+supervisor1,supervisor,Mayerlin Rondón,mayerlinrondon@grupobodeguita.com
+auditor1,auditor,Gabriel Palomo,gabrielpalomo@grupobodeguita.com
+admin,admin,Administrador,carlos.marcano@grupobodeguita.com

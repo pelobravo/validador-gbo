@@ -1,0 +1,6 @@
+2026-06-03 16:20:58 | USUARIO: analista1 | ACCIÓN: LOGIN | Inicio de sesión exitoso | RESULTADO: EXITOSO
+2026-06-04 10:19:27 | USUARIO: analista1 | ACCIÓN: LOGIN | Inicio de sesión exitoso | RESULTADO: EXITOSO
+2026-06-05 14:32:07 | USUARIO: analista1 | ACCIÓN: LOGIN | Inicio de sesión exitoso | RESULTADO: EXITOSO
+2026-06-05 15:19:49 | USUARIO: analista1 | ACCIÓN: LOGIN | Inicio de sesión exitoso | RESULTADO: EXITOSO
+2026-06-05 15:40:30 | USUARIO: analista1 | ACCIÓN: LOGOUT | Cierre de sesión | RESULTADO: EXITOSO
+2026-06-05 15:41:04 | USUARIO: analista1 | ACCIÓN: LOGIN | Inicio de sesión exitoso | RESULTADO: EXITOSO
