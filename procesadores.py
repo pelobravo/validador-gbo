@@ -1,11 +1,71 @@
 # procesadores.py - Versión flexible con búsqueda inteligente de columnas
 # y soporte para archivos del Analista 3 (reportes SAP)
+# con conversión de números en formato europeo (coma decimal)
 
 import pandas as pd
 import re
 import numpy as np
 
 class ProcesadorArchivos:
+    
+    @staticmethod
+    def _convertir_numero_europeo(valor):
+        """
+        Convierte un número con formato europeo (coma decimal, punto separador de miles)
+        a float.
+        
+        Ejemplos:
+        - "154.930,00" → 154930.00
+        - "3.704,30" → 3704.30
+        - "1.234,56" → 1234.56
+        - "0,00" → 0.00
+        - "154,930.00" → 154930.00 (formato inglés, también lo maneja)
+        - "154930.00" → 154930.00
+        """
+        if valor is None or pd.isna(valor):
+            return np.nan
+        
+        # Si ya es número, retornar directamente
+        if isinstance(valor, (int, float)):
+            return float(valor)
+        
+        valor_str = str(valor).strip()
+        
+        # Si está vacío, retornar NaN
+        if not valor_str:
+            return np.nan
+        
+        # Remover símbolos de moneda y espacios
+        valor_str = valor_str.replace('$', '').replace('Bs.', '').replace(' ', '').strip()
+        
+        # Detectar si tiene formato europeo (punto como separador de miles, coma decimal)
+        tiene_punto_miles = '.' in valor_str and ',' in valor_str
+        tiene_coma_decimal = ',' in valor_str
+        
+        try:
+            if tiene_coma_decimal:
+                # Formato europeo: 1.234,56 o 154.930,00
+                # Eliminar puntos (separadores de miles)
+                # Reemplazar coma por punto (separador decimal)
+                valor_limpio = valor_str.replace('.', '').replace(',', '.')
+                return float(valor_limpio)
+            else:
+                # Formato inglés: 1,234.56 o 154,930.00
+                # Eliminar comas (separadores de miles)
+                valor_limpio = valor_str.replace(',', '')
+                return float(valor_limpio)
+        except (ValueError, TypeError):
+            try:
+                # Último intento: eliminar todo lo que no sea número, punto o coma
+                valor_limpio = re.sub(r'[^\d.,-]', '', valor_str)
+                if ',' in valor_limpio and '.' in valor_limpio:
+                    # Si tiene ambos, asumir formato europeo
+                    valor_limpio = valor_limpio.replace('.', '').replace(',', '.')
+                elif ',' in valor_limpio:
+                    valor_limpio = valor_limpio.replace(',', '.')
+                return float(valor_limpio)
+            except:
+                return np.nan
     
     @staticmethod
     def _buscar_columna(df, *nombres_posibles):
@@ -66,6 +126,7 @@ class ProcesadorArchivos:
     def _extraer_valor(df, columna, *nombres_alternativos):
         """
         Extrae el valor de una columna, probando varios nombres alternativos.
+        Ahora soporta números con formato europeo (coma decimal).
         
         Args:
             df: DataFrame de pandas
@@ -78,10 +139,18 @@ class ProcesadorArchivos:
         col = ProcesadorArchivos._buscar_columna(df, columna, *nombres_alternativos)
         if col and not df[col].empty:
             try:
-                # Limpiar datos y convertir a numérico
-                valores = df[col].replace([None, 'None', '', 'NULL'], np.nan)
-                valores = pd.to_numeric(valores, errors='coerce').fillna(0)
-                return float(valores.sum())
+                # Limpiar datos y convertir a numérico con soporte para formato europeo
+                valores = []
+                for val in df[col]:
+                    if pd.isna(val) or val is None or val == '' or val == 'NULL':
+                        valores.append(0.0)
+                    else:
+                        num = ProcesadorArchivos._convertir_numero_europeo(val)
+                        if pd.isna(num):
+                            valores.append(0.0)
+                        else:
+                            valores.append(num)
+                return float(sum(valores))
             except:
                 return 0.0
         return 0.0
@@ -90,6 +159,7 @@ class ProcesadorArchivos:
     def _extraer_valor_por_filtro(df, columna_monto, columna_filtro, valor_filtro, *nombres_alternativos_monto):
         """
         Extrae valores filtrados por una condición.
+        Ahora soporta números con formato europeo (coma decimal).
         
         Args:
             df: DataFrame de pandas
@@ -108,17 +178,24 @@ class ProcesadorArchivos:
             return 0.0
         
         try:
-            # Limpiar datos
-            valores = df[monto_col].replace([None, 'None', '', 'NULL'], np.nan)
-            valores = pd.to_numeric(valores, errors='coerce').fillna(0)
+            # Limpiar datos usando la función de conversión europea
+            valores = []
+            for val in df[monto_col]:
+                if pd.isna(val) or val is None or val == '' or val == 'NULL':
+                    valores.append(0.0)
+                else:
+                    num = ProcesadorArchivos._convertir_numero_europeo(val)
+                    if pd.isna(num):
+                        valores.append(0.0)
+                    else:
+                        valores.append(num)
             
             if filtro_col:
-                # Convertir filtro a string para comparación
                 filtro_str = df[filtro_col].astype(str).str.lower()
                 mascara = filtro_str.str.contains(valor_filtro, na=False, case=False)
-                return float(valores[mascara].sum())
+                return float(sum([valores[i] for i, m in enumerate(mascara) if m]))
             else:
-                return float(valores.sum())
+                return float(sum(valores))
         except:
             return 0.0
     
@@ -219,14 +296,14 @@ class ProcesadorArchivos:
         facturacion = ProcesadorArchivos._extraer_valor(df, 'monto_factura', 'monto', 'total', 'importe', 'valor', 'div neto')
         if facturacion == 0 and monto_col:
             try:
-                facturacion = float(df[monto_col].replace([None, 'None', ''], 0).sum())
+                facturacion = ProcesadorArchivos._extraer_valor(df, monto_col)
             except:
                 facturacion = 0.0
         
         costo = ProcesadorArchivos._extraer_valor(df, 'costo_venta', 'costo', 'coste', 'costo_factura')
         if costo == 0 and costo_col:
             try:
-                costo = float(df[costo_col].replace([None, 'None', ''], 0).sum())
+                costo = ProcesadorArchivos._extraer_valor(df, costo_col)
             except:
                 costo = 0.0
         
@@ -310,7 +387,7 @@ class ProcesadorArchivos:
         # Si no encontró con los nombres, buscar por posición (última columna numérica)
         if total == 0 and monto_col:
             try:
-                total = float(df[monto_col].replace([None, 'None', ''], 0).sum())
+                total = ProcesadorArchivos._extraer_valor(df, monto_col)
             except:
                 total = 0.0
         
@@ -318,9 +395,9 @@ class ProcesadorArchivos:
         if total == 0 and len(df.columns) > 0:
             for col in reversed(df.columns):
                 try:
-                    valores = pd.to_numeric(df[col], errors='coerce').dropna()
-                    if len(valores) > 0 and valores.sum() > 0:
-                        total = float(valores.sum())
+                    val = ProcesadorArchivos._extraer_valor(df, col)
+                    if val > 0:
+                        total = val
                         break
                 except:
                     pass
@@ -410,7 +487,7 @@ class ProcesadorArchivos:
         
         if recepcion_total == 0 and monto_col:
             try:
-                recepcion_total = float(df[monto_col].replace([None, 'None', ''], 0).sum())
+                recepcion_total = ProcesadorArchivos._extraer_valor(df, monto_col)
             except:
                 recepcion_total = 0.0
         
@@ -418,9 +495,9 @@ class ProcesadorArchivos:
         if recepcion_total == 0 and len(df.columns) > 0:
             for col in reversed(df.columns):
                 try:
-                    valores = pd.to_numeric(df[col], errors='coerce').dropna()
-                    if len(valores) > 0 and valores.sum() > 0:
-                        recepcion_total = float(valores.sum())
+                    val = ProcesadorArchivos._extraer_valor(df, col)
+                    if val > 0:
+                        recepcion_total = val
                         break
                 except:
                     pass
@@ -431,7 +508,9 @@ class ProcesadorArchivos:
             try:
                 tipos = df[tipo_col].astype(str).str.lower()
                 mascara_credito = tipos.str.contains('credito|crédito|cred|c/c|plazo|30|60|90|diferido', na=False, case=False)
-                compras_credito = float(df.loc[mascara_credito, monto_col].replace([None, 'None', ''], 0).sum())
+                compras_credito = ProcesadorArchivos._extraer_valor_por_filtro(
+                    df, monto_col, tipo_col, 'credito', 'monto'
+                )
             except:
                 compras_credito = 0.0
         
@@ -492,7 +571,7 @@ class ProcesadorArchivos:
         total_egresos = ProcesadorArchivos._extraer_valor(df, 'monto', 'valor', 'total', 'importe', 'debito')
         if total_egresos == 0 and monto_col:
             try:
-                total_egresos = float(df[monto_col].replace([None, 'None', ''], 0).sum())
+                total_egresos = ProcesadorArchivos._extraer_valor(df, monto_col)
             except:
                 total_egresos = 0.0
         
@@ -509,11 +588,13 @@ class ProcesadorArchivos:
                         'proveedor|compra|mercancia|material|insumo|inventario|producto|stock|pago a proveedores', 
                         na=False, case=False
                     )
-                    pagos_proveedores = float(df.loc[mascara_proveedores, monto_col].replace([None, 'None', ''], 0).sum())
+                    pagos_proveedores = ProcesadorArchivos._extraer_valor_por_filtro(
+                        df, monto_col, tipo_col, 'proveedor', 'monto'
+                    )
                     
                     # Buscar gastos (lo que no es proveedor)
                     mascara_gastos = ~mascara_proveedores & (tipos.str.len() > 0)
-                    pagos_gastos = float(df.loc[mascara_gastos, monto_col].replace([None, 'None', ''], 0).sum())
+                    pagos_gastos = total_egresos - pagos_proveedores
                 except:
                     pagos_proveedores = 0.0
                     pagos_gastos = total_egresos
@@ -538,8 +619,8 @@ class ProcesadorArchivos:
         - Saldo: saldo_final, saldo, balance, saldo_diario, disponible
         
         Para archivos del Analista 3, busca específicamente:
-        - 'Crédito' para ingresos
-        - 'Débito' para egresos
+        - 'Crédito' para ingresos (valores positivos, con formato europeo)
+        - 'Débito' para egresos (valores pueden ser negativos, con formato europeo)
         - 'Saldo' para saldo final
         
         Args:
@@ -583,38 +664,64 @@ class ProcesadorArchivos:
             'dia', 'día'
         )
         
-        # Extraer valores
-        total_ingresos = ProcesadorArchivos._extraer_valor(df, 'Crédito', 'credito', 'crédito', 'ingreso', 'abono')
-        if total_ingresos == 0 and credito_col:
+        # 🔥 EXTRAER VALORES CON SOPORTE PARA FORMATO EUROPEO
+        total_ingresos = 0.0
+        total_egresos = 0.0
+        
+        if credito_col:
             try:
-                total_ingresos = float(df[credito_col].replace([None, 'None', ''], 0).sum())
+                # Extraer todos los valores y convertirlos
+                valores = []
+                for val in df[credito_col]:
+                    num = ProcesadorArchivos._convertir_numero_europeo(val)
+                    if not pd.isna(num) and num > 0:
+                        valores.append(num)
+                total_ingresos = sum(valores)
             except:
                 total_ingresos = 0.0
         
-        total_egresos = ProcesadorArchivos._extraer_valor(df, 'Débito', 'debito', 'débito', 'egreso', 'retiro')
-        if total_egresos == 0 and debito_col:
+        if debito_col:
             try:
-                total_egresos = float(df[debito_col].replace([None, 'None', ''], 0).sum())
+                valores = []
+                for val in df[debito_col]:
+                    num = ProcesadorArchivos._convertir_numero_europeo(val)
+                    if not pd.isna(num):
+                        # Si es negativo, tomar absoluto
+                        if num < 0:
+                            valores.append(abs(num))
+                        else:
+                            valores.append(num)
+                total_egresos = sum(valores)
             except:
                 total_egresos = 0.0
         
         # Si no encontró valores, intentar buscar por posición (últimas columnas numéricas)
-        if total_ingresos == 0 or total_egresos == 0:
+        if total_ingresos == 0 and total_egresos == 0:
             for col in df.columns:
                 try:
-                    valores = pd.to_numeric(df[col], errors='coerce').dropna()
+                    valores = []
+                    for val in df[col]:
+                        num = ProcesadorArchivos._convertir_numero_europeo(val)
+                        if not pd.isna(num):
+                            valores.append(num)
                     if len(valores) > 0:
-                        if 'credito' in col.lower() or 'ingreso' in col.lower():
-                            total_ingresos = float(valores.sum())
-                        elif 'debito' in col.lower() or 'egreso' in col.lower():
-                            total_egresos = float(valores.sum())
+                        # Si la columna tiene valores negativos, es probable que sea débitos
+                        if any(v < 0 for v in valores):
+                            # Tomar solo los negativos y convertirlos a positivos
+                            total_egresos = sum(abs(v) for v in valores if v < 0)
+                        else:
+                            # Si la columna tiene valores positivos, podría ser ingresos
+                            total_ingresos = sum(v for v in valores if v > 0)
                 except:
                     pass
         
         # Calcular saldo final
         if saldo_col and not df[saldo_col].empty:
             try:
-                saldo_final = float(df[saldo_col].replace([None, 'None', ''], np.nan).iloc[-1])
+                ultimo_valor = df[saldo_col].iloc[-1]
+                saldo_final = ProcesadorArchivos._convertir_numero_europeo(ultimo_valor)
+                if pd.isna(saldo_final):
+                    saldo_final = saldo_inicial + total_ingresos - total_egresos
             except:
                 saldo_final = saldo_inicial + total_ingresos - total_egresos
         else:
@@ -639,8 +746,16 @@ class ProcesadorArchivos:
                     na=False, case=False
                 )
                 if credito_col in df.columns:
-                    mascara_credito = df[credito_col] > 0
-                    ingresos_id = float(df.loc[mascara_id & mascara_credito, credito_col].sum())
+                    # Extraer valores de crédito con formato europeo
+                    valores_credito = []
+                    for val in df[credito_col]:
+                        num = ProcesadorArchivos._convertir_numero_europeo(val)
+                        if not pd.isna(num) and num > 0:
+                            valores_credito.append(num)
+                        else:
+                            valores_credito.append(0.0)
+                    mascara_credito = [v > 0 for v in valores_credito]
+                    ingresos_id = sum([valores_credito[i] for i, m in enumerate(mascara_id) if m and mascara_credito[i]])
                 ingresos_no_id = total_ingresos - ingresos_id
             except:
                 ingresos_id = total_ingresos * 0.7
@@ -689,7 +804,7 @@ class ProcesadorArchivos:
         total = ProcesadorArchivos._extraer_valor(df, 'monto', 'valor', 'total', 'credito')
         if total == 0 and monto_col:
             try:
-                total = float(df[monto_col].replace([None, 'None', ''], 0).sum())
+                total = ProcesadorArchivos._extraer_valor(df, monto_col)
             except:
                 total = 0.0
         
@@ -733,8 +848,8 @@ class ProcesadorArchivos:
                     # Buscar el valor numérico en la fila
                     for col in df.columns:
                         try:
-                            val = pd.to_numeric(df.iloc[idx, col], errors='coerce')
-                            if pd.notna(val) and val > 0:
+                            val = ProcesadorArchivos._convertir_numero_europeo(df.iloc[idx, col])
+                            if not pd.isna(val) and val > 0:
                                 return float(val)
                         except:
                             pass
@@ -744,8 +859,8 @@ class ProcesadorArchivos:
             for idx in range(len(df) - 1, -1, -1):
                 for col in df.columns:
                     try:
-                        val = pd.to_numeric(df.iloc[idx, col], errors='coerce')
-                        if pd.notna(val) and val > 0:
+                        val = ProcesadorArchivos._convertir_numero_europeo(df.iloc[idx, col])
+                        if not pd.isna(val) and val > 0:
                             return float(val)
                     except:
                         pass
@@ -758,8 +873,8 @@ class ProcesadorArchivos:
                     # Buscar el valor numérico en la fila (normalmente es el último valor)
                     for col in df.columns:
                         try:
-                            val = pd.to_numeric(df.iloc[idx, col], errors='coerce')
-                            if pd.notna(val) and val > 0:
+                            val = ProcesadorArchivos._convertir_numero_europeo(df.iloc[idx, col])
+                            if not pd.isna(val) and val > 0:
                                 return float(val)
                         except:
                             pass
@@ -768,8 +883,8 @@ class ProcesadorArchivos:
             for idx in range(len(df) - 1, -1, -1):
                 for col in df.columns:
                     try:
-                        val = pd.to_numeric(df.iloc[idx, col], errors='coerce')
-                        if pd.notna(val) and val > 0:
+                        val = ProcesadorArchivos._convertir_numero_europeo(df.iloc[idx, col])
+                        if not pd.isna(val) and val > 0:
                             return float(val)
                     except:
                         pass
@@ -782,9 +897,13 @@ class ProcesadorArchivos:
             )
             if saldo_col:
                 try:
-                    valores = pd.to_numeric(df[saldo_col], errors='coerce').dropna()
+                    valores = []
+                    for val in df[saldo_col]:
+                        num = ProcesadorArchivos._convertir_numero_europeo(val)
+                        if not pd.isna(num):
+                            valores.append(num)
                     if len(valores) > 0:
-                        return float(valores.iloc[-1])
+                        return float(valores[-1])
                 except:
                     pass
         
@@ -798,17 +917,20 @@ class ProcesadorArchivos:
         if saldo_col:
             try:
                 # Intentar obtener el último valor o la suma
-                valores = df[saldo_col].replace([None, 'None', ''], np.nan)
-                valores = pd.to_numeric(valores, errors='coerce').fillna(0)
+                valores = []
+                for val in df[saldo_col]:
+                    num = ProcesadorArchivos._convertir_numero_europeo(val)
+                    if not pd.isna(num):
+                        valores.append(num)
                 
                 if len(valores) == 1:
-                    return float(valores.iloc[0])
+                    return float(valores[0])
                 else:
-                    # Si hay múltiples filas, buscar la última fila con datos
-                    ultimo_valor = valores[valores > 0].iloc[-1] if any(valores > 0) else None
-                    if ultimo_valor is not None:
-                        return float(ultimo_valor)
-                    return float(valores.sum())
+                    # Buscar el último valor significativo
+                    for val in reversed(valores):
+                        if val > 0:
+                            return float(val)
+                    return float(valores[-1]) if valores else None
             except:
                 return None
         
