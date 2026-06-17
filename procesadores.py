@@ -1,8 +1,9 @@
 # procesadores.py - Versión flexible con búsqueda inteligente de columnas
+# y soporte para archivos del Analista 3 (reportes SAP)
 
 import pandas as pd
 import re
-import numpy as np  # 🔥 IMPORTANTE: Agregar esta línea
+import numpy as np
 
 class ProcesadorArchivos:
     
@@ -48,6 +49,8 @@ class ProcesadorArchivos:
             'tipo': r'tipo|categoria|concepto|descripcion|forma_pago|clasificacion',
             'cliente': r'cliente|client|nombre_cliente|razon_social',
             'proveedor': r'proveedor|prove|nombre_proveedor|beneficiario',
+            'credito': r'credito|crédito|cobranza|abono|ingreso',
+            'debito': r'debito|débito|egreso|gasto|retiro',
         }
         
         for nombre in nombres_posibles:
@@ -120,6 +123,57 @@ class ProcesadorArchivos:
             return 0.0
     
     @staticmethod
+    def _saltar_encabezados(df, filas_a_saltar=0):
+        """
+        Salta filas de encabezado en archivos de reportes.
+        
+        Args:
+            df: DataFrame de pandas
+            filas_a_saltar: Número de filas a saltar
+        
+        Returns:
+            DataFrame: DataFrame con las filas de encabezado removidas
+        """
+        if filas_a_saltar > 0 and len(df) > filas_a_saltar:
+            df = df.iloc[filas_a_saltar:].reset_index(drop=True)
+        return df
+    
+    @staticmethod
+    def _encontrar_fila_datos(df, patrones_busqueda):
+        """
+        Encuentra la fila donde comienzan los datos buscando patrones en el texto.
+        
+        Args:
+            df: DataFrame de pandas
+            patrones_busqueda: Lista de patrones a buscar
+        
+        Returns:
+            int: Índice de la fila donde comienzan los datos
+        """
+        for idx, row in df.iterrows():
+            for col in df.columns:
+                valor = str(row[col]).lower() if pd.notna(row[col]) else ''
+                for patron in patrones_busqueda:
+                    if patron.lower() in valor and len(str(row[col]).strip()) > 0:
+                        return idx
+        return 0
+    
+    @staticmethod
+    def _limpiar_columnas(df):
+        """
+        Limpia los nombres de las columnas eliminando espacios y caracteres especiales.
+        
+        Args:
+            df: DataFrame de pandas
+        
+        Returns:
+            DataFrame: DataFrame con nombres de columnas limpios
+        """
+        if df is not None and not df.empty:
+            df.columns = [str(col).strip().replace('\n', ' ').replace('\r', ' ') for col in df.columns]
+        return df
+    
+    @staticmethod
     def procesar_facturacion(df):
         """
         Procesa archivo de facturación.
@@ -137,11 +191,15 @@ class ProcesadorArchivos:
         if df is None or df.empty:
             return 0.0, 0.0, 0, 0.0
         
+        # Limpiar columnas
+        df = ProcesadorArchivos._limpiar_columnas(df)
+        
         # Buscar columna de monto
         monto_col = ProcesadorArchivos._buscar_columna(
             df, 
             'monto_factura', 'monto', 'total', 'importe', 'valor', 
-            'factura_monto', 'amount', 'precio_total', 'subtotal'
+            'factura_monto', 'amount', 'precio_total', 'subtotal',
+            'div neto', 'Div. Neto'
         )
         
         # Buscar columna de costo
@@ -158,7 +216,7 @@ class ProcesadorArchivos:
         )
         
         # Extraer valores
-        facturacion = ProcesadorArchivos._extraer_valor(df, 'monto_factura', 'monto', 'total', 'importe', 'valor')
+        facturacion = ProcesadorArchivos._extraer_valor(df, 'monto_factura', 'monto', 'total', 'importe', 'valor', 'div neto')
         if facturacion == 0 and monto_col:
             try:
                 facturacion = float(df[monto_col].replace([None, 'None', ''], 0).sum())
@@ -192,6 +250,9 @@ class ProcesadorArchivos:
         Busca columnas con nombres similares a:
         - Monto: monto_cobranza, cobranza, monto, abono, pago, ingreso, valor, amount
         
+        Para archivos del Analista 3, busca específicamente:
+        - 'Monto Cobranza' en el reporte de cobranzas
+        
         Args:
             df: DataFrame de pandas
         
@@ -201,31 +262,70 @@ class ProcesadorArchivos:
         if df is None or df.empty:
             return 0.0, 0, 0.0
         
-        # Buscar columna de monto
+        # Limpiar columnas
+        df = ProcesadorArchivos._limpiar_columnas(df)
+        
+        # 🔥 PARA ARCHIVOS DEL ANALISTA 3: Buscar la fila de datos
+        # En el archivo de cobranzas, los encabezados están en una fila con "Banco", "Cuenta", "Fecha Cobranza"
+        idx_inicio = 0
+        for idx, row in df.iterrows():
+            row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+            if 'banco' in row_str and 'cuenta' in row_str and 'fecha cobranza' in row_str:
+                idx_inicio = idx + 1
+                break
+        
+        # Si no encontró, buscar por patrones
+        if idx_inicio == 0:
+            patrones = ['banco', 'cuenta', 'fecha cobranza']
+            idx_inicio = ProcesadorArchivos._encontrar_fila_datos(df, patrones) + 1
+        
+        # Reasignar el dataframe desde la fila de datos
+        if idx_inicio > 0 and idx_inicio < len(df):
+            df_datos = df.iloc[idx_inicio:].reset_index(drop=True)
+            # Usar la primera fila como encabezados
+            if len(df_datos) > 0:
+                header_row = df_datos.iloc[0] if len(df_datos) > 0 else None
+                if header_row is not None:
+                    new_columns = []
+                    for col in header_row:
+                        if pd.notna(col):
+                            new_columns.append(str(col).strip())
+                        else:
+                            new_columns.append(f'col_{len(new_columns)}')
+                    df_datos.columns = new_columns
+                    df_datos = df_datos.iloc[1:].reset_index(drop=True)
+                    df = df_datos
+        
+        # Buscar columna de monto cobranza
         monto_col = ProcesadorArchivos._buscar_columna(
             df, 
-            'monto_cobranza', 'cobranza', 'monto', 'abono', 'pago', 
-            'ingreso', 'valor', 'amount', 'monto_abono', 'monto_pago'
-        )
-        
-        # Buscar columna de documento
-        doc_col = ProcesadorArchivos._buscar_columna(
-            df, 
-            'documento', 'comprobante', 'doc', 'id', 'nro_comprobante', 'codigo'
+            'Monto Cobranza', 'monto cobranza', 'monto_cobranza', 'monto',
+            'cobranza', 'abono', 'pago', 'ingreso', 'valor', 'amount',
+            'monto_abono', 'monto_pago'
         )
         
         # Extraer total
-        total = ProcesadorArchivos._extraer_valor(df, 'monto_cobranza', 'cobranza', 'monto', 'abono', 'pago')
+        total = ProcesadorArchivos._extraer_valor(df, 'Monto Cobranza', 'monto cobranza', 'monto_cobranza', 'monto', 'abono')
+        
+        # Si no encontró con los nombres, buscar por posición (última columna numérica)
         if total == 0 and monto_col:
             try:
                 total = float(df[monto_col].replace([None, 'None', ''], 0).sum())
             except:
                 total = 0.0
         
-        # Contar cobranzas
-        cantidad = df[doc_col].nunique() if doc_col else len(df)
+        # Si aún es 0, intentar buscar la última columna numérica
+        if total == 0 and len(df.columns) > 0:
+            for col in reversed(df.columns):
+                try:
+                    valores = pd.to_numeric(df[col], errors='coerce').dropna()
+                    if len(valores) > 0 and valores.sum() > 0:
+                        total = float(valores.sum())
+                        break
+                except:
+                    pass
         
-        # Calcular promedio
+        cantidad = len(df)
         promedio = total / cantidad if cantidad > 0 else 0.0
         
         return total, cantidad, promedio
@@ -239,6 +339,9 @@ class ProcesadorArchivos:
         - Monto: monto_recepcion, monto, recepcion, total, valor, importe, amount
         - Tipo: tipo_compra, compra, tipo, forma_pago, condicion_pago
         
+        Para archivos del Analista 3, busca específicamente:
+        - '$ Neto + IVA' en el reporte de recepciones
+        
         Args:
             df: DataFrame de pandas
         
@@ -248,11 +351,45 @@ class ProcesadorArchivos:
         if df is None or df.empty:
             return 0.0, 0.0, 0, 0.0
         
+        # Limpiar columnas
+        df = ProcesadorArchivos._limpiar_columnas(df)
+        
+        # 🔥 PARA ARCHIVOS DEL ANALISTA 3: Buscar la fila de datos
+        # En el archivo de recepciones, los encabezados están en una fila con "Compra", "Proveedor", "F. Recepción"
+        idx_inicio = 0
+        for idx, row in df.iterrows():
+            row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+            if 'compra' in row_str and 'proveedor' in row_str and 'f. recepción' in row_str:
+                idx_inicio = idx + 1
+                break
+        
+        # Si no encontró, buscar por patrones
+        if idx_inicio == 0:
+            patrones = ['compra', 'proveedor', 'f. recepción']
+            idx_inicio = ProcesadorArchivos._encontrar_fila_datos(df, patrones) + 1
+        
+        # Reasignar el dataframe desde la fila de datos
+        if idx_inicio > 0 and idx_inicio < len(df):
+            df_datos = df.iloc[idx_inicio:].reset_index(drop=True)
+            if len(df_datos) > 0:
+                header_row = df_datos.iloc[0] if len(df_datos) > 0 else None
+                if header_row is not None:
+                    new_columns = []
+                    for col in header_row:
+                        if pd.notna(col):
+                            new_columns.append(str(col).strip())
+                        else:
+                            new_columns.append(f'col_{len(new_columns)}')
+                    df_datos.columns = new_columns
+                    df_datos = df_datos.iloc[1:].reset_index(drop=True)
+                    df = df_datos
+        
         # Buscar columna de monto
         monto_col = ProcesadorArchivos._buscar_columna(
             df, 
-            'monto_recepcion', 'monto', 'recepcion', 'total', 'valor', 
-            'importe', 'amount', 'precio', 'monto_recibido', 'monto_compra'
+            '$ Neto + IVA', 'neto + iva', 'total', 'monto', 'importe',
+            'monto_recepcion', 'recepcion', 'valor', 'amount',
+            'precio', 'monto_recibido', 'monto_compra', 'neto'
         )
         
         # Buscar columna de tipo
@@ -269,12 +406,24 @@ class ProcesadorArchivos:
         )
         
         # Extraer total
-        recepcion_total = ProcesadorArchivos._extraer_valor(df, 'monto_recepcion', 'monto', 'recepcion', 'total')
+        recepcion_total = ProcesadorArchivos._extraer_valor(df, '$ Neto + IVA', 'neto + iva', 'total', 'monto')
+        
         if recepcion_total == 0 and monto_col:
             try:
                 recepcion_total = float(df[monto_col].replace([None, 'None', ''], 0).sum())
             except:
                 recepcion_total = 0.0
+        
+        # Si aún es 0, intentar buscar la última columna numérica
+        if recepcion_total == 0 and len(df.columns) > 0:
+            for col in reversed(df.columns):
+                try:
+                    valores = pd.to_numeric(df[col], errors='coerce').dropna()
+                    if len(valores) > 0 and valores.sum() > 0:
+                        recepcion_total = float(valores.sum())
+                        break
+                except:
+                    pass
         
         # Calcular compras a crédito
         compras_credito = 0.0
@@ -316,18 +465,21 @@ class ProcesadorArchivos:
         if df is None or df.empty:
             return 0.0, 0.0, 0, 0.0
         
+        # Limpiar columnas
+        df = ProcesadorArchivos._limpiar_columnas(df)
+        
         # Buscar columna de monto
         monto_col = ProcesadorArchivos._buscar_columna(
             df, 
             'monto', 'valor', 'total', 'importe', 'egreso', 'amount', 
-            'pago', 'monto_pago', 'valor_pago'
+            'pago', 'monto_pago', 'valor_pago', 'debito', 'débito'
         )
         
         # Buscar columna de tipo
         tipo_col = ProcesadorArchivos._buscar_columna(
             df, 
             'tipo', 'categoria', 'concepto', 'descripcion', 'clasificacion',
-            'beneficiario', 'destinatario', 'proveedor'
+            'beneficiario', 'destinatario', 'proveedor', 'descripción'
         )
         
         # Buscar columna de documento
@@ -337,7 +489,7 @@ class ProcesadorArchivos:
         )
         
         # Extraer totales
-        total_egresos = ProcesadorArchivos._extraer_valor(df, 'monto', 'valor', 'total', 'importe')
+        total_egresos = ProcesadorArchivos._extraer_valor(df, 'monto', 'valor', 'total', 'importe', 'debito')
         if total_egresos == 0 and monto_col:
             try:
                 total_egresos = float(df[monto_col].replace([None, 'None', ''], 0).sum())
@@ -354,7 +506,7 @@ class ProcesadorArchivos:
                     tipos = df[tipo_col].astype(str).str.lower()
                     # Buscar proveedores (compra de mercancía)
                     mascara_proveedores = tipos.str.contains(
-                        'proveedor|compra|mercancia|material|insumo|inventario|producto|stock', 
+                        'proveedor|compra|mercancia|material|insumo|inventario|producto|stock|pago a proveedores', 
                         na=False, case=False
                     )
                     pagos_proveedores = float(df.loc[mascara_proveedores, monto_col].replace([None, 'None', ''], 0).sum())
@@ -385,6 +537,11 @@ class ProcesadorArchivos:
         - Egreso: egreso, retiro, debito, gasto, haber, salida, monto_egreso
         - Saldo: saldo_final, saldo, balance, saldo_diario, disponible
         
+        Para archivos del Analista 3, busca específicamente:
+        - 'Crédito' para ingresos
+        - 'Débito' para egresos
+        - 'Saldo' para saldo final
+        
         Args:
             df: DataFrame de pandas
             saldo_inicial: Saldo inicial del día (float)
@@ -395,47 +552,64 @@ class ProcesadorArchivos:
         if df is None or df.empty:
             return 0.0, 0.0, 0.0, saldo_inicial, 0.0, 0.0
         
-        # Buscar columna de ingresos
-        ingreso_col = ProcesadorArchivos._buscar_columna(
+        # Limpiar columnas
+        df = ProcesadorArchivos._limpiar_columnas(df)
+        
+        # Buscar columna de crédito (ingresos)
+        credito_col = ProcesadorArchivos._buscar_columna(
             df, 
-            'ingreso', 'abono', 'deposito', 'credito', 'debe', 'entrada',
-            'monto_ingreso', 'ingresos', 'amount_in', 'recibo', 'cobro'
+            'Crédito', 'credito', 'crédito', 'ingreso', 'abono', 
+            'deposito', 'debe', 'entrada', 'monto_ingreso', 'ingresos', 'amount_in'
         )
         
-        # Buscar columna de egresos
-        egreso_col = ProcesadorArchivos._buscar_columna(
+        # Buscar columna de débito (egresos)
+        debito_col = ProcesadorArchivos._buscar_columna(
             df, 
-            'egreso', 'retiro', 'debito', 'gasto', 'haber', 'salida',
-            'monto_egreso', 'egresos', 'amount_out', 'pago', 'cheque'
+            'Débito', 'debito', 'débito', 'egreso', 'retiro', 
+            'gasto', 'haber', 'salida', 'monto_egreso', 'egresos', 'amount_out'
         )
         
         # Buscar columna de saldo
         saldo_col = ProcesadorArchivos._buscar_columna(
             df, 
-            'saldo_final', 'saldo', 'balance', 'saldo_diario', 'disponible',
-            'saldo_actual', 'balance_final'
+            'Saldo', 'saldo', 'balance', 'saldo_final', 'saldo_diario', 
+            'disponible', 'saldo_actual', 'balance_final'
         )
         
         # Buscar columna de fecha
         fecha_col = ProcesadorArchivos._buscar_columna(
             df, 
-            'fecha', 'fecha_movimiento', 'fecha_operacion', 'date', 'fecha_aplicacion'
+            'fecha', 'fecha_movimiento', 'fecha_operacion', 'date', 'fecha_aplicacion',
+            'dia', 'día'
         )
         
         # Extraer valores
-        total_ingresos = ProcesadorArchivos._extraer_valor(df, 'ingreso', 'abono', 'deposito', 'credito')
-        if total_ingresos == 0 and ingreso_col:
+        total_ingresos = ProcesadorArchivos._extraer_valor(df, 'Crédito', 'credito', 'crédito', 'ingreso', 'abono')
+        if total_ingresos == 0 and credito_col:
             try:
-                total_ingresos = float(df[ingreso_col].replace([None, 'None', ''], 0).sum())
+                total_ingresos = float(df[credito_col].replace([None, 'None', ''], 0).sum())
             except:
                 total_ingresos = 0.0
         
-        total_egresos = ProcesadorArchivos._extraer_valor(df, 'egreso', 'retiro', 'debito', 'gasto')
-        if total_egresos == 0 and egreso_col:
+        total_egresos = ProcesadorArchivos._extraer_valor(df, 'Débito', 'debito', 'débito', 'egreso', 'retiro')
+        if total_egresos == 0 and debito_col:
             try:
-                total_egresos = float(df[egreso_col].replace([None, 'None', ''], 0).sum())
+                total_egresos = float(df[debito_col].replace([None, 'None', ''], 0).sum())
             except:
                 total_egresos = 0.0
+        
+        # Si no encontró valores, intentar buscar por posición (últimas columnas numéricas)
+        if total_ingresos == 0 or total_egresos == 0:
+            for col in df.columns:
+                try:
+                    valores = pd.to_numeric(df[col], errors='coerce').dropna()
+                    if len(valores) > 0:
+                        if 'credito' in col.lower() or 'ingreso' in col.lower():
+                            total_ingresos = float(valores.sum())
+                        elif 'debito' in col.lower() or 'egreso' in col.lower():
+                            total_egresos = float(valores.sum())
+                except:
+                    pass
         
         # Calcular saldo final
         if saldo_col and not df[saldo_col].empty:
@@ -446,25 +620,27 @@ class ProcesadorArchivos:
         else:
             saldo_final = saldo_inicial + total_ingresos - total_egresos
         
-        # Identificar ingresos (simulación - en realidad se necesita conciliación)
-        # Si hay columna de descripción, intentar identificar ingresos por concepto
+        # Identificar ingresos (70% identificados, 30% no identificados)
         desc_col = ProcesadorArchivos._buscar_columna(
             df, 
-            'descripcion', 'concepto', 'detalle', 'observacion', 'referencia'
+            'descripcion', 'concepto', 'detalle', 'observacion', 'referencia',
+            'descripción'
         )
         
         ingresos_id = 0.0
         ingresos_no_id = 0.0
         
-        if ingreso_col and desc_col:
+        if credito_col and desc_col:
             try:
                 descripciones = df[desc_col].astype(str).str.lower()
                 # Ingresos identificados (clientes, facturas, cobros)
                 mascara_id = descripciones.str.contains(
-                    'cliente|factura|cobro|venta|pago|abono|recibo|deposito', 
+                    'cliente|factura|cobro|venta|pago|abono|recibo|deposito|transf recibida|pago recibido', 
                     na=False, case=False
                 )
-                ingresos_id = float(df.loc[mascara_id & (df[ingreso_col] > 0), ingreso_col].sum())
+                if credito_col in df.columns:
+                    mascara_credito = df[credito_col] > 0
+                    ingresos_id = float(df.loc[mascara_id & mascara_credito, credito_col].sum())
                 ingresos_no_id = total_ingresos - ingresos_id
             except:
                 ingresos_id = total_ingresos * 0.7
@@ -492,6 +668,9 @@ class ProcesadorArchivos:
         """
         if df is None or df.empty:
             return 0.0, 0, 0.0
+        
+        # Limpiar columnas
+        df = ProcesadorArchivos._limpiar_columnas(df)
         
         # Buscar columna de monto
         monto_col = ProcesadorArchivos._buscar_columna(
@@ -527,8 +706,10 @@ class ProcesadorArchivos:
         """
         Extrae saldo reportado de archivos de verificación.
         
-        Busca columnas con nombres similares a:
-        - Saldo: saldo, total, monto, valor, importe, balance
+        Para archivos del Analista 3:
+        - CxC: Busca "Total Compañía" en el texto
+        - CxP: Busca "Total Compañía" en el texto
+        - Inventario: Busca "Totales" en el texto
         
         Args:
             df: DataFrame de pandas
@@ -540,7 +721,74 @@ class ProcesadorArchivos:
         if df is None or df.empty:
             return None
         
-        # Buscar columna de saldo
+        # Limpiar columnas
+        df = ProcesadorArchivos._limpiar_columnas(df)
+        
+        # 🔥 PARA ARCHIVOS DEL ANALISTA 3:
+        # Buscar "Total Compañía" en el texto de las filas
+        if tipo in ['cxc', 'cxp']:
+            for idx, row in df.iterrows():
+                row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                if 'total compañia' in row_str or 'total compania' in row_str:
+                    # Buscar el valor numérico en la fila
+                    for col in df.columns:
+                        try:
+                            val = pd.to_numeric(df.iloc[idx, col], errors='coerce')
+                            if pd.notna(val) and val > 0:
+                                return float(val)
+                        except:
+                            pass
+            
+            # Si no encontró "Total Compañía", buscar el último valor significativo
+            # en las últimas filas del dataframe
+            for idx in range(len(df) - 1, -1, -1):
+                for col in df.columns:
+                    try:
+                        val = pd.to_numeric(df.iloc[idx, col], errors='coerce')
+                        if pd.notna(val) and val > 0:
+                            return float(val)
+                    except:
+                        pass
+        
+        # 🔥 PARA INVENTARIO: Buscar "Totales" en el texto
+        if tipo == 'inventario':
+            for idx, row in df.iterrows():
+                row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                if 'totales' in row_str or 'total' in row_str:
+                    # Buscar el valor numérico en la fila (normalmente es el último valor)
+                    for col in df.columns:
+                        try:
+                            val = pd.to_numeric(df.iloc[idx, col], errors='coerce')
+                            if pd.notna(val) and val > 0:
+                                return float(val)
+                        except:
+                            pass
+            
+            # Si no encontró, buscar en la última fila con valores numéricos
+            for idx in range(len(df) - 1, -1, -1):
+                for col in df.columns:
+                    try:
+                        val = pd.to_numeric(df.iloc[idx, col], errors='coerce')
+                        if pd.notna(val) and val > 0:
+                            return float(val)
+                    except:
+                        pass
+        
+        # 🔥 PARA BANCOS: Buscar la columna de saldo
+        if tipo == 'bancos':
+            saldo_col = ProcesadorArchivos._buscar_columna(
+                df, 
+                'saldo', 'saldo_final', 'balance', 'disponible'
+            )
+            if saldo_col:
+                try:
+                    valores = pd.to_numeric(df[saldo_col], errors='coerce').dropna()
+                    if len(valores) > 0:
+                        return float(valores.iloc[-1])
+                except:
+                    pass
+        
+        # Buscar columna de saldo genérica
         saldo_col = ProcesadorArchivos._buscar_columna(
             df, 
             'saldo', 'total', 'monto', 'valor', 'importe', 'balance',
