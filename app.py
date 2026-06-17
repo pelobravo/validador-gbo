@@ -26,6 +26,24 @@ st.set_page_config(
 )
 
 # ============================================================
+# FUNCIÓN HELPER PARA VALORES SEGUROS
+# ============================================================
+def safe_number(value, default=0):
+    """Convierte un valor a número de forma segura, evitando None y errores"""
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+def safe_string(value, default=""):
+    """Convierte un valor a string de forma segura"""
+    if value is None:
+        return default
+    return str(value)
+
+# ============================================================
 # CSS PERSONALIZADO - DISEÑO MODERNO
 # ============================================================
 st.markdown("""
@@ -185,19 +203,19 @@ def cargar_ultimo_saldo_automatico():
     """Carga automáticamente el último saldo guardado al iniciar sesión"""
     ultimo = db.obtener_ultimo_saldo()
     if ultimo:
-        st.session_state.saldos['inventario'] = ultimo['inventario']
-        st.session_state.saldos['cx_c'] = ultimo['cx_c']
-        st.session_state.saldos['bancos'] = ultimo['bancos']
-        st.session_state.saldos['cx_p'] = ultimo['cx_p']
-        st.session_state.saldos['transito'] = ultimo['transito']
-        st.session_state.saldos['capital_anterior'] = ultimo['capital']
+        st.session_state.saldos['inventario'] = safe_number(ultimo['inventario'])
+        st.session_state.saldos['cx_c'] = safe_number(ultimo['cx_c'])
+        st.session_state.saldos['bancos'] = safe_number(ultimo['bancos'])
+        st.session_state.saldos['cx_p'] = safe_number(ultimo['cx_p'])
+        st.session_state.saldos['transito'] = safe_number(ultimo['transito'])
+        st.session_state.saldos['capital_anterior'] = safe_number(ultimo['capital'])
         return True
     return False
 
 def formatear_diferencia(valor_calculado, valor_reportado):
     if valor_reportado is None:
         return "N/A"
-    diferencia = valor_calculado - valor_reportado
+    diferencia = safe_number(valor_calculado) - safe_number(valor_reportado)
     if abs(diferencia) < 0.01:
         return "✅ 0,00"
     elif diferencia > 0:
@@ -207,15 +225,23 @@ def formatear_diferencia(valor_calculado, valor_reportado):
 
 def extraer_transito_reportado(df, transito_inicial):
     try:
-        if 'Crédito' in df.columns:
-            total_ingresos = df['Crédito'].sum()
-            return transito_inicial + total_ingresos
+        if df is not None and 'Crédito' in df.columns:
+            total_ingresos = safe_number(df['Crédito'].sum())
+            return safe_number(transito_inicial) + total_ingresos
         else:
             return None
     except:
         return None
 
 def mostrar_tabla_activos_pasivos(inventario, cx_c, bancos, cx_p, transito, capital):
+    # Asegurar valores numéricos
+    inventario = safe_number(inventario)
+    cx_c = safe_number(cx_c)
+    bancos = safe_number(bancos)
+    cx_p = safe_number(cx_p)
+    transito = safe_number(transito)
+    capital = safe_number(capital)
+    
     total_activos = inventario + cx_c + bancos
     total_pasivos = cx_p + transito
     
@@ -409,7 +435,7 @@ with st.sidebar:
     
     tasa_bcv = st.sidebar.number_input(
         "💵 Tasa BCV",
-        value=float(tasa_guardada or 1),  # Cambiado: usa 1 como valor por defecto si no hay tasa
+        value=float(tasa_guardada or 1),
         step=0.0001,
         format="%.4f"
     )
@@ -419,7 +445,6 @@ with st.sidebar:
         tasa_bcv
     )
     
-    # Mostrar mensaje cuando no existe tasa
     if tasa_guardada is None:
         st.sidebar.warning(
             "No hay tasa BCV registrada para esta fecha"
@@ -451,11 +476,11 @@ with st.sidebar:
         if st.button("🔄 Cargar Día Anterior", use_container_width=True):
             ultimo = db.obtener_ultimo_saldo()
             if ultimo:
-                st.session_state.saldos['inventario'] = ultimo['inventario']
-                st.session_state.saldos['cx_c'] = ultimo['cx_c']
-                st.session_state.saldos['bancos'] = ultimo['bancos']
-                st.session_state.saldos['cx_p'] = ultimo['cx_p']
-                st.session_state.saldos['transito'] = ultimo['transito']
+                st.session_state.saldos['inventario'] = safe_number(ultimo['inventario'])
+                st.session_state.saldos['cx_c'] = safe_number(ultimo['cx_c'])
+                st.session_state.saldos['bancos'] = safe_number(ultimo['bancos'])
+                st.session_state.saldos['cx_p'] = safe_number(ultimo['cx_p'])
+                st.session_state.saldos['transito'] = safe_number(ultimo['transito'])
                 st.success("✅ Saldos cargados del día anterior")
             else:
                 st.warning("No hay historial de días anteriores")
@@ -491,68 +516,107 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     st.markdown("#### 📌 Saldos Iniciales")
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
-        st.metric("📦 Inventario", f"{st.session_state.saldos['inventario']:,.2f}")
+        st.metric("📦 Inventario", f"{safe_number(st.session_state.saldos['inventario']):,.2f}")
     with col2:
-        st.metric("💰 CxC", f"{st.session_state.saldos['cx_c']:,.2f}")
+        st.metric("💰 CxC", f"{safe_number(st.session_state.saldos['cx_c']):,.2f}")
     with col3:
-        st.metric("🏦 Bancos", f"{st.session_state.saldos['bancos']:,.2f}")
+        st.metric("🏦 Bancos", f"{safe_number(st.session_state.saldos['bancos']):,.2f}")
     with col4:
-        st.metric("📋 CxP", f"{st.session_state.saldos['cx_p']:,.2f}")
+        st.metric("📋 CxP", f"{safe_number(st.session_state.saldos['cx_p']):,.2f}")
     with col5:
-        st.metric("🔄 Tránsito", f"{st.session_state.saldos['transito']:,.2f}")
+        st.metric("🔄 Tránsito", f"{safe_number(st.session_state.saldos['transito']):,.2f}")
     
     st.markdown("---")
     
     # Leer archivos de movimientos
-    df_facturacion = pd.read_excel(archivo_facturacion)
-    df_cobranzas = pd.read_excel(archivo_cobranzas)
-    df_recepciones = pd.read_excel(archivo_recepciones)
-    df_egresos = pd.read_excel(archivo_egresos)
-    df_estado_cuenta = pd.read_excel(archivo_estado_cuenta)
+    try:
+        df_facturacion = pd.read_excel(archivo_facturacion)
+        df_cobranzas = pd.read_excel(archivo_cobranzas)
+        df_recepciones = pd.read_excel(archivo_recepciones)
+        df_egresos = pd.read_excel(archivo_egresos)
+        df_estado_cuenta = pd.read_excel(archivo_estado_cuenta)
+    except Exception as e:
+        st.error(f"❌ Error al leer archivos Excel: {str(e)}")
+        st.stop()
     
     # Archivos de verificación
     saldos_reportados = {}
     
     if archivo_cxc_reportado:
-        df_cxc_rep = pd.read_excel(archivo_cxc_reportado)
-        saldos_reportados['Cuentas por cobrar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxc_rep, 'cxc')
+        try:
+            df_cxc_rep = pd.read_excel(archivo_cxc_reportado)
+            saldos_reportados['Cuentas por cobrar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxc_rep, 'cxc')
+        except Exception as e:
+            st.warning(f"⚠️ Error al leer CxC reportado: {str(e)}")
     
     if archivo_cxp_reportado:
-        df_cxp_rep = pd.read_excel(archivo_cxp_reportado)
-        saldos_reportados['Cuentas por pagar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxp_rep, 'cxp')
+        try:
+            df_cxp_rep = pd.read_excel(archivo_cxp_reportado)
+            saldos_reportados['Cuentas por pagar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxp_rep, 'cxp')
+        except Exception as e:
+            st.warning(f"⚠️ Error al leer CxP reportado: {str(e)}")
     
     if archivo_inventario_reportado:
-        df_inv_rep = pd.read_excel(archivo_inventario_reportado)
-        saldos_reportados['Inventario'] = ProcesadorArchivos.extraer_saldo_reportado(df_inv_rep, 'inventario')
+        try:
+            df_inv_rep = pd.read_excel(archivo_inventario_reportado)
+            saldos_reportados['Inventario'] = ProcesadorArchivos.extraer_saldo_reportado(df_inv_rep, 'inventario')
+        except Exception as e:
+            st.warning(f"⚠️ Error al leer Inventario reportado: {str(e)}")
     
     if archivo_tb:
-        df_tb = pd.read_excel(archivo_tb)
-        transito_reportado = extraer_transito_reportado(df_tb, st.session_state.saldos['transito'])
-        if transito_reportado is not None:
-            saldos_reportados['Transferencias en tránsito'] = transito_reportado
+        try:
+            df_tb = pd.read_excel(archivo_tb)
+            transito_reportado = extraer_transito_reportado(df_tb, st.session_state.saldos['transito'])
+            if transito_reportado is not None:
+                saldos_reportados['Transferencias en tránsito'] = transito_reportado
+        except Exception as e:
+            st.warning(f"⚠️ Error al leer TB.xlsx: {str(e)}")
     
     # Notas de crédito
     notas_credito_cliente = 0
     if archivo_notas_credito_cliente:
-        df_notas_cliente = pd.read_excel(archivo_notas_credito_cliente)
-        notas_credito_cliente, _, _ = ProcesadorArchivos.procesar_notas_credito(df_notas_cliente)
+        try:
+            df_notas_cliente = pd.read_excel(archivo_notas_credito_cliente)
+            notas_credito_cliente, _, _ = ProcesadorArchivos.procesar_notas_credito(df_notas_cliente)
+        except Exception as e:
+            st.warning(f"⚠️ Error al procesar notas de crédito clientes: {str(e)}")
     
     notas_credito_proveedor = 0
     if archivo_notas_credito_proveedor:
-        df_notas_proveedor = pd.read_excel(archivo_notas_credito_proveedor)
-        notas_credito_proveedor, _, _ = ProcesadorArchivos.procesar_notas_credito(df_notas_proveedor)
+        try:
+            df_notas_proveedor = pd.read_excel(archivo_notas_credito_proveedor)
+            notas_credito_proveedor, _, _ = ProcesadorArchivos.procesar_notas_credito(df_notas_proveedor)
+        except Exception as e:
+            st.warning(f"⚠️ Error al procesar notas de crédito proveedores: {str(e)}")
     
     # Procesar movimientos
-    facturacion, costo_facturacion, _, _ = ProcesadorArchivos.procesar_facturacion(df_facturacion)
-    cobranzas, _, _ = ProcesadorArchivos.procesar_cobranzas(df_cobranzas)
-    recepcion_total, compras_credito, _, _ = ProcesadorArchivos.procesar_recepciones(df_recepciones)
-    pagos_proveedores, pagos_gastos, _, _ = ProcesadorArchivos.procesar_egresos(df_egresos)
-    ingresos_id, ingresos_no_id, egresos_bancarios, saldo_bancario_reportado, _, _ = ProcesadorArchivos.procesar_estado_cuenta(
-        df_estado_cuenta, st.session_state.saldos['bancos']
-    )
+    try:
+        facturacion, costo_facturacion, _, _ = ProcesadorArchivos.procesar_facturacion(df_facturacion)
+        cobranzas, _, _ = ProcesadorArchivos.procesar_cobranzas(df_cobranzas)
+        recepcion_total, compras_credito, _, _ = ProcesadorArchivos.procesar_recepciones(df_recepciones)
+        pagos_proveedores, pagos_gastos, _, _ = ProcesadorArchivos.procesar_egresos(df_egresos)
+        ingresos_id, ingresos_no_id, egresos_bancarios, saldo_bancario_reportado, _, _ = ProcesadorArchivos.procesar_estado_cuenta(
+            df_estado_cuenta, st.session_state.saldos['bancos']
+        )
+    except Exception as e:
+        st.error(f"❌ Error al procesar movimientos: {str(e)}")
+        st.stop()
+    
+    # 🔥 VALIDAR Y ASEGURAR VALORES NUMÉRICOS (EVITAR None)
+    facturacion = safe_number(facturacion)
+    costo_facturacion = safe_number(costo_facturacion)
+    cobranzas = safe_number(cobranzas)
+    notas_credito_cliente = safe_number(notas_credito_cliente)
+    recepcion_total = safe_number(recepcion_total)
+    compras_credito = safe_number(compras_credito)
+    pagos_proveedores = safe_number(pagos_proveedores)
+    pagos_gastos = safe_number(pagos_gastos)
+    notas_credito_proveedor = safe_number(notas_credito_proveedor)
+    ingresos_id = safe_number(ingresos_id)
+    ingresos_no_id = safe_number(ingresos_no_id)
+    saldo_bancario_reportado = safe_number(saldo_bancario_reportado)
     
     ingresos_totales = ingresos_id + ingresos_no_id
-    saldos_reportados['Bancos'] = saldo_bancario_reportado
     
     # ============================================================
     # TABLA 1: MOVIMIENTOS DEL DÍA
@@ -574,11 +638,11 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     # ============================================================
     # CÁLCULOS Y VALIDACIONES
     # ============================================================
-    inventario_calculado = st.session_state.saldos['inventario'] + recepcion_total - costo_facturacion
-    cx_c_calculado = st.session_state.saldos['cx_c'] + facturacion - cobranzas - notas_credito_cliente
-    bancos_calculado = st.session_state.saldos['bancos'] + ingresos_totales - pagos_proveedores - pagos_gastos
-    cx_p_calculado = st.session_state.saldos['cx_p'] + compras_credito - pagos_proveedores - notas_credito_proveedor
-    transito_calculado = st.session_state.saldos['transito'] + ingresos_totales - cobranzas
+    inventario_calculado = safe_number(st.session_state.saldos['inventario']) + recepcion_total - costo_facturacion
+    cx_c_calculado = safe_number(st.session_state.saldos['cx_c']) + facturacion - cobranzas - notas_credito_cliente
+    bancos_calculado = safe_number(st.session_state.saldos['bancos']) + ingresos_totales - pagos_proveedores - pagos_gastos
+    cx_p_calculado = safe_number(st.session_state.saldos['cx_p']) + compras_credito - pagos_proveedores - notas_credito_proveedor
+    transito_calculado = safe_number(st.session_state.saldos['transito']) + ingresos_totales - cobranzas
     capital_calculado = (inventario_calculado + cx_c_calculado + bancos_calculado) - (cx_p_calculado + transito_calculado)
     
     # ============================================================
@@ -616,8 +680,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
         resultados_data.append({
             "Cuenta": cuenta,
             "Fórmula": formula,
-            "Calculado": f"{calc:,.2f}",
-            "Reportado": f"{rep:,.2f}" if rep is not None else "-",
+            "Calculado": f"{safe_number(calc):,.2f}",
+            "Reportado": f"{safe_number(rep):,.2f}" if rep is not None else "-",
             "Diferencia": diff
         })
     
@@ -630,16 +694,16 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     # ============================================================
     st.markdown("#### ✅ Validaciones Cruzadas")
     
-    diff_bancos = bancos_calculado - saldo_bancario_reportado
+    diff_bancos = safe_number(bancos_calculado) - safe_number(saldo_bancario_reportado)
     if abs(diff_bancos) > 0.01:
         st.error(f"❌ **Bancos**: Diferencia de {abs(diff_bancos):,.2f} Bs.")
     else:
         st.success(f"✅ **Bancos**: Coincide")
     
-    if cobranzas > st.session_state.saldos['cx_c'] + facturacion:
+    if cobranzas > safe_number(st.session_state.saldos['cx_c']) + facturacion:
         st.warning(f"⚠️ **CxC**: Cobranzas ({cobranzas:,.2f}) superan saldo disponible")
     
-    if pagos_proveedores > st.session_state.saldos['cx_p'] + compras_credito:
+    if pagos_proveedores > safe_number(st.session_state.saldos['cx_p']) + compras_credito:
         st.warning(f"⚠️ **CxP**: Pagos ({pagos_proveedores:,.2f}) superan saldo disponible")
     
     if transito_calculado >= 0:
@@ -656,7 +720,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     # ============================================================
     st.markdown("#### 📊 Resumen del Día")
     
-    capital_anterior = st.session_state.saldos.get('capital_anterior', capital_calculado)
+    capital_anterior = safe_number(st.session_state.saldos.get('capital_anterior', capital_calculado))
     var_capital = capital_calculado - capital_anterior
     
     col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
