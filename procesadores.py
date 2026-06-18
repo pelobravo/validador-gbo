@@ -363,7 +363,22 @@ class ProcesadorArchivos:
                         except:
                             pass
         
-        # 🔥 MÉTODO 2: Buscar la columna "Div. Neto" y tomar el último valor (total)
+        # 🔥 MÉTODO 2: Buscar cualquier columna con valor grande (> 1000) en la fila de totales
+        for idx, row in df.iterrows():
+            row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+            if 'totales:' in row_str or 'total:' in row_str:
+                for col in df.columns:
+                    try:
+                        valor = row[col]
+                        num = ProcesadorArchivos._convertir_numero_europeo(valor)
+                        if not pd.isna(num) and num > 1000:
+                            facturacion_total = float(num)
+                            cantidad_facturas = 1
+                            return facturacion_total, 0.0, cantidad_facturas, facturacion_total
+                    except:
+                        pass
+        
+        # 🔥 MÉTODO 3: Buscar la columna "Div. Neto" y tomar el último valor (total)
         for col in df.columns:
             col_str = str(col).lower().strip()
             if 'div' in col_str and 'neto' in col_str:
@@ -374,25 +389,13 @@ class ProcesadorArchivos:
                         cantidad_facturas = 1
                         return facturacion_total, 0.0, cantidad_facturas, facturacion_total
         
-        # 🔥 MÉTODO 3: Buscar cualquier columna con valores grandes (fallback)
-        for col in df.columns:
-            try:
-                for val in reversed(df[col]):
-                    num = ProcesadorArchivos._convertir_numero_europeo(val)
-                    if not pd.isna(num) and num > 1000:
-                        facturacion_total = float(num)
-                        cantidad_facturas = 1
-                        return facturacion_total, 0.0, cantidad_facturas, facturacion_total
-            except:
-                pass
-        
         return 0.0, 0.0, 0, 0.0
     
     @staticmethod
     def procesar_cobranzas(df):
         """
         Procesa archivo de cobranzas.
-        Busca la columna "Monto Cobranza" y suma SOLO las filas de datos (excluyendo subtotales)
+        Busca la columna "Monto Cobranza" y extrae el total de la fila "Total General:"
         
         Args:
             df: DataFrame de pandas
@@ -433,11 +436,10 @@ class ProcesadorArchivos:
                     df_datos = df_datos.iloc[1:].reset_index(drop=True)
                     df = df_datos
         
-        # 🔥 MÉTODO 1: Buscar la fila "Total General:" y extraer "Monto Cobranza"
+        # 🔥 BUSCAR LA FILA "Total General:" y la columna "Monto Cobranza"
         for idx, row in df.iterrows():
             row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-            if 'total general:' in row_str or 'sub total usuario:' in row_str:
-                # Buscar la columna "Monto Cobranza" (NO "Monto a Documento")
+            if 'total general:' in row_str:
                 for col in df.columns:
                     col_str = str(col).lower().strip()
                     if 'monto cobranza' in col_str:
@@ -449,8 +451,7 @@ class ProcesadorArchivos:
                         except:
                             pass
         
-        # 🔥 MÉTODO 2: Sumar SOLO las filas de datos (excluyendo subtotales)
-        # Buscar la columna "Monto Cobranza"
+        # 🔥 Si no encontró "Total General:", sumar SOLO las filas de datos
         monto_col = None
         for col in df.columns:
             col_str = str(col).lower().strip()
@@ -463,7 +464,7 @@ class ProcesadorArchivos:
             for idx, val in enumerate(df[monto_col]):
                 num = ProcesadorArchivos._convertir_numero_europeo(val)
                 if not pd.isna(num) and num > 0:
-                    # Excluir filas que son subtotales (contienen "Total" en alguna columna)
+                    # Excluir filas que son subtotales
                     es_subtotal = False
                     for col2 in df.columns:
                         if col2 != monto_col:
@@ -660,6 +661,7 @@ class ProcesadorArchivos:
         Procesa archivo de egresos.
         Separa pagos a proveedores vs gastos.
         FILTRA POR FECHA (solo el día 15).
+        TODO lo que NO es proveedor es gasto.
         
         Args:
             df: DataFrame de pandas
@@ -702,6 +704,13 @@ class ProcesadorArchivos:
             'destinatario', 'proveedor', 'descripción', 'Tipo de Egreso', 'Tipo de Pago'
         )
         
+        # 🔥 Si no encontró tipo, buscar por descripción o proveedor
+        if tipo_col is None:
+            tipo_col = ProcesadorArchivos._buscar_columna(
+                df,
+                'proveedor', 'beneficiario', 'destinatario', 'descripción', 'concepto'
+            )
+        
         # Buscar columna de documento/referencia
         doc_col = ProcesadorArchivos._buscar_columna(
             df, 
@@ -728,20 +737,15 @@ class ProcesadorArchivos:
                 try:
                     tipos = df[tipo_col].astype(str).str.lower()
                     
-                    # 🔥 Buscar proveedores (solo la palabra "proveedor" exacta)
+                    # 🔥 Buscar proveedores (múltiples patrones)
                     mascara_proveedores = tipos.str.contains(
-                        'proveedor', 
+                        'proveedor|oleica|regional de empaques|corp monagas|corporacion 2707|molinos nacionales|monaca', 
                         na=False, case=False
                     )
                     
                     pagos_proveedores = sum([valores[i] for i, m in enumerate(mascara_proveedores) if m])
+                    # 🔥 TODO lo que NO es proveedor es gasto
                     pagos_gastos = total_egresos - pagos_proveedores
-                    
-                    # 🔥 Si pagos_gastos es muy bajo, buscar "Variable" y "Fijo"
-                    if pagos_gastos < 1000000 and total_egresos > 1000000:
-                        mascara_gastos = tipos.str.contains('fijo|variable', na=False, case=False)
-                        pagos_gastos = sum([valores[i] for i, m in enumerate(mascara_gastos) if m])
-                        pagos_proveedores = total_egresos - pagos_gastos
                 except Exception as e:
                     pagos_proveedores = 0.0
                     pagos_gastos = total_egresos
@@ -948,6 +952,52 @@ class ProcesadorArchivos:
         promedio = total / cantidad if cantidad > 0 else 0.0
         
         return total, cantidad, promedio
+    
+    @staticmethod
+    def procesar_costo_facturacion(df):
+        """
+        Procesa archivo de reporte de utilidad para extraer el costo de facturación.
+        Busca "Total General:" y extrae el valor de la columna "Costo"
+        
+        Args:
+            df: DataFrame de pandas
+        
+        Returns:
+            float: Costo total de facturación
+        """
+        if df is None or df.empty:
+            return 0.0
+        
+        # Limpiar columnas
+        df = ProcesadorArchivos._limpiar_columnas(df)
+        
+        # 🔥 BUSCAR LA FILA "Total General:"
+        for idx, row in df.iterrows():
+            row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+            if 'total general:' in row_str:
+                # Buscar la columna que contiene el costo
+                for col in df.columns:
+                    try:
+                        valor = row[col]
+                        num = ProcesadorArchivos._convertir_numero_europeo(valor)
+                        # El costo total debe ser un número grande (> 1000)
+                        if not pd.isna(num) and num > 1000:
+                            return float(num)
+                    except:
+                        pass
+        
+        # 🔥 Si no encontró "Total General:", buscar el último valor significativo
+        for idx in range(len(df) - 1, -1, -1):
+            for col in df.columns:
+                try:
+                    valor = df.iloc[idx][col]
+                    num = ProcesadorArchivos._convertir_numero_europeo(valor)
+                    if not pd.isna(num) and num > 1000:
+                        return float(num)
+                except:
+                    pass
+        
+        return 0.0
     
     @staticmethod
     def extraer_saldo_reportado(df, tipo):
