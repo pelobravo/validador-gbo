@@ -28,6 +28,28 @@ st.set_page_config(
 )
 
 # ============================================================
+# FUNCIÓN PARA FORMATEAR NÚMEROS EN FORMATO VENEZOLANO
+# ============================================================
+def formato_venezolano(valor):
+    """
+    Formatea un número en formato venezolano:
+    - Separador de miles: .
+    - Separador decimal: ,
+    
+    Ejemplo: 129922542.79 → 129.922.542,79
+    """
+    if valor is None:
+        return "0,00"
+    try:
+        # Si es string, limpiar y convertir a float
+        if isinstance(valor, str):
+            valor = float(valor.replace(',', '').replace('.', '').replace(' ', ''))
+        # Formatear con separador de miles como punto y decimal como coma
+        return f"{float(valor):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+    except (ValueError, TypeError):
+        return "0,00"
+
+# ============================================================
 # FUNCIÓN HELPER PARA VALORES SEGUROS
 # ============================================================
 def safe_number(value, default=0):
@@ -221,9 +243,9 @@ def formatear_diferencia(valor_calculado, valor_reportado):
     if abs(diferencia) < 0.01:
         return "✅ 0,00"
     elif diferencia > 0:
-        return f"📈 +{diferencia:,.2f}"
+        return f"📈 +{formato_venezolano(diferencia)}"
     else:
-        return f"📉 {diferencia:,.2f}"
+        return f"📉 {formato_venezolano(diferencia)}"
 
 def extraer_transito_reportado(df, transito_inicial):
     try:
@@ -303,29 +325,29 @@ def mostrar_tabla_activos_pasivos(inventario, cx_c, bancos, cx_p, transito, capi
         <tr>
             <td class="activos-col" style="width: 50%;">
                 <table style="width: 100%; border: none;">
-                    <tr><td class="titulo-cuenta">📦 Inventario</td><td class="valor">{inventario:,.2f}</td></tr>
-                    <tr><td class="titulo-cuenta">💰 Cuentas por cobrar</td><td class="valor">{cx_c:,.2f}</td></tr>
-                    <tr><td class="titulo-cuenta">🏦 Bancos</td><td class="valor">{bancos:,.2f}</td></tr>
+                    <tr><td class="titulo-cuenta">📦 Inventario</td><td class="valor">{formato_venezolano(inventario)}</td></tr>
+                    <tr><td class="titulo-cuenta">💰 Cuentas por cobrar</td><td class="valor">{formato_venezolano(cx_c)}</td></tr>
+                    <tr><td class="titulo-cuenta">🏦 Bancos</td><td class="valor">{formato_venezolano(bancos)}</td></tr>
                     <tr style="border-top: 2px solid #a5d6a7;">
                         <td class="titulo-cuenta"><strong>📌 TOTAL ACTIVOS</strong></td>
-                        <td class="valor"><strong>{total_activos:,.2f}</strong></td>
+                        <td class="valor"><strong>{formato_venezolano(total_activos)}</strong></td>
                     </tr>
                 </table>
             </td>
             <td class="pasivos-col" style="width: 50%;">
                 <table style="width: 100%; border: none;">
-                    <tr><td class="titulo-cuenta">📋 Cuentas por pagar</td><td class="valor">{cx_p:,.2f}</td></tr>
-                    <tr><td class="titulo-cuenta">🔄 Transferencias en tránsito</td><td class="valor">{transito:,.2f}</td></tr>
+                    <tr><td class="titulo-cuenta">📋 Cuentas por pagar</td><td class="valor">{formato_venezolano(cx_p)}</td></tr>
+                    <tr><td class="titulo-cuenta">🔄 Transferencias en tránsito</td><td class="valor">{formato_venezolano(transito)}</td></tr>
                     <tr style="border-top: 2px solid #ffe0b2;">
                         <td class="titulo-cuenta"><strong>📌 TOTAL PASIVOS</strong></td>
-                        <td class="valor"><strong>{total_pasivos:,.2f}</strong></td>
+                        <td class="valor"><strong>{formato_venezolano(total_pasivos)}</strong></td>
                     </tr>
                 </table>
             </td>
         </tr>
         <tr class="capital-row">
             <td colspan="4" style="text-align: center; padding: 15px;">
-                🏁 CAPITAL DE TRABAJO NETO = {capital:,.2f}
+                🏁 CAPITAL DE TRABAJO NETO = {formato_venezolano(capital)}
             </td>
         </tr>
     </table>
@@ -519,19 +541,19 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     st.markdown(f"### 📈 Resultados de la Validación")
     st.markdown(f"**📅 Fecha procesada:** {fecha_procesar.strftime('%Y-%m-%d')}")
     
-    # Saldos iniciales
+    # Saldos iniciales con formato venezolano
     st.markdown("#### 📌 Saldos Iniciales")
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
-        st.metric("📦 Inventario", f"{safe_number(st.session_state.saldos['inventario']):,.2f}")
+        st.metric("📦 Inventario", formato_venezolano(st.session_state.saldos['inventario']))
     with col2:
-        st.metric("💰 CxC", f"{safe_number(st.session_state.saldos['cx_c']):,.2f}")
+        st.metric("💰 CxC", formato_venezolano(st.session_state.saldos['cx_c']))
     with col3:
-        st.metric("🏦 Bancos", f"{safe_number(st.session_state.saldos['bancos']):,.2f}")
+        st.metric("🏦 Bancos", formato_venezolano(st.session_state.saldos['bancos']))
     with col4:
-        st.metric("📋 CxP", f"{safe_number(st.session_state.saldos['cx_p']):,.2f}")
+        st.metric("📋 CxP", formato_venezolano(st.session_state.saldos['cx_p']))
     with col5:
-        st.metric("🔄 Tránsito", f"{safe_number(st.session_state.saldos['transito']):,.2f}")
+        st.metric("🔄 Tránsito", formato_venezolano(st.session_state.saldos['transito']))
     
     st.markdown("---")
     
@@ -625,8 +647,13 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     
     ingresos_totales = ingresos_id + ingresos_no_id
     
+    # 🔥 Si costo_facturacion es 0, usar recepcion_total como costo
+    if costo_facturacion == 0 and recepcion_total > 0:
+        costo_facturacion = recepcion_total
+        st.info(f"ℹ️ Usando recepción mercancía ({formato_venezolano(recepcion_total)}) como costo de facturación")
+    
     # ============================================================
-    # TABLA 1: MOVIMIENTOS DEL DÍA
+    # TABLA 1: MOVIMIENTOS DEL DÍA (con formato venezolano)
     # ============================================================
     st.markdown("#### 📋 Movimientos del día procesados")
     
@@ -634,9 +661,12 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
         "Concepto": ["Facturación", "Costo de facturación", "Cobranzas", "Notas crédito (clientes)",
                      "Recepción mercancía", "Compras a crédito", "Pagos a proveedores", "Pagos de gastos",
                      "Notas crédito (proveedores)", "Ingresos identificados", "Ingresos no identificados"],
-        "Monto": [f"{facturacion:,.2f}", f"{costo_facturacion:,.2f}", f"{cobranzas:,.2f}", f"{notas_credito_cliente:,.2f}",
-                  f"{recepcion_total:,.2f}", f"{compras_credito:,.2f}", f"{pagos_proveedores:,.2f}", f"{pagos_gastos:,.2f}",
-                  f"{notas_credito_proveedor:,.2f}", f"{ingresos_id:,.2f}", f"{ingresos_no_id:,.2f}"]
+        "Monto": [formato_venezolano(facturacion), formato_venezolano(costo_facturacion), 
+                  formato_venezolano(cobranzas), formato_venezolano(notas_credito_cliente),
+                  formato_venezolano(recepcion_total), formato_venezolano(compras_credito), 
+                  formato_venezolano(pagos_proveedores), formato_venezolano(pagos_gastos),
+                  formato_venezolano(notas_credito_proveedor), formato_venezolano(ingresos_id), 
+                  formato_venezolano(ingresos_no_id)]
     }
     st.dataframe(pd.DataFrame(mov_data), use_container_width=True, hide_index=True)
     
@@ -665,7 +695,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     st.markdown("---")
     
     # ============================================================
-    # TABLA COMPARATIVA CON REPORTADOS
+    # TABLA COMPARATIVA CON REPORTADOS (con formato venezolano)
     # ============================================================
     st.markdown("#### 📋 Comparación vs Valores Reportados")
     
@@ -687,8 +717,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
         resultados_data.append({
             "Cuenta": cuenta,
             "Fórmula": formula,
-            "Calculado": f"{safe_number(calc):,.2f}",
-            "Reportado": f"{safe_number(rep):,.2f}" if rep is not None else "-",
+            "Calculado": formato_venezolano(calc),
+            "Reportado": formato_venezolano(rep) if rep is not None else "-",
             "Diferencia": diff
         })
     
@@ -703,27 +733,27 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     
     diff_bancos = safe_number(bancos_calculado) - safe_number(saldo_bancario_reportado)
     if abs(diff_bancos) > 0.01:
-        st.error(f"❌ **Bancos**: Diferencia de {abs(diff_bancos):,.2f} Bs.")
+        st.error(f"❌ **Bancos**: Diferencia de {formato_venezolano(abs(diff_bancos))} Bs.")
     else:
         st.success(f"✅ **Bancos**: Coincide")
     
     if cobranzas > safe_number(st.session_state.saldos['cx_c']) + facturacion:
-        st.warning(f"⚠️ **CxC**: Cobranzas ({cobranzas:,.2f}) superan saldo disponible")
+        st.warning(f"⚠️ **CxC**: Cobranzas ({formato_venezolano(cobranzas)}) superan saldo disponible")
     
     if pagos_proveedores > safe_number(st.session_state.saldos['cx_p']) + compras_credito:
-        st.warning(f"⚠️ **CxP**: Pagos ({pagos_proveedores:,.2f}) superan saldo disponible")
+        st.warning(f"⚠️ **CxP**: Pagos ({formato_venezolano(pagos_proveedores)}) superan saldo disponible")
     
     if transito_calculado >= 0:
-        st.success(f"✅ **Transferencias**: Saldo positivo ({transito_calculado:,.2f})")
+        st.success(f"✅ **Transferencias**: Saldo positivo ({formato_venezolano(transito_calculado)})")
     else:
-        st.error(f"❌ **Transferencias**: Saldo negativo ({transito_calculado:,.2f})")
+        st.error(f"❌ **Transferencias**: Saldo negativo ({formato_venezolano(transito_calculado)})")
     
-    st.info(f"ℹ️ **Ingresos bancarios totales**: {ingresos_totales:,.2f} Bs. (Identificados: {ingresos_id:,.2f})")
+    st.info(f"ℹ️ **Ingresos bancarios totales**: {formato_venezolano(ingresos_totales)} Bs. (Identificados: {formato_venezolano(ingresos_id)})")
     
     st.markdown("---")
     
     # ============================================================
-    # KPI - RESUMEN DEL DÍA
+    # KPI - RESUMEN DEL DÍA (con formato venezolano)
     # ============================================================
     st.markdown("#### 📊 Resumen del Día")
     
@@ -736,7 +766,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
         st.markdown(f"""
         <div class="kpi-card">
             <div class="label">🏁 CAPITAL DE TRABAJO NETO</div>
-            <div class="value">{capital_calculado:,.2f}</div>
+            <div class="value">{formato_venezolano(capital_calculado)}</div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -745,7 +775,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
         st.markdown(f"""
         <div class="kpi-card">
             <div class="label">{arrow} VARIACIÓN DEL CAPITAL</div>
-            <div class="value">{var_capital:,.2f}</div>
+            <div class="value">{formato_venezolano(var_capital)}</div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -753,7 +783,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
         st.markdown(f"""
         <div class="kpi-card">
             <div class="label">🔄 TRANSFERENCIAS EN TRÁNSITO</div>
-            <div class="value">{transito_calculado:,.2f}</div>
+            <div class="value">{formato_venezolano(transito_calculado)}</div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -816,35 +846,38 @@ else:
     
     with st.expander("📋 Formatos esperados de los archivos"):
         st.markdown("""
-        ### Facturación diaria
-        | documento | cliente | monto_factura | costo_venta |
-        |-----------|---------|---------------|-------------|
-        | FAC001 | Cliente A | 1000.00 | 600.00 |
+        ### Facturación diaria (Ranking de Ventas)
+        | Vendedor | Facturas | Div. Neto | Total |
+        |----------|----------|-----------|-------|
+        | JHORDAN PALOMO | 4 | 1220.79 | ... |
+        | Totales: | 26 | 15288.18 | ... |
         
         ### Cobranzas procesadas
-        | documento | cliente | monto_cobranza | fecha_aplicacion |
-        |-----------|---------|----------------|------------------|
-        | COB001 | Cliente A | 500.00 | 2026-06-05 |
+        | Banco | Cuenta | Fecha Cobranza | # Deposito | Monto Cobranza |
+        |-------|--------|----------------|------------|----------------|
+        | MCESIA | 02 - BANCO DE VENEZUELA | 2026-06-15 | 0591367815942 | 263.75 |
         
         ### Recepciones del día
-        | documento | proveedor | monto_recepcion | fecha | tipo_compra |
-        |-----------|-----------|-----------------|-------|-------------|
-        | REC001 | Proveedor X | 2000.00 | 2026-06-05 | credito |
+        | Compra | Proveedor | F. Recepción | $ Neto + IVA |
+        |--------|-----------|--------------|--------------|
+        | 0000000587 | MOLINOS NACIONALES | 15/06/2026 | 21612.5 |
+        | Total General: | | | 21612.5 |
         
         ### Egresos iPago
-        | documento | beneficiario | monto | tipo |
-        |-----------|--------------|-------|------|
-        | PAG001 | Proveedor X | 1000.00 | proveedor |
-        | PAG002 | Electricidad | 150.00 | gasto |
+        | Fecha Pago | Proveedor | Tipo de Egreso | Monto | Referencia |
+        |------------|-----------|----------------|-------|------------|
+        | 2026-06-15 | OLEICA | Proveedor | 2055920.65 | 0329208731225 |
+        | 2026-06-15 | HIDROBOLIVAR | Fijo | 36438.29 | 0429716006476 |
         
         ### Estado de cuenta bancario
-        | fecha | descripcion | ingreso | egreso | saldo_final |
-        |-------|-------------|---------|--------|-------------|
-        | 2026-06-05 | Cobro cliente | 500.00 | 0 | 5000.00 |
-        | 2026-06-05 | Pago proveedor | 0 | 1000.00 | 4000.00 |
+        | Fecha | Referencia | Descripción | Crédito | Débito |
+        |-------|------------|-------------|---------|--------|
+        | 15/06/2026 | 0591367815942 | TRANSF RECIBIDA | 154.930,00 | 0,00 |
         
         ### TB.xlsx (Transferencias en tránsito)
-        Archivo con los movimientos bancarios para calcular ingresos no identificados.
+        | Cuenta | Referencia | Fecha | Descripción | Monto |
+        |--------|------------|-------|-------------|-------|
+        | BANCO DE VENEZUELA | 059137177692 | 2026-05-30 | TRANSF RECIBIDA | 5152834 |
         """)
 
 st.markdown("---")
