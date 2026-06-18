@@ -312,7 +312,7 @@ class ProcesadorArchivos:
         except Exception as e:
             return df
     
-    # ===================== FUNCIONES MODIFICADAS (SOLO ESTAS 4) =====================
+    # ===================== FUNCIÓN MODIFICADA 1: FACTURACIÓN =====================
     
     @staticmethod
     def procesar_facturacion(df):
@@ -339,7 +339,7 @@ class ProcesadorArchivos:
         for idx, row in df.iterrows():
             row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
             if 'totales:' in row_str or 'total:' in row_str:
-                # Buscar SOLO la columna "Div. Neto" (NO "Facturas")
+                # Buscar SOLO la columna "Div. Neto"
                 for col in df.columns:
                     col_str = str(col).lower().strip()
                     if 'div' in col_str and 'neto' in col_str:
@@ -348,18 +348,7 @@ class ProcesadorArchivos:
                             num = ProcesadorArchivos._convertir_numero_europeo(valor)
                             if not pd.isna(num) and num > 100:
                                 facturacion_total = float(num)
-                                # También extraer cantidad de facturas
-                                for col2 in df.columns:
-                                    if 'facturas' in str(col2).lower():
-                                        try:
-                                            facturas_val = row[col2]
-                                            facturas_num = ProcesadorArchivos._convertir_numero_europeo(facturas_val)
-                                            if not pd.isna(facturas_num):
-                                                cantidad_facturas = int(facturas_num)
-                                        except:
-                                            pass
-                                if cantidad_facturas == 0:
-                                    cantidad_facturas = 1
+                                cantidad_facturas = 1
                                 promedio = facturacion_total / cantidad_facturas
                                 return facturacion_total, 0.0, cantidad_facturas, promedio
                         except:
@@ -381,6 +370,8 @@ class ProcesadorArchivos:
                         pass
         
         return 0.0, 0.0, 0, 0.0
+    
+    # ===================== FUNCIÓN MODIFICADA 2: COBRANZAS =====================
     
     @staticmethod
     def procesar_cobranzas(df):
@@ -478,6 +469,8 @@ class ProcesadorArchivos:
         
         return 0.0, 0, 0.0
     
+    # ===================== FUNCIÓN MODIFICADA 3: EGRESOS =====================
+    
     @staticmethod
     def procesar_egresos(df):
         """
@@ -568,6 +561,8 @@ class ProcesadorArchivos:
         cantidad = df[doc_col].nunique() if doc_col else len(df)
         
         return pagos_proveedores, pagos_gastos, cantidad, total_egresos
+    
+    # ===================== FUNCIÓN MODIFICADA 4: ESTADO DE CUENTA =====================
     
     @staticmethod
     def procesar_estado_cuenta(df, saldo_inicial=0):
