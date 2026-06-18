@@ -491,6 +491,12 @@ with st.sidebar:
     archivo_notas_credito_cliente = st.file_uploader("Notas de crédito (clientes)", type=["xlsx", "xls"], key="notas_cliente")
     archivo_notas_credito_proveedor = st.file_uploader("Notas de crédito (proveedores)", type=["xlsx", "xls"], key="notas_proveedor")
     
+    # ============================================================
+    # 🔥 NUEVO: ARCHIVO DE COSTO DE FACTURACIÓN
+    # ============================================================
+    st.markdown("#### 📂 Archivos de costos")
+    archivo_costo_facturacion = st.file_uploader("Costo de facturación", type=["xlsx", "xls"], key="costo_fact")
+    
     st.markdown("#### 📂 Archivos de verificación")
     
     archivo_cxc_reportado = st.file_uploader("CxC final reportado", type=["xlsx", "xls"], key="cxc_rep")
@@ -568,6 +574,18 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
         st.error(f"❌ Error al leer archivos Excel: {str(e)}")
         st.stop()
     
+    # 🔥 Leer archivo de costo de facturación (opcional)
+    costo_facturacion = 0.0
+    if archivo_costo_facturacion:
+        try:
+            df_costo = pd.read_excel(archivo_costo_facturacion)
+            costo_facturacion, _, _, _ = ProcesadorArchivos.procesar_facturacion(df_costo)
+            st.success(f"✅ Costo de facturación cargado: {formato_venezolano(costo_facturacion)}")
+        except Exception as e:
+            st.warning(f"⚠️ Error al leer costo de facturación: {str(e)}")
+    else:
+        st.info("ℹ️ No se cargó archivo de costo de facturación. El costo se mantendrá en 0.")
+    
     # Archivos de verificación
     saldos_reportados = {}
     
@@ -620,7 +638,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     
     # Procesar movimientos
     try:
-        facturacion, costo_facturacion, _, _ = ProcesadorArchivos.procesar_facturacion(df_facturacion)
+        facturacion, _, _, _ = ProcesadorArchivos.procesar_facturacion(df_facturacion)
         cobranzas, _, _ = ProcesadorArchivos.procesar_cobranzas(df_cobranzas)
         recepcion_total, compras_credito, _, _ = ProcesadorArchivos.procesar_recepciones(df_recepciones)
         pagos_proveedores, pagos_gastos, _, _ = ProcesadorArchivos.procesar_egresos(df_egresos)
@@ -647,10 +665,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     
     ingresos_totales = ingresos_id + ingresos_no_id
     
-    # 🔥 Si costo_facturacion es 0, usar recepcion_total como costo
-    if costo_facturacion == 0 and recepcion_total > 0:
-        costo_facturacion = recepcion_total
-        st.info(f"ℹ️ Usando recepción mercancía ({formato_venezolano(recepcion_total)}) como costo de facturación")
+    # 🔥 IMPORTANTE: YA NO ASIGNAMOS recepcion_total como costo_facturacion
+    # El costo de facturación solo se carga si el usuario subió el archivo correspondiente
+    # Si no se cargó, se mantiene en 0
     
     # ============================================================
     # TABLA 1: MOVIMIENTOS DEL DÍA (con formato venezolano)
