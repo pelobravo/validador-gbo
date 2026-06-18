@@ -283,38 +283,75 @@ class ProcesadorArchivos:
         # Limpiar columnas
         df = ProcesadorArchivos._limpiar_columnas(df)
         
-        # 🔥 PARA EL ARCHIVO DE RANKING DE VENTAS: Buscar la fila de totales
+        # 🔥 MÉTODO 1: Buscar la fila "Totales:" y extraer "Div. Neto"
         facturacion_total = 0.0
+        cantidad_facturas = 0
         
-        # Buscar la fila que contiene "Totales:" o "Total:"
-        idx_total = None
         for idx, row in df.iterrows():
             row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
             if 'totales:' in row_str or 'total:' in row_str:
-                idx_total = idx
-                break
+                # Buscar la columna "Div. Neto" o "Total"
+                for col in df.columns:
+                    col_str = str(col).lower().strip()
+                    if 'div' in col_str and 'neto' in col_str:
+                        try:
+                            valor = row[col]
+                            num = ProcesadorArchivos._convertir_numero_europeo(valor)
+                            if not pd.isna(num) and num > 0:
+                                facturacion_total = float(num)
+                                # También extraer cantidad de facturas
+                                for col2 in df.columns:
+                                    if 'facturas' in str(col2).lower():
+                                        try:
+                                            facturas_val = row[col2]
+                                            facturas_num = ProcesadorArchivos._convertir_numero_europeo(facturas_val)
+                                            if not pd.isna(facturas_num):
+                                                cantidad_facturas = int(facturas_num)
+                                        except:
+                                            pass
+                                if cantidad_facturas == 0:
+                                    cantidad_facturas = 1
+                                promedio = facturacion_total / cantidad_facturas
+                                return facturacion_total, 0.0, cantidad_facturas, promedio
+                        except:
+                            pass
         
-        if idx_total is not None:
-            # Buscar la columna que contiene "Div. Neto" o valores grandes
-            for col in df.columns:
-                col_lower = str(col).lower().strip()
-                if 'div' in col_lower and 'neto' in col_lower:
-                    try:
-                        valor = df.iloc[idx_total][col]
-                        facturacion_total = ProcesadorArchivos._convertir_numero_europeo(valor)
-                        if not pd.isna(facturacion_total) and facturacion_total > 0:
-                            return float(facturacion_total), 0.0, 1, float(facturacion_total)
-                    except:
-                        pass
-                # Si no encuentra "Div. Neto", buscar la columna con el valor más grande
-                elif 'total' in col_lower:
-                    try:
-                        valor = df.iloc[idx_total][col]
-                        facturacion_total = ProcesadorArchivos._convertir_numero_europeo(valor)
-                        if not pd.isna(facturacion_total) and facturacion_total > 0:
-                            return float(facturacion_total), 0.0, 1, float(facturacion_total)
-                    except:
-                        pass
+        # 🔥 MÉTODO 2: Buscar la fila de totales por posición (última fila con datos)
+        for idx in range(len(df) - 1, -1, -1):
+            row = df.iloc[idx]
+            row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+            if 'total' in row_str:
+                for col in df.columns:
+                    col_str = str(col).lower().strip()
+                    if 'div' in col_str and 'neto' in col_str:
+                        try:
+                            valor = row[col]
+                            num = ProcesadorArchivos._convertir_numero_europeo(valor)
+                            if not pd.isna(num) and num > 0:
+                                facturacion_total = float(num)
+                                cantidad_facturas = 1
+                                return facturacion_total, 0.0, cantidad_facturas, facturacion_total
+                        except:
+                            pass
+        
+        # 🔥 MÉTODO 3: Buscar columna "Div. Neto" en todo el DataFrame y sumar
+        for col in df.columns:
+            col_str = str(col).lower().strip()
+            if 'div' in col_str and 'neto' in col_str:
+                try:
+                    # Intentar extraer el total de la columna (suma de todos los valores)
+                    valores = []
+                    for val in df[col]:
+                        num = ProcesadorArchivos._convertir_numero_europeo(val)
+                        if not pd.isna(num) and num > 0:
+                            valores.append(num)
+                    if valores:
+                        facturacion_total = sum(valores)
+                        cantidad_facturas = len(valores)
+                        promedio = facturacion_total / cantidad_facturas if cantidad_facturas > 0 else 0
+                        return facturacion_total, 0.0, cantidad_facturas, promedio
+                except:
+                    pass
         
         # Buscar columna de monto (fallback)
         monto_col = ProcesadorArchivos._buscar_columna(
@@ -337,7 +374,7 @@ class ProcesadorArchivos:
             'documento', 'factura', 'doc', 'numero_factura', 'id', 'nro_factura', 'comprobante'
         )
         
-        # Si no se encontró con la fila de totales, extraer con el método normal
+        # Si no se encontró con los métodos anteriores, extraer con el método normal
         if facturacion_total == 0:
             facturacion_total = ProcesadorArchivos._extraer_valor(df, 'monto_factura', 'monto', 'total', 'importe', 'valor', 'div neto', 'neto')
             if facturacion_total == 0 and monto_col:
@@ -549,7 +586,25 @@ class ProcesadorArchivos:
             'documento', 'comprobante', 'doc', 'id', 'nro_recibo', 'recibo', 'factura'
         )
         
-        # Si no se encontró el total general, extraer con el método normal
+        # 🔥 Si no se encontró el total general, intentar extraer de la columna "$ Neto + IVA"
+        if total_recepcion == 0:
+            # Buscar la columna "$ Neto + IVA" directamente
+            for col in df.columns:
+                col_str = str(col).strip()
+                if '$ Neto + IVA' in col_str or 'Neto + IVA' in col_str or 'neto + iva' in col_str.lower():
+                    try:
+                        # Sumar todos los valores de la columna
+                        valores = []
+                        for val in df[col]:
+                            num = ProcesadorArchivos._convertir_numero_europeo(val)
+                            if not pd.isna(num) and num > 0:
+                                valores.append(num)
+                        if valores:
+                            total_recepcion = sum(valores)
+                            break
+                    except:
+                        pass
+        
         if total_recepcion == 0:
             total_recepcion = ProcesadorArchivos._extraer_valor(df, '$ Neto + IVA', 'neto + iva', 'total', 'monto')
         
