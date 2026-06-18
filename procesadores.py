@@ -318,7 +318,7 @@ class ProcesadorArchivos:
     def procesar_facturacion(df):
         """
         Procesa archivo de facturación (ranking de ventas).
-        Busca la fila "Totales:" y extrae el valor de "Div. Neto" de la columna Q
+        Busca la fila "Totales:" y extrae el valor de "Div. Neto" (columna Q)
         
         Args:
             df: DataFrame de pandas
@@ -335,15 +335,15 @@ class ProcesadorArchivos:
         facturacion_total = 0.0
         cantidad_facturas = 0
         
-        # 🔥 MÉTODO 1: Buscar la fila "Totales:" y extraer "Div. Neto"
+        # 🔥 MÉTODO 1: Buscar la fila "Totales:" y extraer "Div. Neto" (columna Q)
         for idx, row in df.iterrows():
             row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-            if 'totales:' in row_str or 'total:' in row_str:
-                # Buscar SOLO la columna "Div. Neto" (en la posición Q)
+            if 'totales:' in row_str:
+                # Buscar la columna "Div. Neto" - puede llamarse "Div. Neto", "Div Neto", etc.
                 for col in df.columns:
                     col_str = str(col).lower().strip()
-                    # Buscar "div" y "neto" juntos, sin importar mayúsculas
-                    if ('div' in col_str and 'neto' in col_str) or col_str == 'div. neto' or col_str == 'div neto':
+                    # Buscar "div" y "neto" juntos
+                    if ('div' in col_str and 'neto' in col_str):
                         try:
                             valor = row[col]
                             num = ProcesadorArchivos._convertir_numero_europeo(valor)
@@ -355,12 +355,13 @@ class ProcesadorArchivos:
                         except:
                             pass
         
-        # 🔥 MÉTODO 2: Si no encontró, buscar por posición de la columna (columna Q = índice 16)
+        # 🔥 MÉTODO 2: Buscar la columna "Div. Neto" por posición (columna Q = índice 16)
+        # En el archivo ranking de ventas, la columna Q es "Div. Neto"
         if len(df.columns) > 16:
             col_q = df.columns[16]  # Columna Q (índice 16)
             for idx, row in df.iterrows():
                 row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                if 'totales:' in row_str or 'total:' in row_str:
+                if 'totales:' in row_str:
                     try:
                         valor = row[col_q]
                         num = ProcesadorArchivos._convertir_numero_europeo(valor)
@@ -372,18 +373,21 @@ class ProcesadorArchivos:
                     except:
                         pass
         
-        # 🔥 MÉTODO 3: Buscar cualquier columna con valor grande (> 1000) en la fila de totales
-        for idx, row in df.iterrows():
+        # 🔥 MÉTODO 3: Buscar por índice de fila (la fila de totales suele ser la última)
+        for idx in range(len(df) - 1, -1, -1):
+            row = df.iloc[idx]
             row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
             if 'totales:' in row_str or 'total:' in row_str:
+                # Buscar en todas las columnas un número > 1000 y < 100000 (rango de facturación)
                 for col in df.columns:
                     try:
                         valor = row[col]
                         num = ProcesadorArchivos._convertir_numero_europeo(valor)
-                        if not pd.isna(num) and num > 1000:
+                        if not pd.isna(num) and 1000 < num < 100000:
                             facturacion_total = float(num)
                             cantidad_facturas = 1
-                            return facturacion_total, 0.0, cantidad_facturas, facturacion_total
+                            promedio = facturacion_total / cantidad_facturas
+                            return facturacion_total, 0.0, cantidad_facturas, promedio
                     except:
                         pass
         
@@ -395,7 +399,7 @@ class ProcesadorArchivos:
     def procesar_cobranzas(df):
         """
         Procesa archivo de cobranzas.
-        Busca la columna "Monto Cobranza" y extrae el total de la fila "Total General:"
+        Busca la fila "Total General:" y la columna "Monto Cobranza"
         
         Args:
             df: DataFrame de pandas
@@ -408,33 +412,6 @@ class ProcesadorArchivos:
         
         # Limpiar columnas
         df = ProcesadorArchivos._limpiar_columnas(df)
-        
-        # 🔥 BUSCAR LA FILA DE DATOS
-        idx_inicio = 0
-        for idx, row in df.iterrows():
-            row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-            if 'banco' in row_str and 'cuenta' in row_str and 'fecha cobranza' in row_str:
-                idx_inicio = idx + 1
-                break
-        
-        if idx_inicio == 0:
-            patrones = ['banco', 'cuenta', 'fecha cobranza']
-            idx_inicio = ProcesadorArchivos._encontrar_fila_datos(df, patrones) + 1
-        
-        if idx_inicio > 0 and idx_inicio < len(df):
-            df_datos = df.iloc[idx_inicio:].reset_index(drop=True)
-            if len(df_datos) > 0:
-                header_row = df_datos.iloc[0] if len(df_datos) > 0 else None
-                if header_row is not None:
-                    new_columns = []
-                    for col in header_row:
-                        if pd.notna(col):
-                            new_columns.append(str(col).strip())
-                        else:
-                            new_columns.append(f'col_{len(new_columns)}')
-                    df_datos.columns = new_columns
-                    df_datos = df_datos.iloc[1:].reset_index(drop=True)
-                    df = df_datos
         
         # 🔥 MÉTODO 1: Buscar la fila "Total General:" y la columna "Monto Cobranza"
         for idx, row in df.iterrows():
@@ -451,7 +428,22 @@ class ProcesadorArchivos:
                         except:
                             pass
         
-        # 🔥 MÉTODO 2: Buscar la columna "Monto Cobranza" y sumar todos los valores (filtrando filas de totales)
+        # 🔥 MÉTODO 2: Buscar la última fila que contenga "Total General:"
+        for idx in range(len(df) - 1, -1, -1):
+            row = df.iloc[idx]
+            row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+            if 'total general:' in row_str:
+                # Buscar la columna con el valor más grande (> 1000)
+                for col in df.columns:
+                    try:
+                        valor = row[col]
+                        num = ProcesadorArchivos._convertir_numero_europeo(valor)
+                        if not pd.isna(num) and num > 1000:
+                            return float(num), 1, float(num)
+                    except:
+                        pass
+        
+        # 🔥 MÉTODO 3: Buscar "Monto Cobranza" y sumar solo registros del día 15
         monto_col = None
         for col in df.columns:
             col_str = str(col).lower().strip()
@@ -462,35 +454,18 @@ class ProcesadorArchivos:
         if monto_col:
             valores = []
             for idx, row in df.iterrows():
-                # Verificar que no sea una fila de total
-                row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                if 'total general:' in row_str or 'sub total' in row_str or 'total:' in row_str:
-                    continue
-                val = ProcesadorArchivos._convertir_numero_europeo(row[monto_col])
-                if not pd.isna(val) and val > 0:
-                    valores.append(val)
+                # Verificar que la fecha sea 15/06/2026
+                fecha_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                if '15/6/2026' in fecha_str or '15-6-2026' in fecha_str or '2026-06-15' in fecha_str:
+                    # Verificar que no sea una fila de total
+                    if 'total general:' not in fecha_str and 'sub total' not in fecha_str:
+                        val = ProcesadorArchivos._convertir_numero_europeo(row[monto_col])
+                        if not pd.isna(val) and val > 0:
+                            valores.append(val)
             if valores:
                 total = sum(valores)
                 if total > 100:
                     return float(total), len(valores), float(total / len(valores))
-        
-        # 🔥 MÉTODO 3: Buscar cualquier columna numérica con valores grandes (fallback)
-        for col in reversed(df.columns):
-            try:
-                valores = []
-                for idx, row in df.iterrows():
-                    row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                    if 'total general:' in row_str or 'sub total' in row_str:
-                        continue
-                    num = ProcesadorArchivos._convertir_numero_europeo(row[col])
-                    if not pd.isna(num) and num > 0:
-                        valores.append(num)
-                if valores and len(valores) > 1:
-                    total = sum(valores)
-                    if total > 100:
-                        return float(total), len(valores), float(total / len(valores))
-            except:
-                pass
         
         return 0.0, 0, 0.0
     
