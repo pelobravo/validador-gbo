@@ -384,7 +384,7 @@ class ProcesadorArchivos:
     def procesar_cobranzas(df):
         """
         Procesa archivo de cobranzas.
-        Busca la columna "Monto Cobranza" y extrae el total de la fila "Total General:"
+        Busca la columna "Monto Cobranza" y extrae el total
         
         Args:
             df: DataFrame de pandas
@@ -398,7 +398,7 @@ class ProcesadorArchivos:
         # Limpiar columnas
         df = ProcesadorArchivos._limpiar_columnas(df)
         
-        # 🔥 PARA ARCHIVOS DEL ANALISTA 3: Buscar la fila de datos
+        # 🔥 BUSCAR LA FILA DE DATOS
         idx_inicio = 0
         for idx, row in df.iterrows():
             row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
@@ -425,7 +425,7 @@ class ProcesadorArchivos:
                     df_datos = df_datos.iloc[1:].reset_index(drop=True)
                     df = df_datos
         
-        # 🔥 BUSCAR LA FILA "Total General:" y la columna "Monto Cobranza"
+        # 🔥 MÉTODO 1: Buscar la fila "Total General:" y la columna "Monto Cobranza"
         for idx, row in df.iterrows():
             row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
             if 'total general:' in row_str:
@@ -439,6 +439,40 @@ class ProcesadorArchivos:
                                 return float(num), 1, float(num)
                         except:
                             pass
+        
+        # 🔥 MÉTODO 2: Buscar la columna "Monto Cobranza" y sumar todos los valores
+        monto_col = None
+        for col in df.columns:
+            col_str = str(col).lower().strip()
+            if 'monto cobranza' in col_str:
+                monto_col = col
+                break
+        
+        if monto_col:
+            valores = []
+            for val in df[monto_col]:
+                num = ProcesadorArchivos._convertir_numero_europeo(val)
+                if not pd.isna(num) and num > 0:
+                    valores.append(num)
+            if valores:
+                total = sum(valores)
+                if total > 100:
+                    return float(total), len(valores), float(total / len(valores))
+        
+        # 🔥 MÉTODO 3: Buscar cualquier columna numérica con valores grandes (fallback)
+        for col in reversed(df.columns):
+            try:
+                valores = []
+                for val in df[col]:
+                    num = ProcesadorArchivos._convertir_numero_europeo(val)
+                    if not pd.isna(num) and num > 0:
+                        valores.append(num)
+                if valores and len(valores) > 1:
+                    total = sum(valores)
+                    if total > 100:
+                        return float(total), len(valores), float(total / len(valores))
+            except:
+                pass
         
         return 0.0, 0, 0.0
     
