@@ -378,17 +378,6 @@ class ProcesadorArchivos:
                     except:
                         pass
         
-        # 🔥 MÉTODO 3: Buscar la columna "Div. Neto" y tomar el último valor (total)
-        for col in df.columns:
-            col_str = str(col).lower().strip()
-            if 'div' in col_str and 'neto' in col_str:
-                for val in reversed(df[col]):
-                    num = ProcesadorArchivos._convertir_numero_europeo(val)
-                    if not pd.isna(num) and num > 100:
-                        facturacion_total = float(num)
-                        cantidad_facturas = 1
-                        return facturacion_total, 0.0, cantidad_facturas, facturacion_total
-        
         return 0.0, 0.0, 0, 0.0
     
     @staticmethod
@@ -450,63 +439,6 @@ class ProcesadorArchivos:
                                 return float(num), 1, float(num)
                         except:
                             pass
-        
-        # 🔥 Si no encontró "Total General:", sumar SOLO las filas de datos
-        monto_col = None
-        for col in df.columns:
-            col_str = str(col).lower().strip()
-            if 'monto cobranza' in col_str:
-                monto_col = col
-                break
-        
-        if monto_col:
-            valores = []
-            for idx, val in enumerate(df[monto_col]):
-                num = ProcesadorArchivos._convertir_numero_europeo(val)
-                if not pd.isna(num) and num > 0:
-                    # Excluir filas que son subtotales
-                    es_subtotal = False
-                    for col2 in df.columns:
-                        if col2 != monto_col:
-                            try:
-                                cell_val = str(df.iloc[idx][col2]).lower()
-                                if 'total' in cell_val or 'sub total' in cell_val:
-                                    es_subtotal = True
-                                    break
-                            except:
-                                pass
-                    if not es_subtotal:
-                        valores.append(num)
-            if valores:
-                total = sum(valores)
-                if total > 100:
-                    return float(total), len(valores), float(total / len(valores))
-        
-        # 🔥 MÉTODO 3: Buscar cualquier columna numérica (fallback)
-        for col in reversed(df.columns):
-            try:
-                valores = []
-                for idx, val in enumerate(df[col]):
-                    num = ProcesadorArchivos._convertir_numero_europeo(val)
-                    if not pd.isna(num) and num > 0:
-                        es_subtotal = False
-                        for col2 in df.columns:
-                            if col2 != col:
-                                try:
-                                    cell_val = str(df.iloc[idx][col2]).lower()
-                                    if 'total' in cell_val or 'sub total' in cell_val:
-                                        es_subtotal = True
-                                        break
-                                except:
-                                    pass
-                        if not es_subtotal:
-                            valores.append(num)
-                if valores:
-                    total = sum(valores)
-                    if total > 100:
-                        return float(total), len(valores), float(total / len(valores))
-            except:
-                pass
         
         return 0.0, 0, 0.0
     
@@ -696,20 +628,11 @@ class ProcesadorArchivos:
             'pago', 'monto_pago', 'valor_pago', 'debito', 'débito'
         )
         
-        # Buscar columna de tipo (con más opciones)
-        tipo_col = ProcesadorArchivos._buscar_columna(
+        # Buscar columna de proveedor/beneficiario
+        proveedor_col = ProcesadorArchivos._buscar_columna(
             df, 
-            'tipo de egreso', 'tipo de pago', 'tipo', 'categoria', 
-            'concepto', 'descripcion', 'clasificacion', 'beneficiario', 
-            'destinatario', 'proveedor', 'descripción', 'Tipo de Egreso', 'Tipo de Pago'
+            'proveedor', 'beneficiario', 'destinatario', 'descripción', 'concepto'
         )
-        
-        # 🔥 Si no encontró tipo, buscar por descripción o proveedor
-        if tipo_col is None:
-            tipo_col = ProcesadorArchivos._buscar_columna(
-                df,
-                'proveedor', 'beneficiario', 'destinatario', 'descripción', 'concepto'
-            )
         
         # Buscar columna de documento/referencia
         doc_col = ProcesadorArchivos._buscar_columna(
@@ -722,7 +645,7 @@ class ProcesadorArchivos:
         pagos_proveedores = 0.0
         pagos_gastos = 0.0
         
-        if monto_col:
+        if monto_col and proveedor_col:
             # Extraer valores con el convertidor europeo
             valores = []
             for val in df[monto_col]:
@@ -733,26 +656,22 @@ class ProcesadorArchivos:
                     valores.append(0.0)
             total_egresos = sum(valores)
             
-            if tipo_col and total_egresos > 0:
-                try:
-                    tipos = df[tipo_col].astype(str).str.lower()
-                    
-                    # 🔥 Buscar proveedores (múltiples patrones)
-                    mascara_proveedores = tipos.str.contains(
-                        'proveedor|oleica|regional de empaques|corp monagas|corporacion 2707|molinos nacionales|monaca', 
-                        na=False, case=False
-                    )
-                    
-                    pagos_proveedores = sum([valores[i] for i, m in enumerate(mascara_proveedores) if m])
-                    # 🔥 TODO lo que NO es proveedor es gasto
-                    pagos_gastos = total_egresos - pagos_proveedores
-                except Exception as e:
-                    pagos_proveedores = 0.0
-                    pagos_gastos = total_egresos
-            else:
-                # Si no hay columna de tipo, asumir 40% proveedores, 60% gastos
-                pagos_proveedores = total_egresos * 0.4
-                pagos_gastos = total_egresos * 0.6
+            # 🔥 Identificar proveedores por nombre
+            proveedores = df[proveedor_col].astype(str).str.lower()
+            
+            # Lista de proveedores conocidos (todos los que deben ir a proveedores)
+            lista_proveedores = [
+                'oleica', 'oleaginosas industriales',
+                'regional de empaques', 'regional empaques',
+                'corporacion 2707', 'corporacion monagas', 'corp monagas',
+                'molinos nacionales', 'monaca'
+            ]
+            
+            mascara_proveedores = proveedores.str.contains('|'.join(lista_proveedores), na=False, case=False)
+            
+            pagos_proveedores = sum([valores[i] for i, m in enumerate(mascara_proveedores) if m])
+            # 🔥 TODO lo que NO es proveedor es gasto
+            pagos_gastos = total_egresos - pagos_proveedores
         
         # Contar egresos
         cantidad = df[doc_col].nunique() if doc_col else len(df)
@@ -985,17 +904,6 @@ class ProcesadorArchivos:
                             return float(num)
                     except:
                         pass
-        
-        # 🔥 Si no encontró "Total General:", buscar el último valor significativo
-        for idx in range(len(df) - 1, -1, -1):
-            for col in df.columns:
-                try:
-                    valor = df.iloc[idx][col]
-                    num = ProcesadorArchivos._convertir_numero_europeo(valor)
-                    if not pd.isna(num) and num > 1000:
-                        return float(num)
-                except:
-                    pass
         
         return 0.0
     
