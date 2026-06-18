@@ -392,7 +392,7 @@ class ProcesadorArchivos:
     def procesar_cobranzas(df):
         """
         Procesa archivo de cobranzas.
-        Busca la columna "Monto Cobranza" para el total correcto.
+        Busca la columna "Monto Cobranza" y suma SOLO las filas de datos (excluyendo subtotales)
         
         Args:
             df: DataFrame de pandas
@@ -449,29 +449,58 @@ class ProcesadorArchivos:
                         except:
                             pass
         
-        # 🔥 MÉTODO 2: Buscar la columna "Monto Cobranza" y sumar todos los valores
+        # 🔥 MÉTODO 2: Sumar SOLO las filas de datos (excluyendo subtotales)
+        # Buscar la columna "Monto Cobranza"
+        monto_col = None
         for col in df.columns:
             col_str = str(col).lower().strip()
             if 'monto cobranza' in col_str:
-                valores = []
-                for val in df[col]:
-                    num = ProcesadorArchivos._convertir_numero_europeo(val)
-                    if not pd.isna(num) and num > 0:
-                        valores.append(num)
-                if valores:
-                    total = sum(valores)
-                    if total > 100:
-                        return float(total), len(valores), float(total / len(valores))
+                monto_col = col
+                break
         
-        # 🔥 MÉTODO 3: Buscar cualquier columna numérica con valores grandes (fallback)
+        if monto_col:
+            valores = []
+            for idx, val in enumerate(df[monto_col]):
+                num = ProcesadorArchivos._convertir_numero_europeo(val)
+                if not pd.isna(num) and num > 0:
+                    # Excluir filas que son subtotales (contienen "Total" en alguna columna)
+                    es_subtotal = False
+                    for col2 in df.columns:
+                        if col2 != monto_col:
+                            try:
+                                cell_val = str(df.iloc[idx][col2]).lower()
+                                if 'total' in cell_val or 'sub total' in cell_val:
+                                    es_subtotal = True
+                                    break
+                            except:
+                                pass
+                    if not es_subtotal:
+                        valores.append(num)
+            if valores:
+                total = sum(valores)
+                if total > 100:
+                    return float(total), len(valores), float(total / len(valores))
+        
+        # 🔥 MÉTODO 3: Buscar cualquier columna numérica (fallback)
         for col in reversed(df.columns):
             try:
                 valores = []
-                for val in df[col]:
+                for idx, val in enumerate(df[col]):
                     num = ProcesadorArchivos._convertir_numero_europeo(val)
                     if not pd.isna(num) and num > 0:
-                        valores.append(num)
-                if valores and len(valores) > 1:
+                        es_subtotal = False
+                        for col2 in df.columns:
+                            if col2 != col:
+                                try:
+                                    cell_val = str(df.iloc[idx][col2]).lower()
+                                    if 'total' in cell_val or 'sub total' in cell_val:
+                                        es_subtotal = True
+                                        break
+                                except:
+                                    pass
+                        if not es_subtotal:
+                            valores.append(num)
+                if valores:
                     total = sum(valores)
                     if total > 100:
                         return float(total), len(valores), float(total / len(valores))
@@ -527,13 +556,26 @@ class ProcesadorArchivos:
         
         total_recepcion = 0.0
         
-        # 🔥 BUSCAR LA COLUMNA "$ Neto + IVA"
+        # 🔥 BUSCAR LA COLUMNA "$ Neto + IVA" (con diferentes variantes)
         col_neto = None
         for col in df.columns:
             col_str = str(col).strip()
-            if '$ Neto + IVA' in col_str or 'Neto + IVA' in col_str or 'neto + iva' in col_str.lower():
+            # Probar diferentes variantes
+            if ('$ Neto + IVA' in col_str or 
+                'Neto + IVA' in col_str or 
+                'neto + iva' in col_str.lower() or
+                '$ Neto' in col_str or
+                'Neto' in col_str):
                 col_neto = col
                 break
+        
+        # Si no encontró, buscar cualquier columna con "neto"
+        if col_neto is None:
+            for col in df.columns:
+                col_str = str(col).lower().strip()
+                if 'neto' in col_str:
+                    col_neto = col
+                    break
         
         # 🔥 Si encontró la columna, buscar el total
         if col_neto:
@@ -550,8 +592,7 @@ class ProcesadorArchivos:
                     except:
                         pass
             
-            # Si no encontró "Total General:", tomar el PRIMER valor de la columna
-            # (NO el último, para evitar duplicados)
+            # Si no encontró "Total General:", tomar el primer valor significativo
             if total_recepcion == 0:
                 for val in df[col_neto]:
                     num = ProcesadorArchivos._convertir_numero_europeo(val)
@@ -559,11 +600,10 @@ class ProcesadorArchivos:
                         total_recepcion = float(num)
                         break
         
-        # Si no encontró la columna "$ Neto + IVA", buscar cualquier columna con "neto"
+        # Si no encontró ninguna columna con "neto", buscar la última columna numérica
         if total_recepcion == 0:
-            for col in df.columns:
-                col_str = str(col).lower().strip()
-                if 'neto' in col_str:
+            for col in reversed(df.columns):
+                try:
                     for val in df[col]:
                         num = ProcesadorArchivos._convertir_numero_europeo(val)
                         if not pd.isna(num) and num > 0:
@@ -571,6 +611,8 @@ class ProcesadorArchivos:
                             break
                     if total_recepcion > 0:
                         break
+                except:
+                    pass
         
         # Calcular compras a crédito (60% de la recepción por defecto)
         compras_credito = total_recepcion * 0.6
@@ -595,6 +637,8 @@ class ProcesadorArchivos:
                         else:
                             valores.append(0.0)
                     compras_credito = sum([valores[i] for i, m in enumerate(mascara_credito) if m])
+                else:
+                    compras_credito = total_recepcion * 0.6
             except:
                 compras_credito = total_recepcion * 0.6
         
@@ -692,6 +736,12 @@ class ProcesadorArchivos:
                     
                     pagos_proveedores = sum([valores[i] for i, m in enumerate(mascara_proveedores) if m])
                     pagos_gastos = total_egresos - pagos_proveedores
+                    
+                    # 🔥 Si pagos_gastos es muy bajo, buscar "Variable" y "Fijo"
+                    if pagos_gastos < 1000000 and total_egresos > 1000000:
+                        mascara_gastos = tipos.str.contains('fijo|variable', na=False, case=False)
+                        pagos_gastos = sum([valores[i] for i, m in enumerate(mascara_gastos) if m])
+                        pagos_proveedores = total_egresos - pagos_gastos
                 except Exception as e:
                     pagos_proveedores = 0.0
                     pagos_gastos = total_egresos
