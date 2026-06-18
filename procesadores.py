@@ -312,7 +312,7 @@ class ProcesadorArchivos:
         except Exception as e:
             return df
     
-    # ===================== FUNCIÓN CORREGIDA: FACTURACIÓN =====================
+    # ===================== FUNCIÓN REEMPLAZADA COMPLETAMENTE: FACTURACIÓN =====================
     
     @staticmethod
     def procesar_facturacion(df):
@@ -329,79 +329,40 @@ class ProcesadorArchivos:
         """
         if df is None or df.empty:
             return 0.0, 0.0, 0, 0.0
-        
-        # Limpiar columnas
-        df = ProcesadorArchivos._limpiar_columnas(df)
-        
-        # 🔥 Buscar la fila "Totales:"
-        for idx, row in df.iterrows():
-            row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-            if 'totales:' in row_str:
-                # En la fila de totales, buscar TODAS las columnas que contienen "Div. Neto"
-                # y tomar el ÚLTIMO valor (que es el TOTAL)
-                valores_div_neto = []
-                for col in df.columns:
-                    col_str = str(col).lower().strip()
-                    if 'div' in col_str and 'neto' in col_str:
-                        try:
-                            valor = row[col]
-                            num = ProcesadorArchivos._convertir_numero_europeo(valor)
-                            if not pd.isna(num):
-                                valores_div_neto.append(num)
-                        except:
-                            pass
-                
-                # Si encontramos valores en columnas "Div. Neto"
-                if valores_div_neto:
-                    # Tomar el ÚLTIMO valor (que es el TOTAL)
-                    facturacion_total = valores_div_neto[-1]
-                    if facturacion_total > 100:
-                        cantidad_facturas = 1
-                        promedio = facturacion_total / cantidad_facturas
-                        return facturacion_total, 0.0, cantidad_facturas, promedio
-                
-                # 🔥 FALLBACK: Si no encontró columnas "Div. Neto", buscar por posición
-                # En el archivo, la columna Q (índice 16) es "Div. Neto → Total"
-                if len(df.columns) > 16:
-                    try:
-                        col_q = df.columns[16]
-                        valor = row[col_q]
-                        num = ProcesadorArchivos._convertir_numero_europeo(valor)
-                        if not pd.isna(num) and num > 100:
-                            facturacion_total = float(num)
-                            cantidad_facturas = 1
-                            promedio = facturacion_total / cantidad_facturas
-                            return facturacion_total, 0.0, cantidad_facturas, promedio
-                    except:
-                        pass
-                
-                # 🔥 FALLBACK 2: Buscar en la fila de totales el número que coincide con 15.288,18
-                for col in df.columns:
-                    try:
-                        valor = row[col]
-                        num = ProcesadorArchivos._convertir_numero_europeo(valor)
-                        if not pd.isna(num) and 15280 < num < 15300:
-                            facturacion_total = float(num)
-                            cantidad_facturas = 1
-                            promedio = facturacion_total / cantidad_facturas
-                            return facturacion_total, 0.0, cantidad_facturas, promedio
-                    except:
-                        pass
-                
-                # 🔥 FALLBACK 3: Buscar cualquier número entre 1000 y 100000 en la fila de totales
-                for col in df.columns:
-                    try:
-                        valor = row[col]
-                        num = ProcesadorArchivos._convertir_numero_europeo(valor)
-                        if not pd.isna(num) and 1000 < num < 100000:
-                            facturacion_total = float(num)
-                            cantidad_facturas = 1
-                            promedio = facturacion_total / cantidad_facturas
-                            return facturacion_total, 0.0, cantidad_facturas, promedio
-                    except:
-                        pass
-        
-        return 0.0, 0.0, 0, 0.0
+
+        # Buscar fila Totales
+        fila_totales = None
+
+        for _, row in df.iterrows():
+            texto = " ".join(
+                [str(x) for x in row.values if pd.notna(x)]
+            ).lower()
+
+            if "totales" in texto:
+                fila_totales = row
+                break
+
+        if fila_totales is None:
+            return 0.0, 0.0, 0, 0.0
+
+        # Extraer todos los números de la fila
+        numeros = []
+
+        for valor in fila_totales.values:
+            num = ProcesadorArchivos._convertir_numero_europeo(valor)
+            if not pd.isna(num):
+                numeros.append(float(num))
+
+        # Buscar el Div Neto Total
+        # En este reporte es el MAYOR valor monetario
+        candidatos = [n for n in numeros if n > 1000]
+
+        if not candidatos:
+            return 0.0, 0.0, 0, 0.0
+
+        facturacion_total = max(candidatos)
+
+        return facturacion_total, 0.0, 1, facturacion_total
     
     # ===================== FUNCIÓN MODIFICADA 2: COBRANZAS =====================
     
