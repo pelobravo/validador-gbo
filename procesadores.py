@@ -318,8 +318,8 @@ class ProcesadorArchivos:
     def procesar_facturacion(df):
         """
         Procesa archivo de facturación (ranking de ventas).
-        Busca la fila "Totales:" y extrae el valor de "Div. Neto → Total"
-        El valor correcto es 15.288,18 (el total, no el de facturas individuales)
+        Busca la fila "Totales:" y extrae el valor de la columna P (índice 15)
+        El valor correcto es 15.288,18
         
         Args:
             df: DataFrame de pandas
@@ -330,39 +330,22 @@ class ProcesadorArchivos:
         if df is None or df.empty:
             return 0.0, 0.0, 0, 0.0
 
-        # Buscar fila Totales
-        fila_totales = None
+        try:
+            for _, row in df.iterrows():
+                texto = str(row.iloc[0]).lower()
+                if "totales" in texto:
+                    valor = row.iloc[15]   # Columna P
+                    facturacion = ProcesadorArchivos._convertir_numero_europeo(valor)
+                    return (
+                        float(facturacion),
+                        0.0,
+                        1,
+                        float(facturacion)
+                    )
+        except Exception as e:
+            print(f"Error en procesar_facturacion: {e}")
 
-        for _, row in df.iterrows():
-            texto = " ".join(
-                [str(x) for x in row.values if pd.notna(x)]
-            ).lower()
-
-            if "totales" in texto:
-                fila_totales = row
-                break
-
-        if fila_totales is None:
-            return 0.0, 0.0, 0, 0.0
-
-        # Extraer todos los números de la fila
-        numeros = []
-
-        for valor in fila_totales.values:
-            num = ProcesadorArchivos._convertir_numero_europeo(valor)
-            if not pd.isna(num):
-                numeros.append(float(num))
-
-        # Buscar el Div Neto Total
-        # En este reporte es el MAYOR valor monetario
-        candidatos = [n for n in numeros if n > 1000]
-
-        if not candidatos:
-            return 0.0, 0.0, 0, 0.0
-
-        facturacion_total = max(candidatos)
-
-        return facturacion_total, 0.0, 1, facturacion_total
+        return 0.0, 0.0, 0, 0.0
     
     # ===================== FUNCIÓN MODIFICADA 2: COBRANZAS =====================
     
