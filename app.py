@@ -6,13 +6,15 @@ import os
 import base64
 from PIL import Image
 import io
+import numpy as np
+import re
 
 # Importar módulos del sistema
 from config import USUARIOS, validar_carpetas
 from database import Database
 from logger import Logger
 from procesadores import ProcesadorArchivos
-from api_bcv import obtener_tasa_bcv  # NUEVA IMPORTACIÓN
+from api_bcv import obtener_tasa_bcv
 
 # Inicializar componentes
 validar_carpetas()
@@ -226,7 +228,12 @@ def formatear_diferencia(valor_calculado, valor_reportado):
 def extraer_transito_reportado(df, transito_inicial):
     try:
         if df is not None and 'Crédito' in df.columns:
-            total_ingresos = safe_number(df['Crédito'].sum())
+            # 🔥 USAR EL CONVERTIDOR EUROPEO
+            total_ingresos = 0
+            for val in df['Crédito']:
+                num = ProcesadorArchivos._convertir_numero_europeo(val)
+                if not pd.isna(num) and num > 0:
+                    total_ingresos += num
             return safe_number(transito_inicial) + total_ingresos
         else:
             return None
