@@ -1,4 +1,5 @@
-# app.py
+# app.py - Con campos para saldos iniciales manuales
+
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -41,10 +42,8 @@ def formato_venezolano(valor):
     if valor is None:
         return "0,00"
     try:
-        # Si es string, limpiar y convertir a float
         if isinstance(valor, str):
             valor = float(valor.replace(',', '').replace('.', '').replace(' ', ''))
-        # Formatear con separador de miles como punto y decimal como coma
         return f"{float(valor):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
     except (ValueError, TypeError):
         return "0,00"
@@ -53,7 +52,6 @@ def formato_venezolano(valor):
 # FUNCIÓN HELPER PARA VALORES SEGUROS
 # ============================================================
 def safe_number(value, default=0):
-    """Convierte un valor a número de forma segura, evitando None y errores"""
     if value is None:
         return default
     try:
@@ -62,7 +60,6 @@ def safe_number(value, default=0):
         return default
 
 def safe_string(value, default=""):
-    """Convierte un valor a string de forma segura"""
     if value is None:
         return default
     return str(value)
@@ -72,14 +69,12 @@ def safe_string(value, default=""):
 # ============================================================
 st.markdown("""
 <style>
-    /* Fuente principal */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
     }
     
-    /* KPI cards */
     .kpi-card {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         border-radius: 20px;
@@ -101,7 +96,6 @@ st.markdown("""
         margin-top: 8px;
     }
     
-    /* Tablas modernas */
     .dataframe {
         border-radius: 16px;
         overflow: hidden;
@@ -115,7 +109,6 @@ st.markdown("""
         padding: 12px;
     }
     
-    /* Botones principales */
     .stButton > button {
         border-radius: 12px;
         font-weight: 500;
@@ -127,7 +120,6 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
     
-    /* Sidebar moderna - Fondo oscuro */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
     }
@@ -142,7 +134,6 @@ st.markdown("""
         color: white;
     }
     
-    /* Botones en sidebar */
     [data-testid="stSidebar"] .stButton > button {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white !important;
@@ -158,7 +149,6 @@ st.markdown("""
         color: white !important;
     }
     
-    /* File uploaders en sidebar */
     [data-testid="stSidebar"] .stFileUploader label {
         color: #e0e0e0 !important;
     }
@@ -167,17 +157,14 @@ st.markdown("""
         color: #a0a0a0 !important;
     }
     
-    /* Date input en sidebar */
     [data-testid="stSidebar"] .stDateInput label {
         color: #e0e0e0 !important;
     }
     
-    /* Subheaders en sidebar */
     [data-testid="stSidebar"] .stSubheader {
         color: white !important;
     }
     
-    /* Metric cards */
     [data-testid="stMetric"] {
         background: rgba(255,255,255,0.05);
         border-radius: 16px;
@@ -224,7 +211,6 @@ if 'usuario_actual' not in st.session_state:
 # FUNCIONES AUXILIARES
 # ============================================================
 def cargar_ultimo_saldo_automatico():
-    """Carga automáticamente el último saldo guardado al iniciar sesión"""
     ultimo = db.obtener_ultimo_saldo()
     if ultimo:
         st.session_state.saldos['inventario'] = safe_number(ultimo['inventario'])
@@ -250,7 +236,6 @@ def formatear_diferencia(valor_calculado, valor_reportado):
 def extraer_transito_reportado(df, transito_inicial):
     try:
         if df is not None and 'Crédito' in df.columns:
-            # 🔥 USAR EL CONVERTIDOR EUROPEO
             total_ingresos = 0
             for val in df['Crédito']:
                 num = ProcesadorArchivos._convertir_numero_europeo(val)
@@ -263,7 +248,6 @@ def extraer_transito_reportado(df, transito_inicial):
         return None
 
 def mostrar_tabla_activos_pasivos(inventario, cx_c, bancos, cx_p, transito, capital):
-    # Asegurar valores numéricos
     inventario = safe_number(inventario)
     cx_c = safe_number(cx_c)
     bancos = safe_number(bancos)
@@ -361,7 +345,6 @@ def mostrar_login():
     with st.container():
         st.markdown("<br><br>", unsafe_allow_html=True)
         
-        # Logo centrado
         try:
             img = Image.open("auditoria.jpeg")
             img.thumbnail((200, 200))
@@ -380,7 +363,6 @@ def mostrar_login():
         except:
             st.markdown("<h1 style='text-align: center;'>AUDITORÍA</h1>", unsafe_allow_html=True)
         
-        # Título principal
         st.markdown("""
         <div style="text-align: center;">
             <h1 style="font-size: 2.2rem; font-weight: 700; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
@@ -392,7 +374,6 @@ def mostrar_login():
         </div>
         """, unsafe_allow_html=True)
         
-        # Formulario de login
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             st.markdown("""
@@ -424,7 +405,7 @@ if st.session_state.usuario_actual is None:
 if cargar_ultimo_saldo_automatico():
     st.sidebar.success("✅ Saldos del día anterior cargados automáticamente")
 else:
-    st.sidebar.info("📌 No hay saldos previos. Guarde los saldos al finalizar el día.")
+    st.sidebar.info("📌 No hay saldos previos. Ingrese los saldos manualmente o guarde al finalizar el día.")
 
 # ============================================================
 # SIDEBAR MODERNA
@@ -481,6 +462,64 @@ with st.sidebar:
     
     st.markdown("---")
     
+    # ============================================================
+    # 🔥 NUEVO: SALDOS INICIALES MANUALES
+    # ============================================================
+    st.markdown("#### 📌 Saldos Iniciales Manuales")
+    st.caption("Ingrese los saldos del día anterior")
+    
+    col_s1, col_s2 = st.columns(2)
+    with col_s1:
+        inventario_manual = st.number_input(
+            "📦 Inventario",
+            value=float(st.session_state.saldos['inventario']),
+            step=100.0,
+            format="%.2f",
+            key="inv_manual"
+        )
+        cx_c_manual = st.number_input(
+            "💰 CxC",
+            value=float(st.session_state.saldos['cx_c']),
+            step=100.0,
+            format="%.2f",
+            key="cxc_manual"
+        )
+    with col_s2:
+        bancos_manual = st.number_input(
+            "🏦 Bancos",
+            value=float(st.session_state.saldos['bancos']),
+            step=100.0,
+            format="%.2f",
+            key="ban_manual"
+        )
+        cx_p_manual = st.number_input(
+            "📋 CxP",
+            value=float(st.session_state.saldos['cx_p']),
+            step=100.0,
+            format="%.2f",
+            key="cxp_manual"
+        )
+    
+    transito_manual = st.number_input(
+        "🔄 Tránsito",
+        value=float(st.session_state.saldos['transito']),
+        step=100.0,
+        format="%.2f",
+        key="tran_manual"
+    )
+    
+    # Botón para actualizar saldos manuales
+    if st.button("📊 Actualizar Saldos Manuales", use_container_width=True):
+        st.session_state.saldos['inventario'] = inventario_manual
+        st.session_state.saldos['cx_c'] = cx_c_manual
+        st.session_state.saldos['bancos'] = bancos_manual
+        st.session_state.saldos['cx_p'] = cx_p_manual
+        st.session_state.saldos['transito'] = transito_manual
+        st.success("✅ Saldos actualizados manualmente")
+        st.rerun()
+    
+    st.markdown("---")
+    
     st.markdown("#### 📂 Archivos del día")
     
     archivo_facturacion = st.file_uploader("Facturación diaria", type=["xlsx", "xls"], key="fact")
@@ -492,7 +531,7 @@ with st.sidebar:
     archivo_notas_credito_proveedor = st.file_uploader("Notas de crédito (proveedores)", type=["xlsx", "xls"], key="notas_proveedor")
     
     # ============================================================
-    # 🔥 NUEVO: ARCHIVO DE COSTO DE FACTURACIÓN
+    # 🔥 ARCHIVO DE COSTO DE FACTURACIÓN
     # ============================================================
     st.markdown("#### 📂 Archivos de costos")
     archivo_costo_facturacion = st.file_uploader("Costo de facturación", type=["xlsx", "xls"], key="costo_fact")
@@ -517,6 +556,7 @@ with st.sidebar:
                 st.session_state.saldos['cx_p'] = safe_number(ultimo['cx_p'])
                 st.session_state.saldos['transito'] = safe_number(ultimo['transito'])
                 st.success("✅ Saldos cargados del día anterior")
+                st.rerun()
             else:
                 st.warning("No hay historial de días anteriores")
     
@@ -528,6 +568,7 @@ with st.sidebar:
             st.session_state.saldos['cx_p'] = 0
             st.session_state.saldos['transito'] = 0
             st.success("✅ Saldos reseteados a 0")
+            st.rerun()
 
 # ============================================================
 # INTERFAZ PRINCIPAL
@@ -574,12 +615,12 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
         st.error(f"❌ Error al leer archivos Excel: {str(e)}")
         st.stop()
     
-    # 🔥 Leer archivo de costo de facturación (opcional)
+    # 🔥 Leer archivo de costo de facturación (usando procesar_costo_facturacion)
     costo_facturacion = 0.0
     if archivo_costo_facturacion:
         try:
             df_costo = pd.read_excel(archivo_costo_facturacion)
-            costo_facturacion, _, _, _ = ProcesadorArchivos.procesar_facturacion(df_costo)
+            costo_facturacion = ProcesadorArchivos.procesar_costo_facturacion(df_costo)
             st.success(f"✅ Costo de facturación cargado: {formato_venezolano(costo_facturacion)}")
         except Exception as e:
             st.warning(f"⚠️ Error al leer costo de facturación: {str(e)}")
@@ -649,7 +690,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
         st.error(f"❌ Error al procesar movimientos: {str(e)}")
         st.stop()
     
-    # 🔥 VALIDAR Y ASEGURAR VALORES NUMÉRICOS (EVITAR None)
+    # 🔥 VALIDAR Y ASEGURAR VALORES NUMÉRICOS
     facturacion = safe_number(facturacion)
     costo_facturacion = safe_number(costo_facturacion)
     cobranzas = safe_number(cobranzas)
@@ -665,12 +706,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     
     ingresos_totales = ingresos_id + ingresos_no_id
     
-    # 🔥 IMPORTANTE: YA NO ASIGNAMOS recepcion_total como costo_facturacion
-    # El costo de facturación solo se carga si el usuario subió el archivo correspondiente
-    # Si no se cargó, se mantiene en 0
-    
     # ============================================================
-    # TABLA 1: MOVIMIENTOS DEL DÍA (con formato venezolano)
+    # TABLA 1: MOVIMIENTOS DEL DÍA
     # ============================================================
     st.markdown("#### 📋 Movimientos del día procesados")
     
@@ -690,8 +727,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     st.markdown("---")
     
     # ============================================================
-    # CÁLCULOS Y VALIDACIONES
-    # ============================================================
+    # CÁLCULOS Y VALIDACIONES    # ============================================================
     inventario_calculado = safe_number(st.session_state.saldos['inventario']) + recepcion_total - costo_facturacion
     cx_c_calculado = safe_number(st.session_state.saldos['cx_c']) + facturacion - cobranzas - notas_credito_cliente
     bancos_calculado = safe_number(st.session_state.saldos['bancos']) + ingresos_totales - pagos_proveedores - pagos_gastos
@@ -712,7 +748,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     st.markdown("---")
     
     # ============================================================
-    # TABLA COMPARATIVA CON REPORTADOS (con formato venezolano)
+    # TABLA COMPARATIVA CON REPORTADOS
     # ============================================================
     st.markdown("#### 📋 Comparación vs Valores Reportados")
     
@@ -770,7 +806,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     st.markdown("---")
     
     # ============================================================
-    # KPI - RESUMEN DEL DÍA (con formato venezolano)
+    # KPI - RESUMEN DEL DÍA
     # ============================================================
     st.markdown("#### 📊 Resumen del Día")
     
