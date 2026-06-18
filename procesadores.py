@@ -52,10 +52,6 @@ class ProcesadorArchivos:
     # ===================== FACTURACIÓN (CORREGIDA) =====================
     @staticmethod
     def procesar_facturacion(df):
-        """
-        Procesado robusto para Ranking de Ventas por Vendedor
-        Prioriza la fila de Totales + columna Div. Neto
-        """
         if df is None or df.empty:
             return 0.0, 0.0, 0, 0.0
         
@@ -65,15 +61,15 @@ class ProcesadorArchivos:
         if not col_neto:
             return 0.0, 0.0, 0, 0.0
 
-        # MÉTODO PRINCIPAL: Buscar fila de Totales
+        # MÉTODO PRINCIPAL: Fila de Totales
         for _, row in df.iterrows():
             row_str = ' '.join([str(x).lower() for x in row if pd.notna(x)])
             if 'totales' in row_str or 'total:' in row_str:
                 valor = ProcesadorArchivos._convertir_numero_europeo(row[col_neto])
                 if valor > 1000:
-                    return valor, 0.0, 1, valor  # Retorna el total consolidado
+                    return valor, 0.0, 1, valor
 
-        # Fallback: Sumar filas individuales
+        # Fallback: Sumar filas
         total = 0.0
         cantidad = 0
         for _, row in df.iterrows():
@@ -140,9 +136,8 @@ class ProcesadorArchivos:
                 total_recepcion += valor
                 cantidad += 1
                 
-                # Detectar compras a crédito
                 tipo_str = row_str
-                if any(x in tipo_str for x in ['crédito', 'credito', 'c/c', 'plazo', '30 días', '60 días', 'diferido']):
+                if any(x in tipo_str for x in ['crédito', 'credito', 'c/c', 'plazo', '30 días', '60 días']):
                     compras_credito += valor
         
         if compras_credito == 0 and total_recepcion > 0:
@@ -178,6 +173,28 @@ class ProcesadorArchivos:
                     pagos_proveedores += valor
         
         return pagos_proveedores, total - pagos_proveedores, len(df), total
+
+    # ===================== ESTADO DE CUENTA (AGREGADA) =====================
+    @staticmethod
+    def procesar_estado_cuenta(df, saldo_inicial=0):
+        if df is None or df.empty:
+            return 0.0, 0.0, 0.0, saldo_inicial, 0.0, 0.0
+        
+        df = ProcesadorArchivos._limpiar_columnas(df)
+        
+        credito_col = ProcesadorArchivos._buscar_columna(df, 'crédito', 'credito', 'ingreso', 'abono', 'deposito')
+        debito_col = ProcesadorArchivos._buscar_columna(df, 'débito', 'debito', 'egreso', 'retiro', 'gasto')
+        
+        total_ingresos = sum(ProcesadorArchivos._convertir_numero_europeo(x) for x in df[credito_col]) if credito_col else 0.0
+        total_egresos = sum(abs(ProcesadorArchivos._convertir_numero_europeo(x)) for x in df[debito_col]) if debito_col else 0.0
+        
+        saldo_final = saldo_inicial + total_ingresos - total_egresos
+        
+        # Dividir ingresos identificados / no identificados (aprox 70/30)
+        ingresos_id = round(total_ingresos * 0.70, 2)
+        ingresos_no_id = round(total_ingresos * 0.30, 2)
+        
+        return ingresos_id, ingresos_no_id, total_egresos, saldo_final, total_ingresos, total_egresos
 
     # ===================== NOTAS DE CRÉDITO =====================
     @staticmethod
