@@ -395,192 +395,68 @@ class ProcesadorArchivos:
                     df_datos = df_datos.iloc[1:].reset_index(drop=True)
                     df = df_datos
         
-        # 🔥 MÉTODO 1 MEJORADO: Buscar "Total General:" y "Monto Cobranza"
+        # BUSCAR TOTAL GENERAL Y TERMINAR
         for idx, row in df.iterrows():
-            row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-            if 'total general:' in row_str:
-                # 🔥 Buscar la columna "Monto Cobranza" exacta
-                monto_col = None
+
+            row_str = ' '.join(
+                [str(x) for x in row.values if pd.notna(x)]
+            ).lower()
+
+            if 'total general' in row_str:
+
                 for col in df.columns:
+
                     if 'monto cobranza' in str(col).lower():
-                        monto_col = col
-                        break
-                
-                if monto_col:
-                    valor = row[monto_col]
-                    num = ProcesadorArchivos._convertir_numero_europeo(valor)
-                    if not pd.isna(num):
-                        return float(num), 1, float(num)
-        
-        # 🔥 MÉTODO 2: Buscar la columna "Monto Cobranza" y sumar solo registros del día 15
-        monto_col = None
-        for col in df.columns:
-            col_str = str(col).lower().strip()
-            if 'monto cobranza' in col_str:
-                monto_col = col
-                break
-        
-        if monto_col:
-            valores = []
-            for idx, row in df.iterrows():
-                row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                if 'total general:' not in row_str and 'sub total' not in row_str:
-                    if '15/6/2026' in row_str or '15-6-2026' in row_str or '2026-06-15' in row_str:
-                        val = ProcesadorArchivos._convertir_numero_europeo(row[monto_col])
-                        if not pd.isna(val) and val > 0:
-                            valores.append(val)
-            if valores:
-                total = sum(valores)
-                if total > 100:
-                    return float(total), len(valores), float(total / len(valores))
-        
-        # 🔥 MÉTODO 3: Buscar cualquier columna numérica con valores grandes (fallback)
-        for col in reversed(df.columns):
-            try:
-                valores = []
-                for idx, row in df.iterrows():
-                    row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                    if 'total general:' in row_str or 'sub total' in row_str:
-                        continue
-                    num = ProcesadorArchivos._convertir_numero_europeo(row[col])
-                    if not pd.isna(num) and num > 0:
-                        valores.append(num)
-                if valores and len(valores) > 1:
-                    total = sum(valores)
-                    if total > 100:
-                        return float(total), len(valores), float(total / len(valores))
-            except:
-                pass
-        
+
+                        valor = row[col]
+
+                        num = ProcesadorArchivos._convertir_numero_europeo(valor)
+
+                        if not pd.isna(num):
+
+                            return float(num), 1, float(num)
+
         return 0.0, 0, 0.0
     
     # ===================== 🔥 CAMBIO 2: EGRESOS MODIFICADA =====================
     
     @staticmethod
     def procesar_egresos(df):
-        """
-        Procesa archivo de egresos.
-        Separa pagos a proveedores vs gastos.
-        FILTRA POR FECHA (solo el día 15).
-        TODO lo que NO es proveedor es gasto.
-        
-        Args:
-            df: DataFrame de pandas
-        
-        Returns:
-            tuple: (pagos_proveedores, pagos_gastos, cantidad_egresos, total_egresos)
-        """
+
         if df is None or df.empty:
             return 0.0, 0.0, 0, 0.0
-        
-        # Limpiar columnas
+
         df = ProcesadorArchivos._limpiar_columnas(df)
-        
-        # ==========================================
-        # 🔥 TOTAL REAL DEL ARCHIVO (Monto USD)
-        # ==========================================
-        
-        monto_usd_col = None
-        
+
+        monto_col = None
+
         for col in df.columns:
+
             if str(col).strip().lower() == "monto usd":
-                monto_usd_col = col
+                monto_col = col
                 break
-        
-        if monto_usd_col is None and len(df.columns) >= 8:
-            monto_usd_col = df.columns[7]
-        
-        # 🔥 BUSCAR COLUMNA DE FECHA
-        fecha_col = None
-        for col in df.columns:
-            col_str = str(col).lower().strip()
-            if 'fecha' in col_str:
-                fecha_col = col
-                break
-        
-        # 🔥 FILTRAR POR FECHA (solo día 15 de junio 2026)
-        if fecha_col:
-            df = ProcesadorArchivos._filtrar_por_fecha(df, fecha_col, dia=15, mes=6, año=2026)
-            if df.empty:
-                return 0.0, 0.0, 0, 0.0
-        
-        # Buscar columna de monto
-        monto_col = ProcesadorArchivos._buscar_columna(
-            df, 
-            'monto', 'valor', 'total', 'importe', 'egreso', 'amount', 
-            'pago', 'monto_pago', 'valor_pago', 'debito', 'débito'
+
+        if monto_col is None:
+
+            if len(df.columns) >= 8:
+                monto_col = df.columns[7]
+
+        if monto_col is None:
+            return 0.0, 0.0, 0, 0.0
+
+        total = pd.to_numeric(
+            df[monto_col],
+            errors='coerce'
+        ).fillna(0).sum()
+
+        cantidad = len(df)
+
+        return (
+            float(total),  # pagos_proveedores
+            0.0,           # pagos_gastos
+            cantidad,
+            float(total)
         )
-        
-        # Buscar columna de proveedor/beneficiario
-        proveedor_col = ProcesadorArchivos._buscar_columna(
-            df, 
-            'proveedor', 'beneficiario', 'destinatario', 'descripción', 'concepto'
-        )
-        
-        # Buscar columna de documento/referencia
-        doc_col = ProcesadorArchivos._buscar_columna(
-            df, 
-            'documento', 'comprobante', 'doc', 'id', 'nro_egreso', 'recibo', 'referencia'
-        )
-        
-        # Extraer totales
-        total_egresos = 0.0
-        pagos_proveedores = 0.0
-        pagos_gastos = 0.0
-        
-        # 🔥 CALCULAR TOTAL_EGRESOS DESDE LA COLUMNA "Monto USD"
-        if monto_usd_col:
-            valores = []
-            for val in df[monto_usd_col]:
-                num = ProcesadorArchivos._convertir_numero_europeo(val)
-                if not pd.isna(num):
-                    valores.append(float(num))
-            total_egresos = sum(valores)
-        
-        # Si no se encontró "Monto USD", usar el método tradicional
-        elif monto_col and proveedor_col:
-            # Extraer valores con el convertidor europeo
-            valores = []
-            for val in df[monto_col]:
-                num = ProcesadorArchivos._convertir_numero_europeo(val)
-                if not pd.isna(num) and num > 0:
-                    valores.append(num)
-                else:
-                    valores.append(0.0)
-            total_egresos = sum(valores)
-            
-            # 🔥 Identificar proveedores por nombre
-            proveedores = df[proveedor_col].astype(str).str.lower()
-            
-            # Lista de proveedores conocidos (todos los que deben ir a proveedores)
-            lista_proveedores = [
-                'oleica', 'oleaginosas industriales',
-                'regional de empaques', 'regional empaques',
-                'corporacion 2707', 'corporacion monagas', 'corp monagas',
-                'molinos nacionales', 'monaca'
-            ]
-            
-            mascara_proveedores = proveedores.str.contains('|'.join(lista_proveedores), na=False, case=False)
-            
-            pagos_proveedores = sum([valores[i] for i, m in enumerate(mascara_proveedores) if m])
-            # 🔥 TODO lo que NO es proveedor es gasto
-            pagos_gastos = total_egresos - pagos_proveedores
-        else:
-            # Fallback: usar el monto_col si existe
-            if monto_col:
-                valores = []
-                for val in df[monto_col]:
-                    num = ProcesadorArchivos._convertir_numero_europeo(val)
-                    if not pd.isna(num) and num > 0:
-                        valores.append(num)
-                total_egresos = sum(valores)
-                pagos_gastos = total_egresos
-        
-        # Contar egresos
-        cantidad = df[doc_col].nunique() if doc_col else len(df)
-        
-        return pagos_proveedores, pagos_gastos, cantidad, total_egresos
-    
     # ===================== 🔥 CAMBIO 3: ESTADO DE CUENTA MODIFICADA =====================
     
     @staticmethod
@@ -1055,3 +931,4 @@ class ProcesadorArchivos:
                 return None
         
         return None
+
