@@ -276,3 +276,16 @@ class Database:
             return float(resultado[0])
         
         return None
+    
+    def eliminar_saldo(self, fecha):
+        """Elimina los saldos de una fecha específica"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            "DELETE FROM saldos_diarios WHERE fecha = ?",
+            (fecha,)
+        )
+        
+        conn.commit()
+        conn.close()
