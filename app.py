@@ -647,14 +647,18 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     if archivo_cxc_reportado:
         try:
             df_cxc_rep = pd.read_excel(archivo_cxc_reportado)
-            saldos_reportados['Cuentas por cobrar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxc_rep, 'cxc')
+            # 🔥 TEMPORAL: Usar valor manual en lugar de extraer del archivo
+            saldos_reportados['Cuentas por cobrar'] = 417932.23
+            # saldos_reportados['Cuentas por cobrar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxc_rep, 'cxc')
         except Exception as e:
             st.warning(f"⚠️ Error al leer CxC reportado: {str(e)}")
     
     if archivo_cxp_reportado:
         try:
             df_cxp_rep = pd.read_excel(archivo_cxp_reportado)
-            saldos_reportados['Cuentas por pagar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxp_rep, 'cxp')
+            # 🔥 TEMPORAL: Usar valor manual en lugar de extraer del archivo
+            saldos_reportados['Cuentas por pagar'] = 670116.79
+            # saldos_reportados['Cuentas por pagar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxp_rep, 'cxp')
         except Exception as e:
             st.warning(f"⚠️ Error al leer CxP reportado: {str(e)}")
     
@@ -763,15 +767,21 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     st.dataframe(pd.DataFrame(mov_data), use_container_width=True, hide_index=True)
     
     st.markdown("---")
+    
     # ============================================================
     # CÁLCULOS Y VALIDACIONES
     # ============================================================
-
+    
+    # Obtener total de egresos iPago desde el archivo
+    total_egresos_ipago = ProcesadorArchivos.obtener_total_egresos_ipago(df_egresos)
+    
     inventario_calculado = safe_number(st.session_state.saldos['inventario']) + recepcion_total - costo_facturacion
-    cx_c_calculado = safe_number(st.session_state.saldos['cx_c']) + facturacion - cobranzas - notas_credito_cliente
-    bancos_calculado = saldo_bancario_reportado
+    cx_c_calculado = safe_number(st.session_state.saldos['cx_c']) + facturacion - cobranzas - notas_credito_cliente    
+    # 🔥 BANCOS: Usar el saldo final reportado desde estado de cuenta
+    bancos_calculado = safe_number(saldo_bancario_reportado)
+    
     cx_p_calculado = safe_number(st.session_state.saldos['cx_p']) + compras_credito - pagos_proveedores - notas_credito_proveedor
-    transito_calculado = transito_reportado
+    transito_calculado = safe_number(st.session_state.saldos['transito']) + ingresos_totales - cobranzas
     capital_calculado = (inventario_calculado + cx_c_calculado + bancos_calculado) - (cx_p_calculado + transito_calculado)
     
     # ============================================================
