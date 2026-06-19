@@ -903,23 +903,55 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     # BOTONES DE ACCIÓN
     # ============================================================
     col_btn1, col_btn2 = st.columns(2)
+    
+    # 🔥 Usar valores reportados si existen, si no usar calculados
+    inventario_final = saldos_reportados.get(
+        'Inventario',
+        inventario_calculado
+    )
+    
+    cx_c_final = saldos_reportados.get(
+        'Cuentas por cobrar',
+        cx_c_calculado
+    )
+    
+    cx_p_final = saldos_reportados.get(
+        'Cuentas por pagar',
+        cx_p_calculado
+    )
+    
+    transito_final = saldos_reportados.get(
+        'Transferencias en tránsito',
+        transito_calculado
+    )
+    
+    bancos_final = bancos_calculado
+    
     with col_btn1:
         if st.button("💾 Guardar saldos calculados", use_container_width=True):
+            
             saldos_guardar = {
-                'inventario': inventario_calculado,
-                'cx_c': cx_c_calculado,
-                'bancos': bancos_calculado,
-                'cx_p': cx_p_calculado,
-                'transito': transito_calculado,
+                'inventario': inventario_final,
+                'cx_c': cx_c_final,
+                'bancos': bancos_final,
+                'cx_p': cx_p_final,
+                'transito': transito_final,
                 'capital': capital_calculado
             }
-            db.guardar_saldos(fecha_procesar.strftime('%Y-%m-%d'), saldos_guardar)
-            st.session_state.saldos['inventario'] = inventario_calculado
-            st.session_state.saldos['cx_c'] = cx_c_calculado
-            st.session_state.saldos['bancos'] = bancos_calculado
-            st.session_state.saldos['cx_p'] = cx_p_calculado
-            st.session_state.saldos['transito'] = transito_calculado
+            
+            db.guardar_saldos(
+                fecha_procesar.strftime('%Y-%m-%d'),
+                saldos_guardar
+            )
+            
+            st.session_state.saldos['inventario'] = inventario_final
+            st.session_state.saldos['cx_c'] = cx_c_final
+            st.session_state.saldos['bancos'] = bancos_final
+            st.session_state.saldos['cx_p'] = cx_p_final
+            st.session_state.saldos['transito'] = transito_final
+            
             st.session_state.saldos['capital_anterior'] = capital_calculado
+            
             st.success("✅ Saldos guardados correctamente")
     
     with col_btn2:
