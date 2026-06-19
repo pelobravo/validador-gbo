@@ -413,10 +413,10 @@ class ProcesadorArchivos:
             saldo_inicial: Saldo inicial del día (float)
         
         Returns:
-            tuple: (ingresos_id, ingresos_no_id, egresos_bancarios, saldo_final, total_ingresos, total_egresos)
+            tuple: (saldo_inicial, ingresos_id, ingresos_no_id, egresos_bancarios, saldo_final, total_ingresos, total_egresos)
         """
         if df is None or df.empty:
-            return 0.0, 0.0, 0.0, saldo_inicial, 0.0, 0.0
+            return saldo_inicial, 0.0, 0.0, 0.0, saldo_inicial, 0.0, 0.0
         
         df = ProcesadorArchivos._limpiar_columnas(df)
         
@@ -482,6 +482,7 @@ class ProcesadorArchivos:
         ingresos_no_id = 0.0
         
         return (
+            saldo_inicial,
             ingresos_id,
             ingresos_no_id,
             total_egresos,
