@@ -210,7 +210,7 @@ class ProcesadorArchivos:
         except:
             return 0.0
     
-       # ===================== 🔥 CAMBIO 2: EGRESOS MODIFICADA =====================
+    # ===================== 🔥 CAMBIO 2: EGRESOS MODIFICADA =====================
     
     @staticmethod
     def procesar_egresos(df):
@@ -243,6 +243,12 @@ class ProcesadorArchivos:
 
         cantidad = len(df)
 
+        return (
+            total,      # pagos_proveedores
+            0.0,        # pagos_gastos
+            cantidad,
+            total
+        )
         return (
             total,      # pagos_proveedores
             0.0,        # pagos_gastos
