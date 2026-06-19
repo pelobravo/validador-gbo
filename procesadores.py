@@ -756,24 +756,27 @@ class ProcesadorArchivos:
         
         if tipo in ['cxc', 'cxp']:
             for idx, row in df.iterrows():
-                row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                if 'total compañia' in row_str or 'total compania' in row_str or 'total compañía' in row_str:
-                    for col in df.columns:
+                row_str = ' '.join(
+                    [str(x) for x in row.values if pd.notna(x)]
+                ).lower()
+
+                if (
+                    'total compañia' in row_str or
+                    'total compania' in row_str or
+                    'total compañía' in row_str
+                ):
+                    numeros = []
+
+                    for valor in row.values:
                         try:
-                            val = ProcesadorArchivos._convertir_numero_europeo(df.iloc[idx, col])
-                            if not pd.isna(val) and val > 0:
-                                return float(val)
+                            num = ProcesadorArchivos._convertir_numero_europeo(valor)
+                            if not pd.isna(num) and num > 0:
+                                numeros.append(float(num))
                         except:
                             pass
-            
-            for idx in range(len(df) - 1, -1, -1):
-                for col in df.columns:
-                    try:
-                        val = ProcesadorArchivos._convertir_numero_europeo(df.iloc[idx, col])
-                        if not pd.isna(val) and val > 0:
-                            return float(val)
-                    except:
-                        pass
+
+                    if numeros:
+                        return numeros[0]
         
         if tipo == 'inventario':
             for idx, row in df.iterrows():
