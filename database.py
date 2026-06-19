@@ -289,3 +289,13 @@ class Database:
         
         conn.commit()
         conn.close()
+    
+    def limpiar_saldos(self):
+        """Elimina TODOS los saldos de la tabla saldos_diarios"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("DELETE FROM saldos_diarios")
+        
+        conn.commit()
+        conn.close()
