@@ -25,41 +25,30 @@ class ProcesadorArchivos:
         if valor is None or pd.isna(valor):
             return np.nan
         
-        # Si ya es número, retornar directamente
         if isinstance(valor, (int, float)):
             return float(valor)
         
         valor_str = str(valor).strip()
         
-        # Si está vacío, retornar NaN
         if not valor_str:
             return np.nan
         
-        # Remover símbolos de moneda y espacios
         valor_str = valor_str.replace('$', '').replace('Bs.', '').replace(' ', '').strip()
         
-        # Detectar si tiene formato europeo (punto como separador de miles, coma decimal)
         tiene_punto_miles = '.' in valor_str and ',' in valor_str
         tiene_coma_decimal = ',' in valor_str
         
         try:
             if tiene_coma_decimal:
-                # Formato europeo: 1.234,56 o 154.930,00
-                # Eliminar puntos (separadores de miles)
-                # Reemplazar coma por punto (separador decimal)
                 valor_limpio = valor_str.replace('.', '').replace(',', '.')
                 return float(valor_limpio)
             else:
-                # Formato inglés: 1,234.56 o 154,930.00
-                # Eliminar comas (separadores de miles)
                 valor_limpio = valor_str.replace(',', '')
                 return float(valor_limpio)
         except (ValueError, TypeError):
             try:
-                # Último intento: eliminar todo lo que no sea número, punto o coma
                 valor_limpio = re.sub(r'[^\d.,-]', '', valor_str)
                 if ',' in valor_limpio and '.' in valor_limpio:
-                    # Si tiene ambos, asumir formato europeo
                     valor_limpio = valor_limpio.replace('.', '').replace(',', '.')
                 elif ',' in valor_limpio:
                     valor_limpio = valor_limpio.replace(',', '.')
@@ -83,23 +72,19 @@ class ProcesadorArchivos:
         if df is None or df.empty:
             return None
         
-        # Obtener nombres de columnas en minúsculas para comparación
         columnas_lower = {col.lower().strip(): col for col in df.columns}
         
-        # Primero buscar coincidencia exacta (ignorando mayúsculas)
         for nombre in nombres_posibles:
             nombre_lower = nombre.lower().strip()
             if nombre_lower in columnas_lower:
                 return columnas_lower[nombre_lower]
         
-        # Segundo: buscar coincidencia parcial (contiene la palabra)
         for nombre in nombres_posibles:
             nombre_lower = nombre.lower().strip()
             for col_lower, col_original in columnas_lower.items():
                 if nombre_lower in col_lower or col_lower in nombre_lower:
                     return col_original
         
-        # Tercero: buscar con expresiones regulares (palabras similares)
         patrones = {
             'monto': r'monto|total|importe|valor|amount|factura.*monto',
             'costo': r'costo|coste|costo_venta|coste_venta|costo_merca',
@@ -121,7 +106,6 @@ class ProcesadorArchivos:
                 if re.search(patron, col_lower, re.IGNORECASE):
                     return col_original
         
-        # 🔥 CUARTO: Para archivos específicos, buscar por caracteres especiales
         for col_original in df.columns:
             col_lower = col_original.lower().strip()
             if 'neto' in col_lower and 'iva' in col_lower:
@@ -150,7 +134,6 @@ class ProcesadorArchivos:
         col = ProcesadorArchivos._buscar_columna(df, columna, *nombres_alternativos)
         if col and not df[col].empty:
             try:
-                # Limpiar datos y convertir a numérico con soporte para formato europeo
                 valores = []
                 for val in df[col]:
                     if pd.isna(val) or val is None or val == '' or val == 'NULL':
@@ -189,7 +172,6 @@ class ProcesadorArchivos:
             return 0.0
         
         try:
-            # Limpiar datos usando la función de conversión europea
             valores = []
             for val in df[monto_col]:
                 if pd.isna(val) or val is None or val == '' or val == 'NULL':
@@ -210,51 +192,19 @@ class ProcesadorArchivos:
         except:
             return 0.0
     
-    # ===================== 🔥 CAMBIO 2: EGRESOS MODIFICADA =====================
-    
     @staticmethod
-    def procesar_egresos(df):
+    def _saltar_encabezados(df, filas_a_saltar=0):
         """
-        Procesa archivo de egresos.
-        Toma la columna "Monto USD" (columna H) y suma todos los valores.
+        Salta filas de encabezado en archivos de reportes.
         
         Args:
             df: DataFrame de pandas
+            filas_a_saltar: Número de filas a saltar
         
         Returns:
-            tuple: (pagos_proveedores, pagos_gastos, cantidad_egresos, total_egresos)
+            DataFrame: DataFrame con las filas de encabezado removidas
         """
-        if df is None or df.empty:
-            return 0.0, 0.0, 0, 0.0
-
-        # Columna H = índice 7
-        try:
-            monto_col = df.columns[7]
-        except:
-            return 0.0, 0.0, 0, 0.0
-
-        total = 0.0
-
-        for val in df[monto_col]:
-            try:
-                total += float(str(val).replace(',', ''))
-            except:
-                pass
-
-        cantidad = len(df)
-
-        return (
-            total,      # pagos_proveedores
-            0.0,        # pagos_gastos
-            cantidad,
-            total
-        )
-        return (
-            total,      # pagos_proveedores
-            0.0,        # pagos_gastos
-            cantidad,
-            total
-        )
+        if filas_a_saltar > 0 and len(df) > filas_a_saltar:
             df = df.iloc[filas_a_saltar:].reset_index(drop=True)
         return df
     
@@ -318,7 +268,6 @@ class ProcesadorArchivos:
                     if isinstance(val, pd.Timestamp):
                         fechas.append(val)
                     elif isinstance(val, str):
-                        # Intentar varios formatos
                         for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y', '%Y/%m/%d', '%d/%m/%y', '%d-%m-%y']:
                             try:
                                 fechas.append(pd.to_datetime(val, format=fmt))
@@ -332,7 +281,6 @@ class ProcesadorArchivos:
                 except:
                     fechas.append(pd.NaT)
             
-            # Crear máscara para la fecha específica
             mascara = []
             for f in fechas:
                 if pd.notna(f) and f.day == dia and f.month == mes and f.year == año:
@@ -366,7 +314,7 @@ class ProcesadorArchivos:
             for _, row in df.iterrows():
                 texto = str(row.iloc[0]).lower()
                 if "totales" in texto:
-                    valor = row.iloc[15]   # Columna P
+                    valor = row.iloc[15]
                     facturacion = ProcesadorArchivos._convertir_numero_europeo(valor)
                     return (
                         float(facturacion),
@@ -397,98 +345,63 @@ class ProcesadorArchivos:
         if df is None or df.empty:
             return 0.0, 0, 0.0
         
-        # Limpiar columnas
         df = ProcesadorArchivos._limpiar_columnas(df)
         
-        # 🔥 BUSCAR LA FILA DE DATOS
-        idx_inicio = 0
         for idx, row in df.iterrows():
-            row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-            if 'banco' in row_str and 'cuenta' in row_str and 'fecha cobranza' in row_str:
-                idx_inicio = idx + 1
-                break
-        
-        if idx_inicio == 0:
-            patrones = ['banco', 'cuenta', 'fecha cobranza']
-            idx_inicio = ProcesadorArchivos._encontrar_fila_datos(df, patrones) + 1
-        
-        if idx_inicio > 0 and idx_inicio < len(df):
-            df_datos = df.iloc[idx_inicio:].reset_index(drop=True)
-            if len(df_datos) > 0:
-                header_row = df_datos.iloc[0] if len(df_datos) > 0 else None
-                if header_row is not None:
-                    new_columns = []
-                    for col in header_row:
-                        if pd.notna(col):
-                            new_columns.append(str(col).strip())
-                        else:
-                            new_columns.append(f'col_{len(new_columns)}')
-                    df_datos.columns = new_columns
-                    df_datos = df_datos.iloc[1:].reset_index(drop=True)
-                    df = df_datos
-        
-        # BUSCAR TOTAL GENERAL Y TERMINAR
-        for idx, row in df.iterrows():
-
             row_str = ' '.join(
                 [str(x) for x in row.values if pd.notna(x)]
             ).lower()
-
+            
             if 'total general' in row_str:
-
                 for col in df.columns:
-
                     if 'monto cobranza' in str(col).lower():
-
                         valor = row[col]
-
                         num = ProcesadorArchivos._convertir_numero_europeo(valor)
-
                         if not pd.isna(num):
-
                             return float(num), 1, float(num)
-
+        
         return 0.0, 0, 0.0
     
     # ===================== 🔥 CAMBIO 2: EGRESOS MODIFICADA =====================
     
     @staticmethod
     def procesar_egresos(df):
-
+        """
+        Procesa archivo de egresos.
+        Toma la columna "Monto USD" (columna H) y suma todos los valores.
+        
+        Args:
+            df: DataFrame de pandas
+        
+        Returns:
+            tuple: (pagos_proveedores, pagos_gastos, cantidad_egresos, total_egresos)
+        """
         if df is None or df.empty:
             return 0.0, 0.0, 0, 0.0
 
-        df = ProcesadorArchivos._limpiar_columnas(df)
-
-        monto_col = None
-
-        for col in df.columns:
-
-            if str(col).strip().lower() == "monto usd":
-                monto_col = col
-                break
-
-        if monto_col is None:
-
-            if len(df.columns) >= 8:
-                monto_col = df.columns[7]
-
-        if monto_col is None:
+        # Columna H = índice 7
+        try:
+            monto_col = df.columns[7]
+        except:
             return 0.0, 0.0, 0, 0.0
 
-        total = pd.to_numeric(
-            df[monto_col],
-            errors='coerce'
-        ).fillna(0).sum()
+        total = 0.0
+
+        for val in df[monto_col]:
+            try:
+                total += float(str(val).replace(',', ''))
+            except:
+                pass
 
         cantidad = len(df)
 
         return (
-            float(total),  # pagos_proveedores
-            0.0,           # pagos_gastos
+            total,      # pagos_proveedores
+            0.0,        # pagos_gastos
             cantidad,
-            float(total)
+            total
         )
+    
     # ===================== 🔥 CAMBIO 3: ESTADO DE CUENTA MODIFICADA =====================
     
     @staticmethod
@@ -507,10 +420,8 @@ class ProcesadorArchivos:
         if df is None or df.empty:
             return 0.0, 0.0, 0.0, saldo_inicial, 0.0, 0.0
         
-        # Limpiar columnas
         df = ProcesadorArchivos._limpiar_columnas(df)
         
-        # 🔥 Buscar los valores en el archivo ESTADO DE CUENTA.xlsx
         saldo_inicial_encontrado = None
         ingresos_encontrados = None
         egresos_encontrados = None
@@ -560,7 +471,6 @@ class ProcesadorArchivos:
                     except:
                         pass
         
-        # 🔥 CORRECCIÓN: Usar valores encontrados o los valores por defecto
         saldo_inicial = saldo_inicial_encontrado if saldo_inicial_encontrado is not None else saldo_inicial
         total_ingresos = ingresos_encontrados if ingresos_encontrados is not None else 0.0
         total_egresos = egresos_encontrados if egresos_encontrados is not None else 0.0
@@ -570,7 +480,6 @@ class ProcesadorArchivos:
             else (saldo_inicial + total_ingresos - total_egresos)
         )
         
-        # 🔥 CORRECCIÓN: ingresos_id = total_ingresos, ingresos_no_id = 0.0
         ingresos_id = total_ingresos
         ingresos_no_id = 0.0
         
@@ -642,10 +551,8 @@ class ProcesadorArchivos:
         if df is None or df.empty:
             return 0.0, 0.0, 0, 0.0
         
-        # Limpiar columnas
         df = ProcesadorArchivos._limpiar_columnas(df)
         
-        # 🔥 PARA ARCHIVOS DEL ANALISTA 3: Buscar la fila de datos
         idx_inicio = 0
         for idx, row in df.iterrows():
             row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
@@ -674,11 +581,9 @@ class ProcesadorArchivos:
         
         total_recepcion = 0.0
         
-        # 🔥 BUSCAR LA COLUMNA "$ Neto + IVA" (con diferentes variantes)
         col_neto = None
         for col in df.columns:
             col_str = str(col).strip()
-            # Probar diferentes variantes
             if ('$ Neto + IVA' in col_str or 
                 'Neto + IVA' in col_str or 
                 'neto + iva' in col_str.lower() or
@@ -687,7 +592,6 @@ class ProcesadorArchivos:
                 col_neto = col
                 break
         
-        # Si no encontró, buscar cualquier columna con "neto"
         if col_neto is None:
             for col in df.columns:
                 col_str = str(col).lower().strip()
@@ -695,9 +599,7 @@ class ProcesadorArchivos:
                     col_neto = col
                     break
         
-        # 🔥 Si encontró la columna, buscar el total
         if col_neto:
-            # Buscar la fila "Total General:"
             for idx, row in df.iterrows():
                 row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
                 if 'total general:' in row_str:
@@ -710,7 +612,6 @@ class ProcesadorArchivos:
                     except:
                         pass
             
-            # Si no encontró "Total General:", tomar el primer valor significativo
             if total_recepcion == 0:
                 for val in df[col_neto]:
                     num = ProcesadorArchivos._convertir_numero_europeo(val)
@@ -718,7 +619,6 @@ class ProcesadorArchivos:
                         total_recepcion = float(num)
                         break
         
-        # Si no encontró ninguna columna con "neto", buscar la última columna numérica
         if total_recepcion == 0:
             for col in reversed(df.columns):
                 try:
@@ -732,10 +632,8 @@ class ProcesadorArchivos:
                 except:
                     pass
         
-        # Calcular compras a crédito (60% de la recepción por defecto)
         compras_credito = total_recepcion * 0.6
         
-        # Buscar columna de tipo para calcular compras a crédito más preciso
         tipo_col = ProcesadorArchivos._buscar_columna(
             df, 
             'tipo_compra', 'compra', 'tipo', 'forma_pago', 'condicion_pago',
@@ -760,14 +658,12 @@ class ProcesadorArchivos:
             except:
                 compras_credito = total_recepcion * 0.6
         
-        # Contar recepciones
         doc_col = ProcesadorArchivos._buscar_columna(
             df, 
             'documento', 'comprobante', 'doc', 'id', 'nro_recibo', 'recibo', 'factura'
         )
         cantidad = df[doc_col].nunique() if doc_col else len(df)
         
-        # Calcular promedio
         promedio = total_recepcion / cantidad if cantidad > 0 else 0.0
         
         return total_recepcion, compras_credito, cantidad, promedio
@@ -786,23 +682,19 @@ class ProcesadorArchivos:
         if df is None or df.empty:
             return 0.0, 0, 0.0
         
-        # Limpiar columnas
         df = ProcesadorArchivos._limpiar_columnas(df)
         
-        # Buscar columna de monto
         monto_col = ProcesadorArchivos._buscar_columna(
             df, 
             'monto', 'valor', 'total', 'credito', 'importe', 'amount',
             'nota_credito', 'monto_nota', 'abono'
         )
         
-        # Buscar columna de documento
         doc_col = ProcesadorArchivos._buscar_columna(
             df, 
             'documento', 'comprobante', 'doc', 'id', 'nro_nota', 'nota'
         )
         
-        # Extraer total
         total = ProcesadorArchivos._extraer_valor(df, 'monto', 'valor', 'total', 'credito')
         if total == 0 and monto_col:
             try:
@@ -810,10 +702,8 @@ class ProcesadorArchivos:
             except:
                 total = 0.0
         
-        # Contar notas
         cantidad = df[doc_col].nunique() if doc_col else len(df)
         
-        # Calcular promedio
         promedio = total / cantidad if cantidad > 0 else 0.0
         
         return total, cantidad, promedio
@@ -833,19 +723,15 @@ class ProcesadorArchivos:
         if df is None or df.empty:
             return 0.0
         
-        # Limpiar columnas
         df = ProcesadorArchivos._limpiar_columnas(df)
         
-        # 🔥 BUSCAR LA FILA "Total General:"
         for idx, row in df.iterrows():
             row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
             if 'total general:' in row_str:
-                # Buscar la columna que contiene el costo
                 for col in df.columns:
                     try:
                         valor = row[col]
                         num = ProcesadorArchivos._convertir_numero_europeo(valor)
-                        # El costo total debe ser un número grande (> 1000)
                         if not pd.isna(num) and num > 1000:
                             return float(num)
                     except:
@@ -868,16 +754,12 @@ class ProcesadorArchivos:
         if df is None or df.empty:
             return None
         
-        # Limpiar columnas
         df = ProcesadorArchivos._limpiar_columnas(df)
         
-        # 🔥 PARA ARCHIVOS DEL ANALISTA 3:
-        # Buscar "Total Compañía" en el texto de las filas
         if tipo in ['cxc', 'cxp']:
             for idx, row in df.iterrows():
                 row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
                 if 'total compañia' in row_str or 'total compania' in row_str or 'total compañía' in row_str:
-                    # Buscar el valor numérico en la fila
                     for col in df.columns:
                         try:
                             val = ProcesadorArchivos._convertir_numero_europeo(df.iloc[idx, col])
@@ -886,7 +768,6 @@ class ProcesadorArchivos:
                         except:
                             pass
             
-            # Si no encontró "Total Compañía", buscar el último valor significativo
             for idx in range(len(df) - 1, -1, -1):
                 for col in df.columns:
                     try:
@@ -896,7 +777,6 @@ class ProcesadorArchivos:
                     except:
                         pass
         
-        # 🔥 PARA INVENTARIO: Buscar "Totales" en el texto
         if tipo == 'inventario':
             for idx, row in df.iterrows():
                 row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
@@ -909,7 +789,6 @@ class ProcesadorArchivos:
                         except:
                             pass
             
-            # Si no encontró, buscar en la última fila con valores numéricos
             for idx in range(len(df) - 1, -1, -1):
                 for col in df.columns:
                     try:
@@ -919,7 +798,6 @@ class ProcesadorArchivos:
                     except:
                         pass
         
-        # 🔥 PARA BANCOS: Buscar la columna de saldo
         if tipo == 'bancos':
             saldo_col = ProcesadorArchivos._buscar_columna(
                 df, 
@@ -937,7 +815,6 @@ class ProcesadorArchivos:
                 except:
                     pass
         
-        # Buscar columna de saldo genérica
         saldo_col = ProcesadorArchivos._buscar_columna(
             df, 
             'saldo', 'total', 'monto', 'valor', 'importe', 'balance',
@@ -963,4 +840,3 @@ class ProcesadorArchivos:
                 return None
         
         return None
-
