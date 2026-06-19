@@ -781,7 +781,7 @@ class ProcesadorArchivos:
                     [str(x) for x in row.values if pd.notna(x)]
                 ).lower()
 
-                if 'totales' in texto_fila:
+                if 'total' in texto_fila:
                     numeros = []
 
                     for valor in row.values:
@@ -793,7 +793,7 @@ class ProcesadorArchivos:
                             pass
 
                     if numeros:
-                        return numeros[-1]
+                        return max(numeros)
         
         if tipo == 'bancos':
             saldo_col = ProcesadorArchivos._buscar_columna(
