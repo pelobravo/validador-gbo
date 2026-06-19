@@ -22,6 +22,11 @@ validar_carpetas()
 db = Database()
 logger = Logger()
 
+# 🔥 TEMPORAL: Botón para LIMPIAR TODOS los saldos
+if st.button("🗑️ LIMPIAR SALDOS"):
+    db.limpiar_saldos()
+    st.success("✅ Tabla saldos_diarios limpiada correctamente")
+
 st.set_page_config(
     page_title="Validador de Trazabilidad Diaria",
     layout="wide",
