@@ -912,7 +912,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     # ============================================================
     # BOTONES DE ACCIÓN
     # ============================================================
-    col_btn1, col_btn2 = st.columns(2)
     
     # 🔥 Usar valores reportados si existen, si no usar calculados
     inventario_final = saldos_reportados.get(
@@ -936,6 +935,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     )
     
     bancos_final = bancos_calculado
+    
+    col_btn1, col_btn2 = st.columns(2)
     
     with col_btn1:
         if st.button("💾 Guardar saldos calculados", use_container_width=True):
