@@ -234,19 +234,33 @@ def formatear_diferencia(valor_calculado, valor_reportado):
         return f"📉 {formato_venezolano(diferencia)}"
 
 def extraer_transito_reportado(df, transito_inicial):
+
     try:
-        if df is not None and 'Crédito' in df.columns:
-            total_ingresos = 0
-            for val in df['Crédito']:
-                num = ProcesadorArchivos._convertir_numero_europeo(val)
-                if not pd.isna(num) and num > 0:
-                    total_ingresos += num
-            return safe_number(transito_inicial) + total_ingresos
-        else:
+
+        if df is None or df.empty:
             return None
-    except:
+
+        for idx, row in df.iterrows():
+
+            row_str = ' '.join(
+                [str(x) for x in row.values if pd.notna(x)]
+            ).lower()
+
+            if 'total' in row_str:
+
+                for val in row.values:
+
+                    num = ProcesadorArchivos._convertir_numero_europeo(val)
+
+                    if not pd.isna(num) and num > 0:
+
+                        return float(num)
+
         return None
 
+    except Exception:
+        return None
+        
 def mostrar_tabla_activos_pasivos(inventario, cx_c, bancos, cx_p, transito, capital):
     inventario = safe_number(inventario)
     cx_c = safe_number(cx_c)
