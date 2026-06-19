@@ -10,51 +10,47 @@ class ProcesadorArchivos:
     
     @staticmethod
     def _convertir_numero_europeo(valor):
-        """
-        Convierte un número con formato europeo (coma decimal, punto separador de miles)
-        a float.
-        
-        Ejemplos:
-        - "154.930,00" → 154930.00
-        - "3.704,30" → 3704.30
-        - "1.234,56" → 1234.56
-        - "0,00" → 0.00
-        - "154,930.00" → 154930.00 (formato inglés, también lo maneja)
-        - "154930.00" → 154930.00
-        """
         if valor is None or pd.isna(valor):
             return np.nan
-        
+
         if isinstance(valor, (int, float)):
             return float(valor)
-        
+
         valor_str = str(valor).strip()
-        
+
         if not valor_str:
             return np.nan
-        
-        valor_str = valor_str.replace('$', '').replace('Bs.', '').replace(' ', '').strip()
-        
-        tiene_punto_miles = '.' in valor_str and ',' in valor_str
-        tiene_coma_decimal = ',' in valor_str
-        
+
+        valor_str = (
+            valor_str.replace('$', '')
+            .replace('Bs.', '')
+            .replace(' ', '')
+            .strip()
+        )
+
         try:
-            if tiene_coma_decimal:
+            # FORMATO AMERICANO
+            # 409,856.24
+            if ',' in valor_str and '.' in valor_str:
+                if valor_str.rfind('.') > valor_str.rfind(','):
+                    valor_limpio = valor_str.replace(',', '')
+                    return float(valor_limpio)
+                else:
+                    valor_limpio = valor_str.replace('.', '').replace(',', '.')
+                    return float(valor_limpio)
+
+            # FORMATO EUROPEO
+            # 154.930,00
+            elif ',' in valor_str:
                 valor_limpio = valor_str.replace('.', '').replace(',', '.')
                 return float(valor_limpio)
+
+            # FORMATO NORMAL
             else:
-                valor_limpio = valor_str.replace(',', '')
-                return float(valor_limpio)
-        except (ValueError, TypeError):
-            try:
-                valor_limpio = re.sub(r'[^\d.,-]', '', valor_str)
-                if ',' in valor_limpio and '.' in valor_limpio:
-                    valor_limpio = valor_limpio.replace('.', '').replace(',', '.')
-                elif ',' in valor_limpio:
-                    valor_limpio = valor_limpio.replace(',', '.')
-                return float(valor_limpio)
-            except:
-                return np.nan
+                return float(valor_str)
+
+        except:
+            return np.nan
     
     @staticmethod
     def _buscar_columna(df, *nombres_posibles):
