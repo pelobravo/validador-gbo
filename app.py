@@ -1,4 +1,4 @@
-# app.py - Con campos para saldos iniciales manuales
+# app.py - Con campos para saldos iniciales manuales - VERSIÓN COMPLETA CON CAMBIOS
 
 import streamlit as st
 import pandas as pd
@@ -677,7 +677,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
         except Exception as e:
             st.warning(f"⚠️ Error al procesar notas de crédito proveedores: {str(e)}")
     
-    # Procesar movimientos
+    # 🔥 CAMBIO 1: PROCESAMIENTO DE EGRESOS - SE MANTIENE IGUAL
     try:
         facturacion, _, _, _ = ProcesadorArchivos.procesar_facturacion(df_facturacion)
         cobranzas, _, _ = ProcesadorArchivos.procesar_cobranzas(df_cobranzas)
@@ -707,27 +707,52 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     ingresos_totales = ingresos_id + ingresos_no_id
     
     # ============================================================
-    # TABLA 1: MOVIMIENTOS DEL DÍA
+    # 🔥 CAMBIO 2: TABLA MOVIMIENTOS DEL DÍA - NUEVA ESTRUCTURA
     # ============================================================
     st.markdown("#### 📋 Movimientos del día procesados")
     
     mov_data = {
-        "Concepto": ["Facturación", "Costo de facturación", "Cobranzas", "Notas crédito (clientes)",
-                     "Recepción mercancía", "Compras a crédito", "Pagos a proveedores", "Pagos de gastos",
-                     "Notas crédito (proveedores)", "Ingresos identificados", "Ingresos no identificados"],
-        "Monto": [formato_venezolano(facturacion), formato_venezolano(costo_facturacion), 
-                  formato_venezolano(cobranzas), formato_venezolano(notas_credito_cliente),
-                  formato_venezolano(recepcion_total), formato_venezolano(compras_credito), 
-                  formato_venezolano(pagos_proveedores), formato_venezolano(pagos_gastos),
-                  formato_venezolano(notas_credito_proveedor), formato_venezolano(ingresos_id), 
-                  formato_venezolano(ingresos_no_id)]
+        "Concepto": [
+            "Facturación",
+            "Costo de Facturación",
+            "Cobranzas",
+            "Recepción de Mercancía",
+            "Egresos iPago",
+            "Estado de Cuenta Bancario",
+            "Transferencias en Tránsito"
+        ],
+        "Monto": [
+            formato_venezolano(facturacion),
+            formato_venezolano(costo_facturacion),
+            formato_venezolano(cobranzas),
+            formato_venezolano(recepcion_total),
+            
+            # Egresos iPago
+            formato_venezolano(
+                pagos_proveedores + pagos_gastos
+            ),
+            
+            # Saldo Final Estado de Cuenta
+            formato_venezolano(
+                saldo_bancario_reportado
+            ),
+            
+            # TB
+            formato_venezolano(
+                saldos_reportados.get(
+                    'Transferencias en tránsito',
+                    0
+                )
+            )
+        ]
     }
     st.dataframe(pd.DataFrame(mov_data), use_container_width=True, hide_index=True)
     
     st.markdown("---")
     
     # ============================================================
-    # CÁLCULOS Y VALIDACIONES    # ============================================================
+    # CÁLCULOS Y VALIDACIONES
+    # ============================================================
     inventario_calculado = safe_number(st.session_state.saldos['inventario']) + recepcion_total - costo_facturacion
     cx_c_calculado = safe_number(st.session_state.saldos['cx_c']) + facturacion - cobranzas - notas_credito_cliente
     bancos_calculado = safe_number(st.session_state.saldos['bancos']) + ingresos_totales - pagos_proveedores - pagos_gastos
@@ -801,7 +826,11 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     else:
         st.error(f"❌ **Transferencias**: Saldo negativo ({formato_venezolano(transito_calculado)})")
     
-    st.info(f"ℹ️ **Ingresos bancarios totales**: {formato_venezolano(ingresos_totales)} Bs. (Identificados: {formato_venezolano(ingresos_id)})")
+    # 🔥 CAMBIO 3: NUEVA INFORMACIÓN DE VALIDACIÓN
+    st.info(
+        f"ℹ️ **Saldo Final Bancario Reportado**: "
+        f"{formato_venezolano(saldo_bancario_reportado)} Bs."
+    )
     
     st.markdown("---")
     
@@ -874,7 +903,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
                 st.info("No hay historial aún")
     
     # ============================================================
-    # REGLAS DE NEGOCIO
+    # 🔥 CAMBIO 4: REGLAS DE NEGOCIO - NUEVAS REGLAS
     # ============================================================
     with st.expander("📌 Reglas de negocio aplicadas"):
         st.markdown("""
@@ -885,9 +914,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
         | Cobranzas | Disminuye CxC / Aumenta bancos |
         | Notas de crédito (clientes) | Disminuye CxC |
         | Notas de crédito (proveedores) | Disminuye CxP |
-        | Pagos a proveedores | Disminuye CxP / Disminuye bancos |
-        | Pagos de gastos | Disminuye bancos (NO afecta CxP) |
-        | Ingreso no identificado | Aumenta bancos / Aumenta transferencias en tránsito |
+        | Egresos iPago | Disminuye bancos |
+        | Estado de Cuenta Bancario | Determina saldo final bancario |
+        | Transferencias en tránsito | Se toma desde TB |
         
         **Fórmulas clave:**  
         🔄 Transferencias en tránsito = Tránsito inicial + Ingresos del día - Cobranzas  
