@@ -701,7 +701,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
         cobranzas, _, _ = ProcesadorArchivos.procesar_cobranzas(df_cobranzas)
         recepcion_total, compras_credito, _, _ = ProcesadorArchivos.procesar_recepciones(df_recepciones)
         pagos_proveedores, pagos_gastos, _, _ = ProcesadorArchivos.procesar_egresos(df_egresos)
-        ingresos_id, ingresos_no_id, egresos_bancarios, saldo_bancario_reportado, _, _ = ProcesadorArchivos.procesar_estado_cuenta(
+        saldo_inicial_bancos, ingresos_id, ingresos_no_id, egresos_bancarios, saldo_final, total_ingresos, total_egresos = ProcesadorArchivos.procesar_estado_cuenta(
             df_estado_cuenta, st.session_state.saldos['bancos']
         )
     except Exception as e:
@@ -720,7 +720,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     notas_credito_proveedor = safe_number(notas_credito_proveedor)
     ingresos_id = safe_number(ingresos_id)
     ingresos_no_id = safe_number(ingresos_no_id)
-    saldo_bancario_reportado = safe_number(saldo_bancario_reportado)
+    saldo_final = safe_number(saldo_final)
+    saldo_inicial_bancos = safe_number(saldo_inicial_bancos)
     
     ingresos_totales = ingresos_id + ingresos_no_id
     
@@ -752,7 +753,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
             
             # Saldo Final Estado de Cuenta
             formato_venezolano(
-                saldo_bancario_reportado
+                saldo_final
             ),
             
             # TB
@@ -778,11 +779,14 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     inventario_calculado = safe_number(st.session_state.saldos['inventario']) + recepcion_total - costo_facturacion
     cx_c_calculado = safe_number(st.session_state.saldos['cx_c']) + facturacion - cobranzas - notas_credito_cliente    
     # 🔥 BANCOS: Usar el saldo final reportado desde estado de cuenta
-    bancos_calculado = safe_number(saldo_bancario_reportado)
+    bancos_calculado = safe_number(saldo_final)
     
     cx_p_calculado = safe_number(st.session_state.saldos['cx_p']) + compras_credito - pagos_proveedores - notas_credito_proveedor
     transito_calculado = safe_number(st.session_state.saldos['transito']) + ingresos_totales - cobranzas
     capital_calculado = (inventario_calculado + cx_c_calculado + bancos_calculado) - (cx_p_calculado + transito_calculado)
+    
+    # 🔥 Mostrar saldo inicial bancario extraído del estado de cuenta
+    st.info(f"ℹ️ **Saldo Inicial Bancario (desde estado de cuenta):** {formato_venezolano(saldo_inicial_bancos)} Bs.")
     
     # ============================================================
     # ACTIVOS vs PASIVOS
@@ -833,7 +837,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     # ============================================================
     st.markdown("#### ✅ Validaciones Cruzadas")
     
-    diff_bancos = safe_number(bancos_calculado) - safe_number(saldo_bancario_reportado)
+    diff_bancos = safe_number(bancos_calculado) - safe_number(saldo_final)
     if abs(diff_bancos) > 0.01:
         st.error(f"❌ **Bancos**: Diferencia de {formato_venezolano(abs(diff_bancos))} Bs.")
     else:
@@ -853,7 +857,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     # 🔥 CAMBIO 3: NUEVA INFORMACIÓN DE VALIDACIÓN
     st.info(
         f"ℹ️ **Saldo Final Bancario Reportado**: "
-        f"{formato_venezolano(saldo_bancario_reportado)} Bs."
+        f"{formato_venezolano(saldo_final)} Bs."
     )
     
     st.markdown("---")
