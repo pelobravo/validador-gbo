@@ -331,35 +331,33 @@ class ProcesadorArchivos:
     
     @staticmethod
     def procesar_cobranzas(df):
-        """
-        Procesa archivo de cobranzas.
-        Busca la fila "Total General:" y la columna "Monto Cobranza"
-        El valor correcto es 38.884,13
-        
-        Args:
-            df: DataFrame de pandas
-        
-        Returns:
-            tuple: (total_cobranzas, cantidad_cobranzas, promedio_cobranza)
-        """
         if df is None or df.empty:
             return 0.0, 0, 0.0
-        
+
         df = ProcesadorArchivos._limpiar_columnas(df)
-        
+
+        # Buscar la fila Total General
         for idx, row in df.iterrows():
             row_str = ' '.join(
                 [str(x) for x in row.values if pd.notna(x)]
             ).lower()
-            
+
             if 'total general' in row_str:
-                for col in df.columns:
-                    if 'monto cobranza' in str(col).lower():
-                        valor = row[col]
+                # Tomar el MAYOR valor numérico de esa fila
+                mayor = 0.0
+
+                for valor in row.values:
+                    try:
                         num = ProcesadorArchivos._convertir_numero_europeo(valor)
                         if not pd.isna(num):
-                            return float(num), 1, float(num)
-        
+                            if float(num) > mayor:
+                                mayor = float(num)
+                    except:
+                        pass
+
+                if mayor > 0:
+                    return mayor, 1, mayor
+
         return 0.0, 0, 0.0
     
     # ===================== 🔥 CAMBIO 2: EGRESOS MODIFICADA =====================
