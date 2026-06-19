@@ -604,6 +604,10 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     
     # Saldos iniciales con formato venezolano
     st.markdown("#### 📌 Saldos Iniciales")
+    
+    # 🔥 DEBUG: Mostrar el valor real antes de formatear
+    st.write("DEBUG INVENTARIO:", st.session_state.saldos['inventario'])
+    
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.metric("📦 Inventario", formato_venezolano(st.session_state.saldos['inventario']))
