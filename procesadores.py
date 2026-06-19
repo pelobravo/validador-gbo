@@ -210,19 +210,45 @@ class ProcesadorArchivos:
         except:
             return 0.0
     
+       # ===================== 🔥 CAMBIO 2: EGRESOS MODIFICADA =====================
+    
     @staticmethod
-    def _saltar_encabezados(df, filas_a_saltar=0):
+    def procesar_egresos(df):
         """
-        Salta filas de encabezado en archivos de reportes.
+        Procesa archivo de egresos.
+        Toma la columna "Monto USD" (columna H) y suma todos los valores.
         
         Args:
             df: DataFrame de pandas
-            filas_a_saltar: Número de filas a saltar
         
         Returns:
-            DataFrame: DataFrame con las filas de encabezado removidas
+            tuple: (pagos_proveedores, pagos_gastos, cantidad_egresos, total_egresos)
         """
-        if filas_a_saltar > 0 and len(df) > filas_a_saltar:
+        if df is None or df.empty:
+            return 0.0, 0.0, 0, 0.0
+
+        # Columna H = índice 7
+        try:
+            monto_col = df.columns[7]
+        except:
+            return 0.0, 0.0, 0, 0.0
+
+        total = 0.0
+
+        for val in df[monto_col]:
+            try:
+                total += float(str(val).replace(',', ''))
+            except:
+                pass
+
+        cantidad = len(df)
+
+        return (
+            total,      # pagos_proveedores
+            0.0,        # pagos_gastos
+            cantidad,
+            total
+        )
             df = df.iloc[filas_a_saltar:].reset_index(drop=True)
         return df
     
