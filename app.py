@@ -22,6 +22,11 @@ validar_carpetas()
 db = Database()
 logger = Logger()
 
+# 🔥 TEMPORAL: Botón para borrar saldo del día 15
+if st.button("🗑️ Borrar saldo 15"):
+    db.eliminar_saldo("2026-06-15")
+    st.success("✅ Saldo eliminado correctamente")
+
 st.set_page_config(
     page_title="Validador de Trazabilidad Diaria",
     layout="wide",
