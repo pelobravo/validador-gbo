@@ -183,6 +183,51 @@ class Database:
         conn.close()
         return df
     
+    def obtener_historial_saldos_completo(self, limite=30):
+        """Obtiene el historial de saldos con capital de los últimos N días
+        
+        Args:
+            limite (int): Número de días a consultar (default 30)
+        
+        Returns:
+            DataFrame: Historial de saldos incluyendo capital
+        """
+        conn = sqlite3.connect(self.db_path)
+        df = pd.read_sql_query(
+            """SELECT 
+                fecha, 
+                inventario, 
+                cx_c, 
+                bancos, 
+                cx_p, 
+                transito, 
+                capital,
+                created_at
+            FROM saldos_diarios 
+            ORDER BY fecha DESC 
+            LIMIT ?""",
+            conn, params=[limite]
+        )
+        conn.close()
+        return df
+    
+    def obtener_historial_capital(self, limite=30):
+        """Obtiene solo el historial de capital de los últimos N días
+        
+        Args:
+            limite (int): Número de días a consultar (default 30)
+        
+        Returns:
+            DataFrame: Historial de capital
+        """
+        conn = sqlite3.connect(self.db_path)
+        df = pd.read_sql_query(
+            "SELECT fecha, capital FROM saldos_diarios ORDER BY fecha DESC LIMIT ?",
+            conn, params=[limite]
+        )
+        conn.close()
+        return df
+    
     def obtener_inconsistencias(self, fecha=None):
         """Obtiene las inconsistencias registradas"""
         conn = sqlite3.connect(self.db_path)
