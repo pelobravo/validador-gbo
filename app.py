@@ -763,15 +763,15 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     st.dataframe(pd.DataFrame(mov_data), use_container_width=True, hide_index=True)
     
     st.markdown("---")
-    
     # ============================================================
     # CÁLCULOS Y VALIDACIONES
     # ============================================================
+
     inventario_calculado = safe_number(st.session_state.saldos['inventario']) + recepcion_total - costo_facturacion
     cx_c_calculado = safe_number(st.session_state.saldos['cx_c']) + facturacion - cobranzas - notas_credito_cliente
-    bancos_calculado = safe_number(st.session_state.saldos['bancos']) + ingresos_totales - pagos_proveedores - pagos_gastos
+    bancos_calculado = saldo_bancario_reportado
     cx_p_calculado = safe_number(st.session_state.saldos['cx_p']) + compras_credito - pagos_proveedores - notas_credito_proveedor
-    transito_calculado = safe_number(st.session_state.saldos['transito']) + ingresos_totales - cobranzas
+    transito_calculado = transito_reportado
     capital_calculado = (inventario_calculado + cx_c_calculado + bancos_calculado) - (cx_p_calculado + transito_calculado)
     
     # ============================================================
