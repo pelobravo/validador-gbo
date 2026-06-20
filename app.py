@@ -668,6 +668,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
             # 🔥 TEMPORAL: Usar valor manual en lugar de extraer del archivo
             saldos_reportados['Cuentas por pagar'] = 670116.79
             # saldos_reportados['Cuentas por pagar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxp_rep, 'cxp')
+            
+            # 🔥 DEBUG: Mostrar el valor extraído
+            st.write("DEBUG CXP REPORTADO:", saldos_reportados['Cuentas por pagar'])
         except Exception as e:
             st.warning(f"⚠️ Error al leer CxP reportado: {str(e)}")
     
