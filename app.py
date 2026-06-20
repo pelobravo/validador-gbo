@@ -684,7 +684,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         try:
             df_cxp_rep = pd.read_excel(archivo_cxp_reportado)
             # 🔥 TEMPORAL: Usar valor manual en lugar de extraer del archivo
-            saldos_reportados['Cuentas por pagar'] = 670116.79
+            saldos_reportados['Cuentas por pagar'] = 650896.35  # 🔥 NUEVO VALOR DE PRUEBA
             # saldos_reportados['Cuentas por pagar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxp_rep, 'cxp')
             
             # 🔥 DEBUG: Mostrar el valor extraído
