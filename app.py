@@ -543,7 +543,7 @@ with st.sidebar:
     
     archivo_facturacion = st.file_uploader("Facturación diaria", type=["xlsx", "xls"], key="fact")
     archivo_cobranzas = st.file_uploader("Cobranzas procesadas", type=["xlsx", "xls"], key="cob")
-    archivo_recepciones = st.file_uploader("Recepciones del día", type=["xlsx", "xls"], key="rec")
+    archivo_recepciones = st.file_uploader("Recepciones del día (OPCIONAL)", type=["xlsx", "xls"], key="rec")
     archivo_egresos = st.file_uploader("Egresos iPago", type=["xlsx", "xls"], key="egr")
     archivo_estado_cuenta = st.file_uploader("Estado de cuenta bancario", type=["xlsx", "xls"], key="estado")
     archivo_notas_credito_cliente = st.file_uploader("Notas de crédito (clientes)", type=["xlsx", "xls"], key="notas_cliente")
@@ -602,7 +602,9 @@ st.markdown("""
 # ============================================================
 # PROCESAMIENTO PRINCIPAL
 # ============================================================
-if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo_egresos and archivo_estado_cuenta:
+# 🔥 CAMBIO: Recepción ahora es OPCIONAL
+# Solo Facturación, Cobranzas, Egresos y Estado de Cuenta son obligatorios
+if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_estado_cuenta:
     
     st.markdown(f"### 📈 Resultados de la Validación")
     st.markdown(f"**📅 Fecha procesada:** {fecha_procesar.strftime('%Y-%m-%d')}")
@@ -631,12 +633,28 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     try:
         df_facturacion = pd.read_excel(archivo_facturacion)
         df_cobranzas = pd.read_excel(archivo_cobranzas)
-        df_recepciones = pd.read_excel(archivo_recepciones)
         df_egresos = pd.read_excel(archivo_egresos)
         df_estado_cuenta = pd.read_excel(archivo_estado_cuenta)
     except Exception as e:
         st.error(f"❌ Error al leer archivos Excel: {str(e)}")
         st.stop()
+    
+    # 🔥 Leer archivo de Recepción (OPCIONAL)
+    recepcion_total = 0.0
+    df_recepciones = None
+    compras_credito = 0.0
+    
+    if archivo_recepciones:
+        try:
+            df_recepciones = pd.read_excel(archivo_recepciones)
+            recepcion_total, compras_credito, _, _ = ProcesadorArchivos.procesar_recepciones(df_recepciones)
+            st.info(f"✅ Recepción de mercancía procesada: {formato_venezolano(recepcion_total)}")
+        except Exception as e:
+            st.warning(f"⚠️ Error procesando Recepción: {str(e)}")
+            recepcion_total = 0.0
+            compras_credito = 0.0
+    else:
+        st.info("ℹ️ No se cargó archivo de Recepción. Se usará valor 0,00 para inventario.")
     
     # 🔥 Leer archivo de costo de facturación (usando procesar_costo_facturacion)
     costo_facturacion = 0.0
@@ -711,7 +729,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
     try:
         facturacion, _, _, _ = ProcesadorArchivos.procesar_facturacion(df_facturacion)
         cobranzas, _, _ = ProcesadorArchivos.procesar_cobranzas(df_cobranzas)
-        recepcion_total, compras_credito, _, _ = ProcesadorArchivos.procesar_recepciones(df_recepciones)
         pagos_proveedores, pagos_gastos, _, _ = ProcesadorArchivos.procesar_egresos(df_egresos)
         saldo_inicial_bancos, ingresos_id, ingresos_no_id, egresos_bancarios, saldo_final, total_ingresos, total_egresos = ProcesadorArchivos.procesar_estado_cuenta(
             df_estado_cuenta, st.session_state.saldos['bancos']
@@ -1084,7 +1101,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_recepciones and archivo
         """)
 
 else:
-    st.info("👈 Carga todos los archivos del día en la barra lateral para comenzar la validación")
+    st.info("👈 Carga los archivos obligatorios del día en la barra lateral para comenzar la validación")
+    st.info("📌 **Archivos obligatorios:** Facturación, Cobranzas, Egresos iPago y Estado de Cuenta")
+    st.info("ℹ️ **Archivos opcionales:** Recepción de mercancía, Notas de crédito, Costo de facturación")
     
     with st.expander("📋 Formatos esperados de los archivos"):
         st.markdown("""
@@ -1099,7 +1118,7 @@ else:
         |-------|--------|----------------|------------|----------------|
         | MCESIA | 02 - BANCO DE VENEZUELA | 2026-06-15 | 0591367815942 | 263.75 |
         
-        ### Recepciones del día
+        ### Recepciones del día (OPCIONAL)
         | Compra | Proveedor | F. Recepción | $ Neto + IVA |
         |--------|-----------|--------------|--------------|
         | 0000000587 | MOLINOS NACIONALES | 15/06/2026 | 21612.5 |
