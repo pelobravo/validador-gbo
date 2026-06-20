@@ -810,7 +810,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     # 🔥 BANCOS: Usar el saldo final reportado desde estado de cuenta
     bancos_calculado = safe_number(saldo_final)
     
-    cx_p_calculado = safe_number(st.session_state.saldos['cx_p']) + compras_credito - pagos_proveedores - notas_credito_proveedor
+    # 🔥 CAMBIO: CxP ahora usa Recepciones en lugar de Compras crédito
+    cx_p_calculado = safe_number(st.session_state.saldos['cx_p']) + recepcion_total - pagos_proveedores
+    
     transito_calculado = safe_number(st.session_state.saldos['transito']) + ingresos_totales - cobranzas
     capital_calculado = (inventario_calculado + cx_c_calculado + bancos_calculado) - (cx_p_calculado + transito_calculado)
     
@@ -916,7 +918,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     diff_cx_p = cx_p_calculado - (cx_p_reportado if cx_p_reportado is not None else 0)
     resultados_data.append({
         "Cuenta": "Cuentas por pagar",
-        "Fórmula": "CxP inicial + Compras crédito - Pagos proveedores - Notas crédito proveedores",
+        "Fórmula": "CxP inicial + Recepciones - Pagos proveedores",
         "Calculado": formato_venezolano(cx_p_calculado),
         "Reportado": formato_venezolano(cx_p_reportado) if cx_p_reportado is not None else "-",
         "Diferencia": formatear_diferencia(cx_p_calculado, cx_p_reportado),
@@ -962,7 +964,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     if cobranzas > safe_number(st.session_state.saldos['cx_c']) + facturacion:
         st.warning(f"⚠️ **CxC**: Cobranzas ({formato_venezolano(cobranzas)}) superan saldo disponible")
     
-    if pagos_proveedores > safe_number(st.session_state.saldos['cx_p']) + compras_credito:
+    if pagos_proveedores > safe_number(st.session_state.saldos['cx_p']) + recepcion_total:
         st.warning(f"⚠️ **CxP**: Pagos ({formato_venezolano(pagos_proveedores)}) superan saldo disponible")
     
     if transito_calculado >= 0:
@@ -1097,7 +1099,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         
         **Fórmulas clave:**  
         🔄 Transferencias en tránsito = Tránsito inicial + Ingresos del día - Cobranzas  
-        📋 Cuentas por pagar = CxP inicial + Compras crédito - Pagos proveedores - Notas crédito proveedores
+        📋 Cuentas por pagar = CxP inicial + Recepciones - Pagos proveedores
         """)
 
 else:
