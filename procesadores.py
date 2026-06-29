@@ -356,45 +356,126 @@ class ProcesadorArchivos:
 
         return 0.0, 0, 0.0
     
-    # ===================== EGRESOS =====================
+    # ===================== EGRESOS - MODIFICADO PARA FILTRAR PROVEEDORES DE MERCANCIA =====================
     
     @staticmethod
     def procesar_egresos(df):
         """
-        Procesa archivo de egresos.
-        Toma la columna "Monto USD" (columna H) y suma todos los valores.
+        Procesa archivo de egresos iPago.
+        Filtra SOLO "PROVEEDORES DE MERCANCIA" de la columna D (Concepto)
+        y suma los montos de la columna H (Monto USD).
         
         Args:
             df: DataFrame de pandas
         
         Returns:
-            tuple: (pagos_proveedores, pagos_gastos, cantidad_egresos, total_egresos)
+            tuple: (pagos_proveedores, pagos_gastos, total_egresos, df_proveedores)
+                - pagos_proveedores: Suma de montos donde Concepto = "PROVEEDORES DE MERCANCIA"
+                - pagos_gastos: Suma de montos donde Concepto != "PROVEEDORES DE MERCANCIA"
+                - total_egresos: Suma de todos los egresos
+                - df_proveedores: DataFrame con los proveedores de mercancía filtrados
         """
+        pagos_proveedores = 0.0
+        pagos_gastos = 0.0
+        df_proveedores = pd.DataFrame()
+        
         if df is None or df.empty:
-            return 0.0, 0.0, 0, 0.0
+            return pagos_proveedores, pagos_gastos, 0.0, df_proveedores
 
-        # Columna H = índice 7
+        df = ProcesadorArchivos._limpiar_columnas(df)
+        
         try:
-            monto_col = df.columns[7]
-        except:
-            return 0.0, 0.0, 0, 0.0
-
-        total = 0.0
-
-        for val in df[monto_col]:
-            try:
-                total += float(str(val).replace(',', ''))
-            except:
-                pass
-
-        cantidad = len(df)
-
-        return (
-            total,      # pagos_proveedores
-            0.0,        # pagos_gastos
-            cantidad,
-            total
-        )
+            # Columna D = índice 3 (0-based), Columna H = índice 7 (0-based)
+            # Pero buscamos por nombre primero para mayor robustez
+            
+            # Buscar columna de concepto (columna D)
+            col_concepto = ProcesadorArchivos._buscar_columna(
+                df,
+                'concepto', 'tipo', 'categoria', 'descripcion', 
+                'tipo de egreso', 'tipo de pago', 'forma_pago'
+            )
+            
+            # Si no se encuentra por nombre, usar índice 3 (columna D)
+            if col_concepto is None and len(df.columns) >= 4:
+                col_concepto = df.columns[3]
+            
+            # Buscar columna de monto (columna H)
+            col_monto = ProcesadorArchivos._buscar_columna(
+                df,
+                'monto usd', 'monto', 'usd', 'importe', 'monto_egreso', 
+                'valor', 'total', 'monto_pago', 'monto_total'
+            )
+            
+            # Si no se encuentra por nombre, usar índice 7 (columna H)
+            if col_monto is None and len(df.columns) >= 8:
+                col_monto = df.columns[7]
+            
+            # Si aún no se encuentra, buscar la primera columna numérica
+            if col_monto is None:
+                for col in df.columns:
+                    try:
+                        if pd.api.types.is_numeric_dtype(df[col]):
+                            col_monto = col
+                            break
+                    except:
+                        pass
+            
+            if col_concepto is None or col_monto is None:
+                return pagos_proveedores, pagos_gastos, 0.0, df_proveedores
+            
+            # Convertir la columna de concepto a string para filtrar
+            df['_concepto_str'] = df[col_concepto].astype(str).str.upper().str.strip()
+            
+            # Filtrar SOLO PROVEEDORES DE MERCANCIA
+            # Buscar varias variantes del concepto
+            mascara_proveedores = (
+                df['_concepto_str'].str.contains('PROVEEDORES DE MERCANCIA', case=False, na=False) |
+                df['_concepto_str'].str.contains('PROVEEDOR', case=False, na=False) |
+                df['_concepto_str'].str.contains('PROVEEDORES', case=False, na=False) |
+                df['_concepto_str'].str.contains('PROVEEDOR DE MERCANCIA', case=False, na=False)
+            )
+            
+            # Para depuración, mostrar los conceptos únicos encontrados
+            conceptos_unicos = df['_concepto_str'].unique()
+            conceptos_unicos = [c for c in conceptos_unicos if c and c != '']
+            
+            # Si no se encuentra "PROVEEDORES DE MERCANCIA", buscar por posición
+            if not mascara_proveedores.any():
+                # Buscar en la columna D (índice 3) específicamente
+                for idx, row in df.iterrows():
+                    if len(row) >= 4:
+                        valor_concepto = str(row.iloc[3]).upper().strip()
+                        if 'PROVEEDORES DE MERCANCIA' in valor_concepto:
+                            mascara_proveedores.iloc[idx] = True
+            
+            df_proveedores = df[mascara_proveedores].copy()
+            
+            # Extraer montos de la columna de monto
+            for idx, row in df.iterrows():
+                monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto])
+                if pd.isna(monto) or monto == 0:
+                    continue
+                
+                concepto = str(row[col_concepto]).upper().strip()
+                
+                # SOLO sumar si es PROVEEDORES DE MERCANCIA
+                if ('PROVEEDORES DE MERCANCIA' in concepto or 
+                    'PROVEEDOR DE MERCANCIA' in concepto):
+                    pagos_proveedores += monto
+                else:
+                    pagos_gastos += monto
+            
+            total_egresos = pagos_proveedores + pagos_gastos
+            
+            # Eliminar columna temporal
+            if '_concepto_str' in df.columns:
+                df.drop('_concepto_str', axis=1, inplace=True)
+            
+            return pagos_proveedores, pagos_gastos, total_egresos, df_proveedores
+            
+        except Exception as e:
+            print(f"Error al procesar egresos: {str(e)}")
+            return 0.0, 0.0, 0.0, pd.DataFrame()
     
     # ===================== ESTADO DE CUENTA =====================
     
