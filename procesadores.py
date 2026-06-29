@@ -812,36 +812,69 @@ class ProcesadorArchivos:
         
         return total, cantidad, promedio
     
-    # ===================== COSTO DE FACTURACIÓN =====================
+    # ===================== COSTO DE FACTURACIÓN - CORREGIDO =====================
     
     @staticmethod
     def procesar_costo_facturacion(df):
         """
         Procesa archivo de reporte de utilidad para extraer el costo de facturación.
-        Busca "Total General:" y extrae el valor de la columna "Costo"
+        Busca "Total General:" y extrae el valor de la columna E (índice 4)
+        
+        Estructura esperada del archivo:
+        - Columna E: Costo (con valores como 1.417,00)
+        - Fila que contiene "Total General:" en la primera columna
         
         Args:
             df: DataFrame de pandas
         
         Returns:
-            float: Costo total de facturación
+            float: Costo total de facturación (ej: 1.417,00)
         """
         if df is None or df.empty:
             return 0.0
         
         df = ProcesadorArchivos._limpiar_columnas(df)
         
+        # 🔥 Buscar la fila que contiene "Total General" o "Total General:"
         for idx, row in df.iterrows():
-            row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-            if 'total general:' in row_str:
+            # Convertir la primera columna a string para buscar
+            primera_col = str(row.iloc[0]) if len(row) > 0 else ""
+            
+            # Buscar "Total General" en la primera columna
+            if 'total general' in primera_col.lower() or 'total general:' in primera_col.lower():
+                # 🔥 Extraer el valor de la columna E (índice 4)
+                try:
+                    if len(row) > 4:
+                        valor = row.iloc[4]
+                        num = ProcesadorArchivos._convertir_numero_europeo(valor)
+                        if not pd.isna(num) and num > 0:
+                            return float(num)
+                except Exception as e:
+                    print(f"Error al extraer valor de columna E: {e}")
+                
+                # Si falla la columna E, intentar buscar en cualquier columna numérica
                 for col in df.columns:
                     try:
                         valor = row[col]
                         num = ProcesadorArchivos._convertir_numero_europeo(valor)
-                        if not pd.isna(num) and num > 1000:
+                        if not pd.isna(num) and num > 100:
                             return float(num)
                     except:
                         pass
+        
+        # 🔥 Si no se encuentra "Total General", buscar "Total" en la primera columna
+        for idx, row in df.iterrows():
+            primera_col = str(row.iloc[0]) if len(row) > 0 else ""
+            
+            if 'total' in primera_col.lower():
+                try:
+                    if len(row) > 4:
+                        valor = row.iloc[4]
+                        num = ProcesadorArchivos._convertir_numero_europeo(valor)
+                        if not pd.isna(num) and num > 0:
+                            return float(num)
+                except:
+                    pass
         
         return 0.0
     
