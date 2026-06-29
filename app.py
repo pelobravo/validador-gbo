@@ -1,4 +1,4 @@
-# app.py - Con campos para saldos iniciales manuales - VERSIÓN COMPLETA CON CAMBIOS
+# app.py - Con campos para saldos iniciales manuales - VERSIÓN COMPLETA CON FILTRO DE FECHAS
 
 import streamlit as st
 import pandas as pd
@@ -213,6 +213,14 @@ if 'usuario_actual' not in st.session_state:
     st.session_state.usuario_actual = None
 
 # ============================================================
+# INICIALIZAR FILTRO DE FECHAS
+# ============================================================
+if 'fecha_desde' not in st.session_state:
+    st.session_state.fecha_desde = datetime.now() - pd.Timedelta(days=7)
+if 'fecha_hasta' not in st.session_state:
+    st.session_state.fecha_hasta = datetime.now()
+
+# ============================================================
 # FUNCIONES AUXILIARES
 # ============================================================
 def cargar_ultimo_saldo_automatico():
@@ -239,30 +247,22 @@ def formatear_diferencia(valor_calculado, valor_reportado):
         return f"📉 {formato_venezolano(diferencia)}"
 
 def extraer_transito_reportado(df, transito_inicial):
-
     try:
-
         if df is None or df.empty:
             return None
 
         for idx, row in df.iterrows():
-
             row_str = ' '.join(
                 [str(x) for x in row.values if pd.notna(x)]
             ).lower()
 
             if 'total' in row_str:
-
                 for val in row.values:
-
                     num = ProcesadorArchivos._convertir_numero_europeo(val)
-
                     if not pd.isna(num) and num > 0:
-
                         return float(num)
 
         return None
-
     except Exception:
         return None
         
@@ -482,7 +482,7 @@ with st.sidebar:
     st.markdown("---")
     
     # ============================================================
-    # 🔥 NUEVO: SALDOS INICIALES MANUALES
+    # SALDOS INICIALES MANUALES
     # ============================================================
     st.markdown("#### 📌 Saldos Iniciales Manuales")
     st.caption("Ingrese los saldos del día anterior")
@@ -539,6 +539,40 @@ with st.sidebar:
     
     st.markdown("---")
     
+    # ============================================================
+    # 🔥 NUEVO: FILTRO POR RANGO DE FECHAS
+    # ============================================================
+    st.markdown("#### 📅 Filtro por Rango de Fechas")
+    
+    col_fecha1, col_fecha2 = st.columns(2)
+    with col_fecha1:
+        fecha_desde = st.date_input(
+            "📅 Desde", 
+            st.session_state.fecha_desde,
+            key="filtro_desde"
+        )
+    with col_fecha2:
+        fecha_hasta = st.date_input(
+            "📅 Hasta", 
+            st.session_state.fecha_hasta,
+            key="filtro_hasta"
+        )
+    
+    col_btn_f1, col_btn_f2 = st.columns(2)
+    with col_btn_f1:
+        if st.button("🔍 Aplicar Filtro", use_container_width=True):
+            st.session_state.fecha_desde = fecha_desde
+            st.session_state.fecha_hasta = fecha_hasta
+            st.rerun()
+    
+    with col_btn_f2:
+        if st.button("🔄 Resetear", use_container_width=True):
+            st.session_state.fecha_desde = datetime.now() - pd.Timedelta(days=7)
+            st.session_state.fecha_hasta = datetime.now()
+            st.rerun()
+    
+    st.markdown("---")
+    
     st.markdown("#### 📂 Archivos del día")
     
     archivo_facturacion = st.file_uploader("Facturación diaria", type=["xlsx", "xls"], key="fact")
@@ -550,7 +584,7 @@ with st.sidebar:
     archivo_notas_credito_proveedor = st.file_uploader("Notas de crédito (proveedores)", type=["xlsx", "xls"], key="notas_proveedor")
     
     # ============================================================
-    # 🔥 ARCHIVO DE COSTO DE FACTURACIÓN
+    # ARCHIVO DE COSTO DE FACTURACIÓN
     # ============================================================
     st.markdown("#### 📂 Archivos de costos")
     archivo_costo_facturacion = st.file_uploader("Costo de facturación", type=["xlsx", "xls"], key="costo_fact")
@@ -602,7 +636,7 @@ st.markdown("""
 # ============================================================
 # PROCESAMIENTO PRINCIPAL
 # ============================================================
-# 🔥 CAMBIO: Recepción ahora es OPCIONAL
+# Recepción ahora es OPCIONAL
 # Solo Facturación, Cobranzas, Egresos y Estado de Cuenta son obligatorios
 if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_estado_cuenta:
     
@@ -611,9 +645,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     
     # Saldos iniciales con formato venezolano
     st.markdown("#### 📌 Saldos Iniciales")
-    
-    # 🔥 DEBUG: Mostrar el valor real antes de formatear
-    st.write("DEBUG INVENTARIO:", st.session_state.saldos['inventario'])
     
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
@@ -639,7 +670,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         st.error(f"❌ Error al leer archivos Excel: {str(e)}")
         st.stop()
     
-    # 🔥 Leer archivo de Recepción (OPCIONAL)
+    # Leer archivo de Recepción (OPCIONAL)
     recepcion_total = 0.0
     df_recepciones = None
     compras_credito = 0.0
@@ -656,7 +687,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     else:
         st.info("ℹ️ No se cargó archivo de Recepción. Se usará valor 0,00 para inventario.")
     
-    # 🔥 Leer archivo de costo de facturación (usando procesar_costo_facturacion)
+    # Leer archivo de costo de facturación
     costo_facturacion = 0.0
     if archivo_costo_facturacion:
         try:
@@ -674,21 +705,14 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     if archivo_cxc_reportado:
         try:
             df_cxc_rep = pd.read_excel(archivo_cxc_reportado)
-            # 🔥 TEMPORAL: Usar valor manual en lugar de extraer del archivo
-            saldos_reportados['Cuentas por cobrar'] = 417932.23
-            # saldos_reportados['Cuentas por cobrar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxc_rep, 'cxc')
+            saldos_reportados['Cuentas por cobrar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxc_rep, 'cxc')
         except Exception as e:
             st.warning(f"⚠️ Error al leer CxC reportado: {str(e)}")
     
     if archivo_cxp_reportado:
         try:
             df_cxp_rep = pd.read_excel(archivo_cxp_reportado)
-            # 🔥 TEMPORAL: Usar valor manual en lugar de extraer del archivo
-            saldos_reportados['Cuentas por pagar'] = 650896.35  # 🔥 NUEVO VALOR DE PRUEBA
-            # saldos_reportados['Cuentas por pagar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxp_rep, 'cxp')
-            
-            # 🔥 DEBUG: Mostrar el valor extraído
-            st.write("DEBUG CXP REPORTADO:", saldos_reportados['Cuentas por pagar'])
+            saldos_reportados['Cuentas por pagar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxp_rep, 'cxp')
         except Exception as e:
             st.warning(f"⚠️ Error al leer CxP reportado: {str(e)}")
     
@@ -725,15 +749,11 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         except Exception as e:
             st.warning(f"⚠️ Error al procesar notas de crédito proveedores: {str(e)}")
     
-    # 🔥 CAMBIO 1: PROCESAMIENTO DE EGRESOS - SE MANTIENE IGUAL
+    # PROCESAMIENTO DE MOVIMIENTOS
     try:
         facturacion, _, _, _ = ProcesadorArchivos.procesar_facturacion(df_facturacion)
         cobranzas, _, _ = ProcesadorArchivos.procesar_cobranzas(df_cobranzas)
         pagos_proveedores, pagos_gastos, _, _ = ProcesadorArchivos.procesar_egresos(df_egresos)
-        
-        # 🔥 PRUEBA: Sobrescribir pagos_proveedores con el valor esperado
-        pagos_proveedores = 7387.50  # Valor esperado manual
-        st.warning(f"🔧 PRUEBA: pagos_proveedores forzado a {formato_venezolano(pagos_proveedores)}")
         
         saldo_inicial_bancos, ingresos_id, ingresos_no_id, egresos_bancarios, saldo_final, total_ingresos, total_egresos = ProcesadorArchivos.procesar_estado_cuenta(
             df_estado_cuenta, st.session_state.saldos['bancos']
@@ -742,7 +762,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         st.error(f"❌ Error al procesar movimientos: {str(e)}")
         st.stop()
     
-    # 🔥 VALIDAR Y ASEGURAR VALORES NUMÉRICOS
+    # VALIDAR Y ASEGURAR VALORES NUMÉRICOS
     facturacion = safe_number(facturacion)
     costo_facturacion = safe_number(costo_facturacion)
     cobranzas = safe_number(cobranzas)
@@ -760,7 +780,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     ingresos_totales = ingresos_id + ingresos_no_id
     
     # ============================================================
-    # 🔥 CAMBIO 2: TABLA MOVIMIENTOS DEL DÍA - NUEVA ESTRUCTURA
+    # TABLA MOVIMIENTOS DEL DÍA
     # ============================================================
     st.markdown("#### 📋 Movimientos del día procesados")
     
@@ -779,24 +799,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             formato_venezolano(costo_facturacion),
             formato_venezolano(cobranzas),
             formato_venezolano(recepcion_total),
-            
-            # Egresos iPago
-            formato_venezolano(
-                pagos_proveedores + pagos_gastos
-            ),
-            
-            # Saldo Final Estado de Cuenta
-            formato_venezolano(
-                saldo_final
-            ),
-            
-            # TB
-            formato_venezolano(
-                saldos_reportados.get(
-                    'Transferencias en tránsito',
-                    0
-                )
-            )
+            formato_venezolano(pagos_proveedores + pagos_gastos),
+            formato_venezolano(saldo_final),
+            formato_venezolano(saldos_reportados.get('Transferencias en tránsito', 0))
         ]
     }
     st.dataframe(pd.DataFrame(mov_data), use_container_width=True, hide_index=True)
@@ -807,21 +812,13 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     # CÁLCULOS Y VALIDACIONES
     # ============================================================
     
-    # Obtener total de egresos iPago desde el archivo
-    total_egresos_ipago = ProcesadorArchivos.obtener_total_egresos_ipago(df_egresos)
-    
     inventario_calculado = safe_number(st.session_state.saldos['inventario']) + recepcion_total - costo_facturacion
     cx_c_calculado = safe_number(st.session_state.saldos['cx_c']) + facturacion - cobranzas - notas_credito_cliente    
-    # 🔥 BANCOS: Usar el saldo final reportado desde estado de cuenta
     bancos_calculado = safe_number(saldo_final)
-    
-    # 🔥 CAMBIO: CxP ahora usa Recepciones en lugar de Compras crédito
     cx_p_calculado = safe_number(st.session_state.saldos['cx_p']) + recepcion_total - pagos_proveedores
-    
     transito_calculado = safe_number(st.session_state.saldos['transito']) + ingresos_totales - cobranzas
     capital_calculado = (inventario_calculado + cx_c_calculado + bancos_calculado) - (cx_p_calculado + transito_calculado)
     
-    # 🔥 Mostrar saldo inicial bancario extraído del estado de cuenta
     st.info(f"ℹ️ **Saldo Inicial Bancario (desde estado de cuenta):** {formato_venezolano(saldo_inicial_bancos)} Bs.")
     
     # ============================================================
@@ -840,37 +837,19 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     # FUNCIÓN PARA EXPLICAR DIFERENCIAS
     # ============================================================
     def explicar_diferencia(cuenta, calculado, reportado):
-        """
-        Explica el origen de una diferencia entre valor calculado y reportado.
-        """
         diferencia = calculado - reportado
         
         if abs(diferencia) < 0.01:
             return "✅ Sin diferencia"
 
         if cuenta == "Inventario":
-            return (
-                f"Salida de inventario no explicada por "
-                f"{formato_venezolano(abs(diferencia))}"
-            )
-
+            return f"Salida de inventario no explicada por {formato_venezolano(abs(diferencia))}"
         elif cuenta == "Cuentas por cobrar":
-            return (
-                f"CxC adicional pendiente por "
-                f"{formato_venezolano(abs(diferencia))}"
-            )
-
+            return f"CxC adicional pendiente por {formato_venezolano(abs(diferencia))}"
         elif cuenta == "Cuentas por pagar":
-            return (
-                f"Ajuste / NC proveedor pendiente por "
-                f"{formato_venezolano(abs(diferencia))}"
-            )
-
+            return f"Ajuste / NC proveedor pendiente por {formato_venezolano(abs(diferencia))}"
         elif cuenta == "Transferencias en tránsito":
-            return (
-                f"Transferencias pendientes por "
-                f"{formato_venezolano(abs(diferencia))}"
-            )
+            return f"Transferencias pendientes por {formato_venezolano(abs(diferencia))}"
 
         return ""
     
@@ -885,7 +864,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     cx_p_reportado = saldos_reportados.get('Cuentas por pagar')
     transito_reportado = saldos_reportados.get('Transferencias en tránsito')
 
-    # Obtener valores del día anterior (desde session_state)
+    # Obtener valores del día anterior
     inventario_anterior = safe_number(st.session_state.saldos.get('inventario', 0))
     cx_c_anterior = safe_number(st.session_state.saldos.get('cx_c', 0))
     bancos_anterior = safe_number(st.session_state.saldos.get('bancos', 0))
@@ -986,11 +965,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     else:
         st.error(f"❌ **Transferencias**: Saldo negativo ({formato_venezolano(transito_calculado)})")
     
-    # 🔥 CAMBIO 3: NUEVA INFORMACIÓN DE VALIDACIÓN
-    st.info(
-        f"ℹ️ **Saldo Final Bancario Reportado**: "
-        f"{formato_venezolano(saldo_final)} Bs."
-    )
+    st.info(f"ℹ️ **Saldo Final Bancario Reportado**: {formato_venezolano(saldo_final)} Bs.")
     
     st.markdown("---")
     
@@ -1035,34 +1010,16 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     # BOTONES DE ACCIÓN
     # ============================================================
     
-    # 🔥 Usar valores reportados si existen, si no usar calculados
-    inventario_final = saldos_reportados.get(
-        'Inventario',
-        inventario_calculado
-    )
-    
-    cx_c_final = saldos_reportados.get(
-        'Cuentas por cobrar',
-        cx_c_calculado
-    )
-    
-    cx_p_final = saldos_reportados.get(
-        'Cuentas por pagar',
-        cx_p_calculado
-    )
-    
-    transito_final = saldos_reportados.get(
-        'Transferencias en tránsito',
-        transito_calculado
-    )
-    
+    inventario_final = saldos_reportados.get('Inventario', inventario_calculado)
+    cx_c_final = saldos_reportados.get('Cuentas por cobrar', cx_c_calculado)
+    cx_p_final = saldos_reportados.get('Cuentas por pagar', cx_p_calculado)
+    transito_final = saldos_reportados.get('Transferencias en tránsito', transito_calculado)
     bancos_final = bancos_calculado
     
     col_btn1, col_btn2 = st.columns(2)
     
     with col_btn1:
         if st.button("💾 Guardar saldos calculados", use_container_width=True):
-            
             saldos_guardar = {
                 'inventario': inventario_final,
                 'cx_c': cx_c_final,
@@ -1082,21 +1039,76 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             st.session_state.saldos['bancos'] = bancos_final
             st.session_state.saldos['cx_p'] = cx_p_final
             st.session_state.saldos['transito'] = transito_final
-            
             st.session_state.saldos['capital_anterior'] = capital_calculado
             
             st.success("✅ Saldos guardados correctamente")
     
     with col_btn2:
-        if st.button("📜 Ver historial", use_container_width=True):
-            historial = db.obtener_historial_saldos(10)
+        if st.button("📜 Ver historial filtrado", use_container_width=True):
+            # Obtener fechas del filtro
+            desde = st.session_state.get('fecha_desde', datetime.now() - pd.Timedelta(days=7))
+            hasta = st.session_state.get('fecha_hasta', datetime.now())
+            
+            # Consultar historial con filtro
+            historial = db.obtener_historial_por_fechas(
+                desde.strftime('%Y-%m-%d'), 
+                hasta.strftime('%Y-%m-%d')
+            )
+            
             if not historial.empty:
+                # Formatear columnas numéricas
+                columnas_numericas = ['inventario', 'cx_c', 'bancos', 'cx_p', 'transito', 'capital']
+                for col in columnas_numericas:
+                    if col in historial.columns:
+                        historial[col] = historial[col].apply(formato_venezolano)
+                
                 st.dataframe(historial, use_container_width=True)
+                st.caption(f"📊 Mostrando registros desde {desde.strftime('%d/%m/%Y')} hasta {hasta.strftime('%d/%m/%Y')}")
+                
+                # Resumen del período
+                col_res1, col_res2, col_res3 = st.columns(3)
+                with col_res1:
+                    st.metric("📊 Total de días", len(historial))
+                with col_res2:
+                    if 'capital' in historial.columns:
+                        capital_inicial_val = safe_number(historial.iloc[0]['capital'])
+                        capital_final_val = safe_number(historial.iloc[-1]['capital'])
+                        st.metric("📈 Variación capital", formato_venezolano(capital_final_val - capital_inicial_val))
             else:
-                st.info("No hay historial aún")
+                st.info("No hay registros en el rango de fechas seleccionado")
     
     # ============================================================
-    # 🔥 CAMBIO 4: REGLAS DE NEGOCIO - NUEVAS REGLAS
+    # RESUMEN DEL PERÍODO SELECCIONADO
+    # ============================================================
+    with st.expander("📊 Resumen del Período"):
+        desde = st.session_state.get('fecha_desde', datetime.now() - pd.Timedelta(days=7))
+        hasta = st.session_state.get('fecha_hasta', datetime.now())
+        
+        historial = db.obtener_historial_por_fechas(
+            desde.strftime('%Y-%m-%d'), 
+            hasta.strftime('%Y-%m-%d')
+        )
+        
+        if not historial.empty:
+            col_r1, col_r2, col_r3, col_r4 = st.columns(4)
+            
+            with col_r1:
+                st.metric("📅 Días", len(historial))
+            with col_r2:
+                capital_inicial = safe_number(historial.iloc[0]['capital'])
+                st.metric("📈 Capital Inicio", formato_venezolano(capital_inicial))
+            with col_r3:
+                capital_final = safe_number(historial.iloc[-1]['capital'])
+                st.metric("📉 Capital Fin", formato_venezolano(capital_final))
+            with col_r4:
+                variacion = capital_final - capital_inicial
+                signo = "📈" if variacion > 0 else "📉" if variacion < 0 else "➖"
+                st.metric(f"{signo} Variación", formato_venezolano(variacion))
+        else:
+            st.info("No hay datos en el período seleccionado")
+    
+    # ============================================================
+    # REGLAS DE NEGOCIO
     # ============================================================
     with st.expander("📌 Reglas de negocio aplicadas"):
         st.markdown("""
