@@ -1,4 +1,4 @@
-# app.py - Con campos para saldos iniciales manuales - VERSIÓN COMPLETA CON FILTRO DE FECHAS FUNCIONAL
+# app.py - Con campos para saldos iniciales manuales - VERSIÓN COMPLETA CON CIERRE DIARIO
 
 import streamlit as st
 import pandas as pd
@@ -559,7 +559,7 @@ with st.sidebar:
     st.markdown("---")
     
     # ============================================================
-    # 🔥 FILTRO POR RANGO DE FECHAS - CORREGIDO
+    # FILTRO POR RANGO DE FECHAS
     # ============================================================
     st.markdown("#### 📅 Filtro por Rango de Fechas")
     
@@ -714,7 +714,6 @@ if st.session_state.get('mostrar_historial', False) and st.session_state.get('hi
             try:
                 import matplotlib.pyplot as plt
                 fig, ax = plt.subplots(figsize=(10, 4))
-                # Ordenar por fecha ascendente para el gráfico
                 historial_ordenado = historial.sort_values('fecha')
                 ax.plot(historial_ordenado['fecha'], historial_ordenado['capital'], marker='o', linewidth=2, color='#667eea')
                 ax.set_title('Evolución del Capital de Trabajo Neto', fontsize=14, fontweight='bold')
@@ -1038,6 +1037,183 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
+    # 🔥 NUEVO: CIERRE DIARIO - CAPITAL DE TRABAJO NETO
+    # ============================================================
+    st.markdown("#### 📊 CIERRE DIARIO - Capital de Trabajo Neto")
+
+    # Obtener valores reportados (de los archivos cargados)
+    inventario_reportado_cierre = saldos_reportados.get('Inventario')
+    cx_c_reportado_cierre = saldos_reportados.get('Cuentas por cobrar')
+    cx_p_reportado_cierre = saldos_reportados.get('Cuentas por pagar')
+    transito_reportado_cierre = saldos_reportados.get('Transferencias en tránsito')
+    bancos_reportado_cierre = saldo_final  # Del estado de cuenta
+
+    # Si no hay valores reportados, usar los calculados
+    if inventario_reportado_cierre is None:
+        inventario_reportado_cierre = inventario_calculado
+    if cx_c_reportado_cierre is None:
+        cx_c_reportado_cierre = cx_c_calculado
+    if cx_p_reportado_cierre is None:
+        cx_p_reportado_cierre = cx_p_calculado
+    if transito_reportado_cierre is None:
+        transito_reportado_cierre = transito_calculado
+
+    # Asegurar valores numéricos
+    inventario_reportado_cierre = safe_number(inventario_reportado_cierre)
+    cx_c_reportado_cierre = safe_number(cx_c_reportado_cierre)
+    bancos_reportado_cierre = safe_number(bancos_reportado_cierre)
+    cx_p_reportado_cierre = safe_number(cx_p_reportado_cierre)
+    transito_reportado_cierre = safe_number(transito_reportado_cierre)
+
+    # ============================================================
+    # ACTIVOS OPERATIVOS
+    # ============================================================
+    activos_operativos = cx_c_reportado_cierre + inventario_reportado_cierre + bancos_reportado_cierre
+
+    # ============================================================
+    # PASIVOS OPERATIVOS
+    # ============================================================
+    pasivos_operativos = cx_p_reportado_cierre + transito_reportado_cierre
+
+    # ============================================================
+    # CAPITAL DE TRABAJO NETO
+    # ============================================================
+    capital_neto = activos_operativos - pasivos_operativos
+
+    # ============================================================
+    # MOSTRAR TABLA DEL CIERRE DIARIO
+    # ============================================================
+    cierre_data = [
+        {
+            "Concepto": "📦 Inventario",
+            "Tipo": "ACTIVO",
+            "Monto": formato_venezolano(inventario_reportado_cierre)
+        },
+        {
+            "Concepto": "💰 Cuentas por cobrar",
+            "Tipo": "ACTIVO",
+            "Monto": formato_venezolano(cx_c_reportado_cierre)
+        },
+        {
+            "Concepto": "🏦 Bancos",
+            "Tipo": "ACTIVO",
+            "Monto": formato_venezolano(bancos_reportado_cierre)
+        },
+        {
+            "Concepto": "📌 TOTAL ACTIVOS OPERATIVOS",
+            "Tipo": "ACTIVO_TOTAL",
+            "Monto": formato_venezolano(activos_operativos)
+        },
+        {
+            "Concepto": "📋 Cuentas por pagar",
+            "Tipo": "PASIVO",
+            "Monto": formato_venezolano(cx_p_reportado_cierre)
+        },
+        {
+            "Concepto": "🔄 Transferencias en tránsito",
+            "Tipo": "PASIVO",
+            "Monto": formato_venezolano(transito_reportado_cierre)
+        },
+        {
+            "Concepto": "📌 TOTAL PASIVOS OPERATIVOS",
+            "Tipo": "PASIVO_TOTAL",
+            "Monto": formato_venezolano(pasivos_operativos)
+        },
+        {
+            "Concepto": "🏁 CAPITAL DE TRABAJO NETO",
+            "Tipo": "CAPITAL",
+            "Monto": formato_venezolano(capital_neto)
+        }
+    ]
+
+    df_cierre = pd.DataFrame(cierre_data)
+
+    # Estilizar la tabla con colores
+    def color_rows(row):
+        if row['Tipo'] == 'ACTIVO_TOTAL':
+            return ['background-color: #e8f5e9; font-weight: bold;'] * len(row)
+        elif row['Tipo'] == 'PASIVO_TOTAL':
+            return ['background-color: #fff3e0; font-weight: bold;'] * len(row)
+        elif row['Tipo'] == 'CAPITAL':
+            if capital_neto >= 0:
+                return ['background-color: #667eea; color: white; font-weight: bold; font-size: 1.1rem;'] * len(row)
+            else:
+                return ['background-color: #dc3545; color: white; font-weight: bold; font-size: 1.1rem;'] * len(row)
+        elif row['Tipo'] == 'ACTIVO':
+            return ['background-color: #f1f8f4;'] * len(row)
+        elif row['Tipo'] == 'PASIVO':
+            return ['background-color: #fff8f0;'] * len(row)
+        return [''] * len(row)
+
+    # Aplicar estilos
+    styled_df = df_cierre.style.apply(color_rows, axis=1).hide(axis='index')
+
+    # Mostrar tabla
+    st.dataframe(styled_df, use_container_width=True)
+
+    # ============================================================
+    # RESUMEN DEL CIERRE DIARIO
+    # ============================================================
+    st.markdown("---")
+    st.markdown("#### 📋 Resumen del Cierre Diario")
+
+    col_c1, col_c2, col_c3 = st.columns(3)
+
+    with col_c1:
+        st.metric(
+            "📈 Activos Operativos",
+            formato_venezolano(activos_operativos),
+            help="CxC + Inventario + Bancos"
+        )
+
+    with col_c2:
+        st.metric(
+            "📉 Pasivos Operativos",
+            formato_venezolano(pasivos_operativos),
+            help="CxP + Transferencias en tránsito"
+        )
+
+    with col_c3:
+        signo = "✅" if capital_neto >= 0 else "❌"
+        delta_color = "normal" if capital_neto >= 0 else "inverse"
+        st.metric(
+            f"{signo} Capital de Trabajo Neto",
+            formato_venezolano(capital_neto),
+            delta_color=delta_color
+        )
+
+    # ============================================================
+    # DETALLE DE LA VALIDACIÓN DEL CIERRE
+    # ============================================================
+    with st.expander("📌 Detalle de la validación del cierre"):
+        st.markdown(f"""
+        ### 📊 Cierre Diario - {fecha_procesar.strftime('%Y-%m-%d')}
+        
+        | Concepto | Fórmula | Valor |
+        |----------|---------|-------|
+        | **ACTIVOS OPERATIVOS** | | |
+        | Cuentas por cobrar | CxC reportado | {formato_venezolano(cx_c_reportado_cierre)} |
+        | Inventario | Inventario reportado | {formato_venezolano(inventario_reportado_cierre)} |
+        | Bancos | Saldo final estado de cuenta | {formato_venezolano(bancos_reportado_cierre)} |
+        | | **Total Activos** | **{formato_venezolano(activos_operativos)}** |
+        | | | |
+        | **PASIVOS OPERATIVOS** | | |
+        | Cuentas por pagar | CxP reportado | {formato_venezolano(cx_p_reportado_cierre)} |
+        | Transferencias en tránsito | TB reportado | {formato_venezolano(transito_reportado_cierre)} |
+        | | **Total Pasivos** | **{formato_venezolano(pasivos_operativos)}** |
+        | | | |
+        | **🏁 CAPITAL DE TRABAJO NETO** | Activos - Pasivos | **{formato_venezolano(capital_neto)}** |
+        """)
+
+        # Verificar si el capital es positivo
+        if capital_neto >= 0:
+            st.success(f"✅ Capital de Trabajo Neto POSITIVO: {formato_venezolano(capital_neto)}")
+        else:
+            st.error(f"❌ Capital de Trabajo Neto NEGATIVO: {formato_venezolano(capital_neto)}")
+    
+    st.markdown("---")
+    
+    # ============================================================
     # VALIDACIONES CRUZADAS
     # ============================================================
     st.markdown("#### ✅ Validaciones Cruzadas")
@@ -1196,6 +1372,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         **Fórmulas clave:**  
         🔄 Transferencias en tránsito = Tránsito inicial + Ingresos del día - Cobranzas  
         📋 Cuentas por pagar = CxP inicial + Recepciones - Pagos proveedores
+        
+        **Cierre Diario:**  
+        🏁 Capital de Trabajo Neto = (CxC + Inventario + Bancos) - (CxP + Transferencias en tránsito)
         """)
 
 else:
