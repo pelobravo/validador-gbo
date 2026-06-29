@@ -121,7 +121,7 @@ def safe_string(value, default=""):
     return str(value)
 
 # ============================================================
-# CSS PERSONALIZADO - DISEÑO MODERNO
+# CSS PERSONALIZADO - DISEÑO MODERNO CON KPIS MEJORADOS
 # ============================================================
 st.markdown("""
 <style>
@@ -131,31 +131,111 @@ st.markdown("""
         font-family: 'Inter', sans-serif;
     }
     
-    .kpi-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    /* KPI Cards con bordes y colores diferenciados */
+    .kpi-card-activos {
+        background: linear-gradient(135deg, #1a8a4a 0%, #2ecc71 100%);
         border-radius: 20px;
         padding: 25px 20px;
         text-align: center;
         color: white;
-        box-shadow: 0 10px 25px -5px rgba(102, 126, 234, 0.3);
+        box-shadow: 0 10px 25px -5px rgba(46, 204, 113, 0.4);
+        border: 3px solid #27ae60;
         cursor: pointer;
-        transition: transform 0.2s;
+        transition: transform 0.2s, box-shadow 0.2s;
     }
     
-    .kpi-card:hover {
+    .kpi-card-activos:hover {
         transform: translateY(-3px);
+        box-shadow: 0 15px 35px -5px rgba(46, 204, 113, 0.5);
+    }
+    
+    .kpi-card-pasivos {
+        background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%);
+        border-radius: 20px;
+        padding: 25px 20px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 10px 25px -5px rgba(231, 76, 60, 0.4);
+        border: 3px solid #e74c3c;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .kpi-card-pasivos:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 35px -5px rgba(231, 76, 60, 0.5);
+    }
+    
+    .kpi-card-capital {
+        background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+        border-radius: 20px;
+        padding: 25px 20px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 10px 25px -5px rgba(52, 152, 219, 0.4);
+        border: 3px solid #2980b9;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .kpi-card-capital:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 35px -5px rgba(52, 152, 219, 0.5);
+    }
+    
+    .kpi-card-capital-positivo {
+        background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+        border-radius: 20px;
+        padding: 25px 20px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 10px 25px -5px rgba(46, 204, 113, 0.4);
+        border: 3px solid #27ae60;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .kpi-card-capital-positivo:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 35px -5px rgba(46, 204, 113, 0.5);
+    }
+    
+    .kpi-card-capital-negativo {
+        background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%);
+        border-radius: 20px;
+        padding: 25px 20px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 10px 25px -5px rgba(231, 76, 60, 0.4);
+        border: 3px solid #e74c3c;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .kpi-card-capital-negativo:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 35px -5px rgba(231, 76, 60, 0.5);
     }
     
     .kpi-card .label {
-        font-size: 0.85rem;
-        opacity: 0.9;
+        font-size: 0.9rem;
+        opacity: 0.95;
         letter-spacing: 0.5px;
+        font-weight: 500;
     }
     
     .kpi-card .value {
-        font-size: 2rem;
+        font-size: 2.2rem;
         font-weight: 700;
-        margin-top: 8px;
+        margin-top: 10px;
+        letter-spacing: 0.5px;
+        font-family: 'Courier New', monospace;
+    }
+    
+    .kpi-card .sub-label {
+        font-size: 0.7rem;
+        opacity: 0.7;
+        margin-top: 5px;
     }
     
     .dataframe {
@@ -247,6 +327,13 @@ st.markdown("""
         margin-top: -5px;
         margin-bottom: 10px;
         opacity: 0.7;
+    }
+    
+    /* Popover personalizado */
+    div[data-testid="stPopover"] {
+        background: #f8f9fa;
+        border-radius: 16px;
+        border: 2px solid #667eea;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -428,6 +515,51 @@ def mostrar_tabla_activos_pasivos(inventario, cx_c, bancos, cx_p, transito, capi
     </table>
     """
     return html
+
+# ============================================================
+# FUNCIÓN PARA KPI CON COLORES DIFERENCIADOS
+# ============================================================
+def mostrar_kpi_con_color(titulo, valor, tipo, popover_content=None):
+    """
+    Muestra un KPI con colores diferenciados según el tipo:
+    - activos: verde
+    - pasivos: rojo
+    - capital_positivo: verde oscuro
+    - capital_negativo: rojo oscuro
+    - capital: azul (por defecto)
+    """
+    
+    # Determinar la clase CSS según el tipo
+    if tipo == "activos":
+        clase = "kpi-card-activos"
+    elif tipo == "pasivos":
+        clase = "kpi-card-pasivos"
+    elif tipo == "capital_positivo":
+        clase = "kpi-card-capital-positivo"
+    elif tipo == "capital_negativo":
+        clase = "kpi-card-capital-negativo"
+    else:
+        clase = "kpi-card-capital"
+    
+    # Valor formateado
+    valor_formateado = formato_venezolano(valor)
+    
+    # Construir el HTML del KPI
+    html = f"""
+    <div class="{clase}">
+        <div class="label">{titulo}</div>
+        <div class="value">{valor_formateado}</div>
+        <div class="sub-label">💡 Haz clic para ver detalle</div>
+    </div>
+    """
+    
+    # Mostrar como popover si hay contenido
+    if popover_content:
+        with st.popover("", use_container_width=True):
+            st.markdown(popover_content)
+        st.markdown(html, unsafe_allow_html=True)
+    else:
+        st.markdown(html, unsafe_allow_html=True)
 
 # ============================================================
 # LOGIN CON LOGO Y TÍTULO CENTRADO
@@ -1513,9 +1645,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             return ['background-color: #fff3e0; font-weight: bold;'] * len(row)
         elif row['Tipo'] == 'CAPITAL':
             if capital_neto >= 0:
-                return ['background-color: #667eea; color: white; font-weight: bold; font-size: 1.1rem;'] * len(row)
+                return ['background-color: #27ae60; color: white; font-weight: bold; font-size: 1.1rem;'] * len(row)
             else:
-                return ['background-color: #dc3545; color: white; font-weight: bold; font-size: 1.1rem;'] * len(row)
+                return ['background-color: #e74c3c; color: white; font-weight: bold; font-size: 1.1rem;'] * len(row)
         elif row['Tipo'] == 'ACTIVO':
             return ['background-color: #f1f8f4;'] * len(row)
         elif row['Tipo'] == 'PASIVO':
@@ -1583,7 +1715,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         """)
 
     # ============================================================
-    # 7. RESUMEN DEL CIERRE DIARIO - CON KPIS CLICABLES
+    # 7. RESUMEN DEL CIERRE DIARIO - CON KPIS MEJORADOS
     # ============================================================
     st.markdown("---")
     st.markdown("#### 📊 Resumen del Cierre Diario")
@@ -1592,20 +1724,24 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     col_c1, col_c2, col_c3 = st.columns(3)
 
     with col_c1:
-        # KPI de Activos con popover
-        with st.popover("📈 Ver detalle de Activos", use_container_width=True):
-            st.markdown("##### Composición de Activos Operativos")
-            st.markdown(f"""
-            | Concepto | Monto | Archivo Origen |
-            |----------|-------|----------------|
-            | **Cuentas por cobrar** | {formato_venezolano(cx_c_cierre)} | {'✅ Cargado' if archivo_cxc_reportado else '❌ No disponible'} |
-            | **Inventario** | {formato_venezolano(inventario_cierre)} | {'✅ Cargado' if archivo_inventario_reportado else '❌ No disponible'} |
-            | **Bancos** | {formato_venezolano(bancos_cierre)} | ✅ Estado de cuenta |
-            | **TOTAL ACTIVOS** | **{formato_venezolano(activos_operativos)}** |  |
-            """)
-            st.caption("✅ Valores tomados de los archivos de verificación.")
-            
-            # Mostrar gráfico de barras si hay datos
+        # Popover para Activos
+        popover_activos = f"""
+        ##### 📈 Composición de Activos Operativos
+        
+        | Concepto | Monto | Archivo Origen |
+        |----------|-------|----------------|
+        | **Cuentas por cobrar** | {formato_venezolano(cx_c_cierre)} | {'✅ Cargado' if archivo_cxc_reportado else '❌ No disponible'} |
+        | **Inventario** | {formato_venezolano(inventario_cierre)} | {'✅ Cargado' if archivo_inventario_reportado else '❌ No disponible'} |
+        | **Bancos** | {formato_venezolano(bancos_cierre)} | ✅ Estado de cuenta |
+        | **TOTAL ACTIVOS** | **{formato_venezolano(activos_operativos)}** |  |
+        
+        ✅ Valores tomados de los archivos de verificación.
+        """
+        
+        # Mostrar KPI de Activos con color verde
+        with st.popover("", use_container_width=True):
+            st.markdown(popover_activos)
+            # Gráfico de barras
             if cx_c_cierre > 0 or inventario_cierre > 0 or bancos_cierre > 0:
                 fig, ax = plt.subplots(figsize=(6, 3))
                 componentes = ['CxC', 'Inventario', 'Bancos']
@@ -1617,47 +1753,74 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 plt.tight_layout()
                 st.pyplot(fig)
         
-        st.metric("📈 Activos Operativos", formato_venezolano(activos_operativos))
+        # Mostrar el KPI con HTML
+        st.markdown(f"""
+        <div class="kpi-card-activos">
+            <div class="label">📈 ACTIVOS OPERATIVOS</div>
+            <div class="value">{formato_venezolano(activos_operativos)}</div>
+            <div class="sub-label">💡 Haz clic para ver detalle</div>
+        </div>
+        """, unsafe_allow_html=True)
 
     with col_c2:
-        # KPI de Pasivos con popover
-        with st.popover("📉 Ver detalle de Pasivos", use_container_width=True):
-            st.markdown("##### Composición de Pasivos Operativos")
-            st.markdown(f"""
-            | Concepto | Monto | Archivo Origen |
-            |----------|-------|----------------|
-            | **Cuentas por pagar** | {formato_venezolano(cx_p_cierre)} | {'✅ Cargado' if archivo_cxp_reportado else '❌ No disponible'} |
-            | **Transferencias en tránsito** | {formato_venezolano(transito_cierre)} | {'✅ Cargado' if archivo_tb else '❌ No disponible'} |
-            | **TOTAL PASIVOS** | **{formato_venezolano(pasivos_operativos)}** |  |
-            """)
-            st.caption("✅ Valores tomados de los archivos de verificación.")
+        # Popover para Pasivos
+        popover_pasivos = f"""
+        ##### 📉 Composición de Pasivos Operativos
         
-        st.metric("📉 Pasivos Operativos", formato_venezolano(pasivos_operativos))
+        | Concepto | Monto | Archivo Origen |
+        |----------|-------|----------------|
+        | **Cuentas por pagar** | {formato_venezolano(cx_p_cierre)} | {'✅ Cargado' if archivo_cxp_reportado else '❌ No disponible'} |
+        | **Transferencias en tránsito** | {formato_venezolano(transito_cierre)} | {'✅ Cargado' if archivo_tb else '❌ No disponible'} |
+        | **TOTAL PASIVOS** | **{formato_venezolano(pasivos_operativos)}** |  |
+        
+        ✅ Valores tomados de los archivos de verificación.
+        """
+        
+        with st.popover("", use_container_width=True):
+            st.markdown(popover_pasivos)
+        
+        st.markdown(f"""
+        <div class="kpi-card-pasivos">
+            <div class="label">📉 PASIVOS OPERATIVOS</div>
+            <div class="value">{formato_venezolano(pasivos_operativos)}</div>
+            <div class="sub-label">💡 Haz clic para ver detalle</div>
+        </div>
+        """, unsafe_allow_html=True)
 
     with col_c3:
-        signo = "✅" if capital_neto >= 0 else "❌"
-        # KPI de Capital con popover
-        with st.popover("🏁 Ver detalle del Capital", use_container_width=True):
-            st.markdown("##### Cálculo del Capital de Trabajo Neto")
-            st.markdown(f"""
-            | Concepto | Fórmula | Monto |
-            |----------|---------|-------|
-            | **Activos Operativos** | CxC + Inv. + Bancos | {formato_venezolano(activos_operativos)} |
-            | **Pasivos Operativos** | CxP + Tránsito | {formato_venezolano(pasivos_operativos)} |
-            | **CAPITAL DE TRABAJO NETO** | Activos - Pasivos | **{formato_venezolano(capital_neto)}** |
-            """)
-            
-            # Mostrar relación Activos vs Pasivos
-            if pasivos_operativos > 0:
-                ratio = activos_operativos / pasivos_operativos
-                st.metric("📊 Ratio Activos/Pasivos", f"{ratio:.2f}x")
-            
-            if capital_neto >= 0:
-                st.success(f"✅ Capital de Trabajo Neto POSITIVO: {formato_venezolano(capital_neto)}")
-            else:
-                st.error(f"❌ Capital de Trabajo Neto NEGATIVO: {formato_venezolano(capital_neto)}")
+        # Determinar si el capital es positivo o negativo
+        if capital_neto >= 0:
+            clase_capital = "kpi-card-capital-positivo"
+            emoji = "✅"
+        else:
+            clase_capital = "kpi-card-capital-negativo"
+            emoji = "❌"
         
-        st.metric(f"{signo} Capital de Trabajo Neto", formato_venezolano(capital_neto))
+        # Popover para Capital
+        popover_capital = f"""
+        ##### 🏁 Cálculo del Capital de Trabajo Neto
+        
+        | Concepto | Fórmula | Monto |
+        |----------|---------|-------|
+        | **Activos Operativos** | CxC + Inv. + Bancos | {formato_venezolano(activos_operativos)} |
+        | **Pasivos Operativos** | CxP + Tránsito | {formato_venezolano(pasivos_operativos)} |
+        | **CAPITAL DE TRABAJO NETO** | Activos - Pasivos | **{formato_venezolano(capital_neto)}** |
+        
+        **Ratio Activos/Pasivos:** {f"{activos_operativos / pasivos_operativos:.2f}x" if pasivos_operativos > 0 else "N/A"}
+        
+        {f"✅ Capital de Trabajo Neto POSITIVO: {formato_venezolano(capital_neto)}" if capital_neto >= 0 else f"❌ Capital de Trabajo Neto NEGATIVO: {formato_venezolano(capital_neto)}"}
+        """
+        
+        with st.popover("", use_container_width=True):
+            st.markdown(popover_capital)
+        
+        st.markdown(f"""
+        <div class="{clase_capital}">
+            <div class="label">{emoji} CAPITAL DE TRABAJO NETO</div>
+            <div class="value">{formato_venezolano(capital_neto)}</div>
+            <div class="sub-label">💡 Haz clic para ver detalle</div>
+        </div>
+        """, unsafe_allow_html=True)
 
     # ============================================================
     # 8. DETALLE DE LA VALIDACIÓN (DESPLEGABLE)
@@ -1738,7 +1901,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     
     with col_kpi1:
         st.markdown(f"""
-        <div class="kpi-card">
+        <div class="kpi-card-capital">
             <div class="label">🏁 CAPITAL DE TRABAJO NETO</div>
             <div class="value">{formato_venezolano(capital_calculado)}</div>
         </div>
@@ -1746,8 +1909,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     
     with col_kpi2:
         arrow = "📉" if var_capital < 0 else "📈"
+        color_class = "kpi-card-capital-negativo" if var_capital < 0 else "kpi-card-capital-positivo"
         st.markdown(f"""
-        <div class="kpi-card">
+        <div class="{color_class}">
             <div class="label">{arrow} VARIACIÓN DEL CAPITAL</div>
             <div class="value">{formato_venezolano(var_capital)}</div>
         </div>
@@ -1755,7 +1919,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     
     with col_kpi3:
         st.markdown(f"""
-        <div class="kpi-card">
+        <div class="kpi-card-capital">
             <div class="label">🔄 TRANSFERENCIAS EN TRÁNSITO</div>
             <div class="value">{formato_venezolano(transito_calculado)}</div>
         </div>
