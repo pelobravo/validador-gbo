@@ -738,14 +738,16 @@ class ProcesadorArchivos:
         
         return 0.0
     
-    # ===================== 🔥 EXTRAER SALDO REPORTADO (MEJORADO) =====================
+    # ===================== 🔥 EXTRAER SALDO REPORTADO (MEJORADO - POR COLUMNA ESPECÍFICA) =====================
     
     @staticmethod
     def extraer_saldo_reportado(df, tipo):
         """
         Extrae saldo reportado de archivos de verificación.
-        Mejorado para detectar correctamente "Total Compañia" en archivos SAP.
-        Diseñado para funcionar con múltiples analistas y bancos.
+        Busca específicamente en las columnas correctas según el tipo.
+        
+        CxC: Columna I (Saldo Pendt.) - Total Compañia = 417.932,23
+        CxP: Columna C (Saldo Pendt.) - Total Compañia = 670.115,79
         
         Args:
             df: DataFrame de pandas
@@ -759,34 +761,39 @@ class ProcesadorArchivos:
         
         df = ProcesadorArchivos._limpiar_columnas(df)
         
-        # 🔥 ESTRATEGIA 1: Buscar "Total Compañia" o "Total Compañía"
-        for idx, row in df.iterrows():
-            texto_fila = ' '.join(
-                [str(x) for x in row.values if pd.notna(x)]
-            ).lower()
-
-            if 'total compañia' in texto_fila or 'total compania' in texto_fila or 'total compañía' in texto_fila:
-                numeros = []
-                for valor in row.values:
-                    try:
-                        num = ProcesadorArchivos._convertir_numero_europeo(valor)
-                        if not pd.isna(num) and num > 0:
-                            numeros.append(float(num))
-                    except:
-                        pass
-                
-                if numeros:
-                    # Tomar el número más grande (debería ser el total)
-                    return max(numeros)
-        
-        # 🔥 ESTRATEGIA 2: Buscar "Total" + "Compañ" en la misma fila
-        if tipo in ['cxc', 'cxp']:
+        # ============================================================
+        # 🔥 CxC: Buscar en columna I (índice 8) o columna "Saldo Pendt."
+        # ============================================================
+        if tipo == 'cxc':
+            # Buscar la fila con "Total Compañia"
             for idx, row in df.iterrows():
                 texto_fila = ' '.join(
                     [str(x) for x in row.values if pd.notna(x)]
                 ).lower()
                 
-                if 'total' in texto_fila and ('compañ' in texto_fila or 'compan' in texto_fila):
+                if 'total compañia' in texto_fila or 'total compania' in texto_fila or 'total compañía' in texto_fila:
+                    # Intentar por índice de columna (columna I = índice 8)
+                    try:
+                        if len(row) > 8:
+                            valor = row.iloc[8]
+                            num = ProcesadorArchivos._convertir_numero_europeo(valor)
+                            if not pd.isna(num) and num > 0:
+                                return float(num)
+                    except:
+                        pass
+                    
+                    # Si falla, buscar en la columna "Saldo Pendt."
+                    saldo_col = ProcesadorArchivos._buscar_columna(df, 'saldo pendt', 'saldo pendiente', 'saldo')
+                    if saldo_col:
+                        try:
+                            valor = row[saldo_col]
+                            num = ProcesadorArchivos._convertir_numero_europeo(valor)
+                            if not pd.isna(num) and num > 0:
+                                return float(num)
+                        except:
+                            pass
+                    
+                    # Último recurso: tomar el número más grande de la fila
                     numeros = []
                     for valor in row.values:
                         try:
@@ -795,11 +802,56 @@ class ProcesadorArchivos:
                                 numeros.append(float(num))
                         except:
                             pass
-                    
                     if numeros:
                         return max(numeros)
         
-        # 🔥 ESTRATEGIA 3: Buscar "Total" en la fila (para inventario)
+        # ============================================================
+        # 🔥 CxP: Buscar en columna C (índice 2) o columna "Saldo Pendt."
+        # ============================================================
+        if tipo == 'cxp':
+            # Buscar la fila con "Total Compañia"
+            for idx, row in df.iterrows():
+                texto_fila = ' '.join(
+                    [str(x) for x in row.values if pd.notna(x)]
+                ).lower()
+                
+                if 'total compañia' in texto_fila or 'total compania' in texto_fila or 'total compañía' in texto_fila:
+                    # Intentar por índice de columna (columna C = índice 2)
+                    try:
+                        if len(row) > 2:
+                            valor = row.iloc[2]
+                            num = ProcesadorArchivos._convertir_numero_europeo(valor)
+                            if not pd.isna(num) and num > 0:
+                                return float(num)
+                    except:
+                        pass
+                    
+                    # Si falla, buscar en la columna "Saldo Pendt."
+                    saldo_col = ProcesadorArchivos._buscar_columna(df, 'saldo pendt', 'saldo pendiente', 'saldo')
+                    if saldo_col:
+                        try:
+                            valor = row[saldo_col]
+                            num = ProcesadorArchivos._convertir_numero_europeo(valor)
+                            if not pd.isna(num) and num > 0:
+                                return float(num)
+                        except:
+                            pass
+                    
+                    # Último recurso: tomar el número más grande de la fila
+                    numeros = []
+                    for valor in row.values:
+                        try:
+                            num = ProcesadorArchivos._convertir_numero_europeo(valor)
+                            if not pd.isna(num) and num > 0:
+                                numeros.append(float(num))
+                        except:
+                            pass
+                    if numeros:
+                        return max(numeros)
+        
+        # ============================================================
+        # 🔥 Inventario: Buscar "Totales:"
+        # ============================================================
         if tipo == 'inventario':
             for idx, row in df.iterrows():
                 texto_fila = ' '.join(
@@ -819,15 +871,35 @@ class ProcesadorArchivos:
                     if numeros:
                         return max(numeros)
         
-        # 🔥 ESTRATEGIA 4: Buscar en la última fila que tenga números grandes
-        for idx in range(len(df) - 1, -1, -1):
-            row = df.iloc[idx]
+        # ============================================================
+        # 🔥 Bancos (si se usa)
+        # ============================================================
+        if tipo == 'bancos':
+            saldo_col = ProcesadorArchivos._buscar_columna(
+                df, 
+                'saldo', 'saldo_final', 'balance', 'disponible'
+            )
+            if saldo_col:
+                try:
+                    valores = []
+                    for val in df[saldo_col]:
+                        num = ProcesadorArchivos._convertir_numero_europeo(val)
+                        if not pd.isna(num):
+                            valores.append(num)
+                    if valores:
+                        return float(valores[-1])
+                except:
+                    pass
+        
+        # ============================================================
+        # 🔥 Fallback: buscar en cualquier columna
+        # ============================================================
+        for idx, row in df.iterrows():
             texto_fila = ' '.join(
                 [str(x) for x in row.values if pd.notna(x)]
             ).lower()
             
-            # Buscar filas que contengan "Total" o que tengan números grandes
-            if 'total' in texto_fila or 'suma' in texto_fila:
+            if 'total compañia' in texto_fila or 'total compania' in texto_fila:
                 numeros = []
                 for valor in row.values:
                     try:
@@ -837,43 +909,7 @@ class ProcesadorArchivos:
                     except:
                         pass
                 
-                if numeros and max(numeros) > 1000:
+                if numeros:
                     return max(numeros)
-        
-        # 🔥 ESTRATEGIA 5: Buscar en la última fila de datos
-        if len(df) > 0:
-            ultima_fila = df.iloc[-1]
-            numeros = []
-            for valor in ultima_fila.values:
-                try:
-                    num = ProcesadorArchivos._convertir_numero_europeo(valor)
-                    if not pd.isna(num) and num > 0:
-                        numeros.append(float(num))
-                except:
-                    pass
-            
-            if numeros and max(numeros) > 1000:
-                return max(numeros)
-        
-        # 🔥 ESTRATEGIA 6: Buscar en columnas específicas
-        saldo_col = ProcesadorArchivos._buscar_columna(
-            df, 
-            'saldo', 'total', 'monto', 'valor', 'importe', 'balance',
-            'saldo_final', 'saldo_actual', 'disponible', 'Total'
-        )
-        
-        if saldo_col:
-            try:
-                # Buscar el valor más grande en esa columna
-                valores = []
-                for val in df[saldo_col]:
-                    num = ProcesadorArchivos._convertir_numero_europeo(val)
-                    if not pd.isna(num) and num > 0:
-                        valores.append(num)
-                
-                if valores:
-                    return float(max(valores))
-            except:
-                pass
         
         return None
