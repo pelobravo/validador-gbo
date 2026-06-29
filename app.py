@@ -736,8 +736,52 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown(f"### 📈 Resultados de la Validación")
     st.markdown(f"**📅 Fecha procesada:** {fecha_procesar.strftime('%Y-%m-%d')}")
     
-    # Saldos iniciales con formato venezolano
-    st.markdown("#### 📌 Saldos Iniciales")
+    # ============================================================
+    # 🔥 SALDOS INICIALES - DESPLEGABLE CON ORIGEN
+    # ============================================================
+    with st.expander("📌 Saldos Iniciales - Ver detalle de origen", expanded=False):
+        
+        # Origen de los saldos iniciales
+        origen_saldos = {}
+        
+        # Verificar si los saldos vienen del día anterior o son manuales
+        if cargar_ultimo_saldo_automatico():
+            origen_saldos['inventario'] = "📂 Cargado automáticamente del día anterior"
+            origen_saldos['cx_c'] = "📂 Cargado automáticamente del día anterior"
+            origen_saldos['bancos'] = "📂 Cargado automáticamente del día anterior"
+            origen_saldos['cx_p'] = "📂 Cargado automáticamente del día anterior"
+            origen_saldos['transito'] = "📂 Cargado automáticamente del día anterior"
+        else:
+            origen_saldos['inventario'] = "✏️ Ingresado manualmente"
+            origen_saldos['cx_c'] = "✏️ Ingresado manualmente"
+            origen_saldos['bancos'] = "✏️ Ingresado manualmente"
+            origen_saldos['cx_p'] = "✏️ Ingresado manualmente"
+            origen_saldos['transito'] = "✏️ Ingresado manualmente"
+        
+        # Mostrar los saldos con su origen
+        st.markdown("""
+        ### 📂 Origen de los Saldos Iniciales
+        
+        | Concepto | Valor | Origen |
+        |----------|-------|--------|
+        """)
+        
+        st.markdown(f"""
+        | 📦 Inventario | {formato_venezolano(st.session_state.saldos['inventario'])} | {origen_saldos['inventario']} |
+        | 💰 Cuentas por cobrar | {formato_venezolano(st.session_state.saldos['cx_c'])} | {origen_saldos['cx_c']} |
+        | 🏦 Bancos | {formato_venezolano(st.session_state.saldos['bancos'])} | {origen_saldos['bancos']} |
+        | 📋 Cuentas por pagar | {formato_venezolano(st.session_state.saldos['cx_p'])} | {origen_saldos['cx_p']} |
+        | 🔄 Transferencias en tránsito | {formato_venezolano(st.session_state.saldos['transito'])} | {origen_saldos['transito']} |
+        """)
+        
+        # Mostrar el capital anterior si existe
+        if st.session_state.saldos.get('capital_anterior', 0) > 0:
+            st.markdown(f"""
+            | 🏁 Capital anterior | {formato_venezolano(st.session_state.saldos['capital_anterior'])} | 📂 Calculado del día anterior |
+            """)
+    
+    # Saldos iniciales resumidos
+    st.markdown("#### 📌 Saldos Iniciales (Resumen)")
     
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
@@ -947,7 +991,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         return ""
     
     # ============================================================
-    # TABLA COMPARATIVA CON REPORTADOS - CON "INFORMACIÓN DÍA ANTERIOR"
+    # 🔥 COMPARACIÓN VS VALORES REPORTADOS - CON AJUSTE
     # ============================================================
     st.markdown("#### 📋 Comparación vs Valores Reportados")
 
@@ -964,29 +1008,62 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     cx_p_anterior = safe_number(st.session_state.saldos.get('cx_p', 0))
     transito_anterior = safe_number(st.session_state.saldos.get('transito', 0))
 
+    # Inicializar ajustes en session_state si no existen
+    if 'ajustes' not in st.session_state:
+        st.session_state.ajustes = {
+            'inventario': {'monto': 0.0, 'justificacion': ''},
+            'cx_c': {'monto': 0.0, 'justificacion': ''},
+            'cx_p': {'monto': 0.0, 'justificacion': ''},
+            'transito': {'monto': 0.0, 'justificacion': ''}
+        }
+
     resultados_data = []
 
+    # Función para crear cada fila de la tabla
+    def crear_fila_comparacion(cuenta, formula, valor_anterior, valor_calculado, valor_reportado, key_ajuste):
+        diferencia = safe_number(valor_calculado) - safe_number(valor_reportado) if valor_reportado is not None else 0
+        
+        # Obtener ajuste actual
+        ajuste_actual = st.session_state.ajustes.get(key_ajuste, {'monto': 0.0, 'justificacion': ''})
+        monto_ajuste = ajuste_actual.get('monto', 0.0)
+        justificacion = ajuste_actual.get('justificacion', '')
+        
+        # Calcular diferencia ajustada
+        diferencia_ajustada = diferencia - monto_ajuste
+        estado_ajuste = "✅ 0,00" if abs(diferencia_ajustada) < 0.01 else formatear_diferencia(diferencia_ajustada, 0)
+        
+        return {
+            "Cuenta": cuenta,
+            "Fórmula": formula,
+            "Información día anterior": formato_venezolano(valor_anterior),
+            "Calculado": formato_venezolano(valor_calculado),
+            "Reportado": formato_venezolano(valor_reportado) if valor_reportado is not None else "-",
+            "Diferencia": formatear_diferencia(valor_calculado, valor_reportado),
+            "Ajuste": monto_ajuste,
+            "Diferencia Ajustada": estado_ajuste,
+            "Justificación": justificacion if justificacion else "-",
+            "Origen": explicar_diferencia(cuenta, valor_calculado, valor_reportado if valor_reportado is not None else 0)
+        }
+
     # Inventario
-    resultados_data.append({
-        "Cuenta": "Inventario",
-        "Fórmula": "Inv. inicial + Recepción - Costo facturación",
-        "Información día anterior": formato_venezolano(inventario_anterior),
-        "Calculado": formato_venezolano(inventario_calculado),
-        "Reportado": formato_venezolano(inventario_reportado) if inventario_reportado is not None else "-",
-        "Diferencia": formatear_diferencia(inventario_calculado, inventario_reportado),
-        "Origen": explicar_diferencia("Inventario", inventario_calculado, inventario_reportado if inventario_reportado is not None else 0)
-    })
+    resultados_data.append(crear_fila_comparacion(
+        "Inventario",
+        "Inv. inicial + Recepción - Costo facturación",
+        inventario_anterior,
+        inventario_calculado,
+        inventario_reportado,
+        'inventario'
+    ))
 
     # Cuentas por cobrar
-    resultados_data.append({
-        "Cuenta": "Cuentas por cobrar",
-        "Fórmula": "CxC inicial + Facturación - Cobranzas - Notas crédito clientes",
-        "Información día anterior": formato_venezolano(cx_c_anterior),
-        "Calculado": formato_venezolano(cx_c_calculado),
-        "Reportado": formato_venezolano(cx_c_reportado) if cx_c_reportado is not None else "-",
-        "Diferencia": formatear_diferencia(cx_c_calculado, cx_c_reportado),
-        "Origen": explicar_diferencia("Cuentas por cobrar", cx_c_calculado, cx_c_reportado if cx_c_reportado is not None else 0)
-    })
+    resultados_data.append(crear_fila_comparacion(
+        "Cuentas por cobrar",
+        "CxC inicial + Facturación - Cobranzas - Notas crédito clientes",
+        cx_c_anterior,
+        cx_c_calculado,
+        cx_c_reportado,
+        'cx_c'
+    ))
 
     # Bancos
     resultados_data.append({
@@ -996,30 +1073,31 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         "Calculado": formato_venezolano(bancos_calculado),
         "Reportado": "-",
         "Diferencia": "-",
+        "Ajuste": 0,
+        "Diferencia Ajustada": "-",
+        "Justificación": "-",
         "Origen": "Tomado del estado de cuenta"
     })
 
     # Cuentas por pagar
-    resultados_data.append({
-        "Cuenta": "Cuentas por pagar",
-        "Fórmula": "CxP inicial + Recepciones - Pagos proveedores",
-        "Información día anterior": formato_venezolano(cx_p_anterior),
-        "Calculado": formato_venezolano(cx_p_calculado),
-        "Reportado": formato_venezolano(cx_p_reportado) if cx_p_reportado is not None else "-",
-        "Diferencia": formatear_diferencia(cx_p_calculado, cx_p_reportado),
-        "Origen": explicar_diferencia("Cuentas por pagar", cx_p_calculado, cx_p_reportado if cx_p_reportado is not None else 0)
-    })
+    resultados_data.append(crear_fila_comparacion(
+        "Cuentas por pagar",
+        "CxP inicial + Recepciones - Pagos proveedores",
+        cx_p_anterior,
+        cx_p_calculado,
+        cx_p_reportado,
+        'cx_p'
+    ))
 
     # Transferencias en tránsito
-    resultados_data.append({
-        "Cuenta": "Transferencias en tránsito",
-        "Fórmula": "Tránsito inicial + Ingresos del día - Cobranzas",
-        "Información día anterior": formato_venezolano(transito_anterior),
-        "Calculado": formato_venezolano(transito_calculado),
-        "Reportado": formato_venezolano(transito_reportado) if transito_reportado is not None else "-",
-        "Diferencia": formatear_diferencia(transito_calculado, transito_reportado),
-        "Origen": explicar_diferencia("Transferencias en tránsito", transito_calculado, transito_reportado if transito_reportado is not None else 0)
-    })
+    resultados_data.append(crear_fila_comparacion(
+        "Transferencias en tránsito",
+        "Tránsito inicial + Ingresos del día - Cobranzas",
+        transito_anterior,
+        transito_calculado,
+        transito_reportado,
+        'transito'
+    ))
 
     # Capital de Trabajo Neto
     resultados_data.append({
@@ -1029,15 +1107,116 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         "Calculado": formato_venezolano(capital_calculado),
         "Reportado": "-",
         "Diferencia": "-",
+        "Ajuste": 0,
+        "Diferencia Ajustada": "-",
+        "Justificación": "-",
         "Origen": "Calculado automáticamente"
     })
 
-    st.dataframe(pd.DataFrame(resultados_data), use_container_width=True, hide_index=True)
+    # Mostrar tabla de comparación
+    df_comparacion = pd.DataFrame(resultados_data)
+    st.dataframe(df_comparacion, use_container_width=True, hide_index=True)
+
+    # ============================================================
+    # 🔥 FORMULARIO DE AJUSTES
+    # ============================================================
+    st.markdown("#### ✏️ Registrar Ajustes de Diferencias")
+
+    col_ajuste1, col_ajuste2, col_ajuste3, col_ajuste4 = st.columns(4)
+
+    with col_ajuste1:
+        ajuste_inv = st.number_input(
+            "Ajuste Inventario",
+            value=float(st.session_state.ajustes['inventario']['monto']),
+            step=1.0,
+            format="%.2f",
+            key="ajuste_inv"
+        )
+        just_inv = st.text_input(
+            "Justificación",
+            value=st.session_state.ajustes['inventario']['justificacion'],
+            placeholder="Ej: Ajuste por merma",
+            key="just_inv"
+        )
+
+    with col_ajuste2:
+        ajuste_cxc = st.number_input(
+            "Ajuste CxC",
+            value=float(st.session_state.ajustes['cx_c']['monto']),
+            step=1.0,
+            format="%.2f",
+            key="ajuste_cxc"
+        )
+        just_cxc = st.text_input(
+            "Justificación",
+            value=st.session_state.ajustes['cx_c']['justificacion'],
+            placeholder="Ej: Ajuste por cobranza no registrada",
+            key="just_cxc"
+        )
+
+    with col_ajuste3:
+        ajuste_cxp = st.number_input(
+            "Ajuste CxP",
+            value=float(st.session_state.ajustes['cx_p']['monto']),
+            step=1.0,
+            format="%.2f",
+            key="ajuste_cxp"
+        )
+        just_cxp = st.text_input(
+            "Justificación",
+            value=st.session_state.ajustes['cx_p']['justificacion'],
+            placeholder="Ej: Ajuste por factura no registrada",
+            key="just_cxp"
+        )
+
+    with col_ajuste4:
+        ajuste_transito = st.number_input(
+            "Ajuste Tránsito",
+            value=float(st.session_state.ajustes['transito']['monto']),
+            step=1.0,
+            format="%.2f",
+            key="ajuste_transito"
+        )
+        just_transito = st.text_input(
+            "Justificación",
+            value=st.session_state.ajustes['transito']['justificacion'],
+            placeholder="Ej: Ajuste por transferencia pendiente",
+            key="just_transito"
+        )
+
+    # Botón para guardar ajustes
+    col_btn_ajuste1, col_btn_ajuste2 = st.columns(2)
+    with col_btn_ajuste1:
+        if st.button("💾 Guardar Ajustes", use_container_width=True):
+            st.session_state.ajustes['inventario'] = {'monto': ajuste_inv, 'justificacion': just_inv}
+            st.session_state.ajustes['cx_c'] = {'monto': ajuste_cxc, 'justificacion': just_cxc}
+            st.session_state.ajustes['cx_p'] = {'monto': ajuste_cxp, 'justificacion': just_cxp}
+            st.session_state.ajustes['transito'] = {'monto': ajuste_transito, 'justificacion': just_transito}
+            
+            # Guardar en base de datos
+            db.guardar_ajustes(
+                fecha_procesar.strftime('%Y-%m-%d'),
+                st.session_state.ajustes
+            )
+            
+            st.success("✅ Ajustes guardados correctamente")
+            st.rerun()
+    
+    with col_btn_ajuste2:
+        if st.button("🔄 Resetear Ajustes", use_container_width=True):
+            st.session_state.ajustes = {
+                'inventario': {'monto': 0.0, 'justificacion': ''},
+                'cx_c': {'monto': 0.0, 'justificacion': ''},
+                'cx_p': {'monto': 0.0, 'justificacion': ''},
+                'transito': {'monto': 0.0, 'justificacion': ''}
+            }
+            st.success("✅ Ajustes reseteados a 0")
+            st.rerun()
 
     st.markdown("---")
     
     # ============================================================
-    # 🔥 CIERRE DIARIO - SOLO ARCHIVOS DE VERIFICACIÓN
+    # 🔥 CIERRE DIARIO - CON ORIGEN DE ARCHIVOS
     # ============================================================
     st.markdown("#### 📊 CIERRE DIARIO - Capital de Trabajo Neto")
 
@@ -1046,14 +1225,33 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     # ============================================================
 
     archivos_faltantes = []
+    origen_archivos = {}
+
     if not archivo_cxc_reportado:
         archivos_faltantes.append("📄 Cuentas por cobrar (CxC)")
+        origen_archivos['CxC'] = "❌ NO DISPONIBLE"
+    else:
+        origen_archivos['CxC'] = "📄 " + archivo_cxc_reportado.name
+
     if not archivo_cxp_reportado:
         archivos_faltantes.append("📄 Cuentas por pagar (CxP)")
+        origen_archivos['CxP'] = "❌ NO DISPONIBLE"
+    else:
+        origen_archivos['CxP'] = "📄 " + archivo_cxp_reportado.name
+
     if not archivo_inventario_reportado:
         archivos_faltantes.append("📄 Inventario")
+        origen_archivos['Inventario'] = "❌ NO DISPONIBLE"
+    else:
+        origen_archivos['Inventario'] = "📄 " + archivo_inventario_reportado.name
+
     if not archivo_tb:
         archivos_faltantes.append("📄 Transferencias en tránsito (TB)")
+        origen_archivos['Tránsito'] = "❌ NO DISPONIBLE"
+    else:
+        origen_archivos['Tránsito'] = "📄 " + archivo_tb.name
+
+    origen_archivos['Bancos'] = "📄 " + archivo_estado_cuenta.name if archivo_estado_cuenta else "📄 Estado de cuenta"
 
     if archivos_faltantes:
         st.warning(f"""
@@ -1064,8 +1262,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         **El Cierre Diario SOLO usa valores de los archivos de verificación.**
         Carga los archivos faltantes para obtener el Capital de Trabajo Neto correcto.
         """)
-        
-        st.info("ℹ️ **Valores disponibles parcialmente:**")
 
     # ============================================================
     # 2. OBTENER VALORES DE ARCHIVOS DE VERIFICACIÓN (SOLO)
@@ -1141,58 +1337,58 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     capital_neto = activos_operativos - pasivos_operativos
 
     # ============================================================
-    # 5. MOSTRAR TABLA DEL CIERRE DIARIO
+    # 5. MOSTRAR TABLA DEL CIERRE DIARIO CON ORIGEN DE ARCHIVOS
     # ============================================================
 
     st.markdown("#### 📋 Detalle del Cierre Diario")
 
-    # Crear DataFrame para mostrar
+    # Crear DataFrame para mostrar con origen de archivo
     cierre_detalle = [
         {
             "Concepto": "📦 Inventario",
-            "Origen": "Archivo de verificación" if archivo_inventario_reportado else "NO DISPONIBLE",
+            "Archivo Origen": origen_archivos.get('Inventario', 'NO DISPONIBLE'),
             "Tipo": "ACTIVO",
             "Monto": formato_venezolano(inventario_cierre)
         },
         {
             "Concepto": "💰 Cuentas por cobrar",
-            "Origen": "Archivo de verificación" if archivo_cxc_reportado else "NO DISPONIBLE",
+            "Archivo Origen": origen_archivos.get('CxC', 'NO DISPONIBLE'),
             "Tipo": "ACTIVO",
             "Monto": formato_venezolano(cx_c_cierre)
         },
         {
             "Concepto": "🏦 Bancos",
-            "Origen": "Estado de cuenta",
+            "Archivo Origen": origen_archivos.get('Bancos', 'NO DISPONIBLE'),
             "Tipo": "ACTIVO",
             "Monto": formato_venezolano(bancos_cierre)
         },
         {
             "Concepto": "📌 TOTAL ACTIVOS OPERATIVOS",
-            "Origen": "Suma de activos",
+            "Archivo Origen": "Suma de activos",
             "Tipo": "ACTIVO_TOTAL",
             "Monto": formato_venezolano(activos_operativos)
         },
         {
             "Concepto": "📋 Cuentas por pagar",
-            "Origen": "Archivo de verificación" if archivo_cxp_reportado else "NO DISPONIBLE",
+            "Archivo Origen": origen_archivos.get('CxP', 'NO DISPONIBLE'),
             "Tipo": "PASIVO",
             "Monto": formato_venezolano(cx_p_cierre)
         },
         {
             "Concepto": "🔄 Transferencias en tránsito",
-            "Origen": "Archivo de verificación" if archivo_tb else "NO DISPONIBLE",
+            "Archivo Origen": origen_archivos.get('Tránsito', 'NO DISPONIBLE'),
             "Tipo": "PASIVO",
             "Monto": formato_venezolano(transito_cierre)
         },
         {
             "Concepto": "📌 TOTAL PASIVOS OPERATIVOS",
-            "Origen": "Suma de pasivos",
+            "Archivo Origen": "Suma de pasivos",
             "Tipo": "PASIVO_TOTAL",
             "Monto": formato_venezolano(pasivos_operativos)
         },
         {
             "Concepto": "🏁 CAPITAL DE TRABAJO NETO",
-            "Origen": "Activos - Pasivos",
+            "Archivo Origen": "Activos - Pasivos",
             "Tipo": "CAPITAL",
             "Monto": formato_venezolano(capital_neto)
         }
@@ -1221,7 +1417,64 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.dataframe(styled_df, use_container_width=True)
 
     # ============================================================
-    # 6. RESUMEN DEL CIERRE DIARIO
+    # 6. DETALLE CON ORIGEN DE ARCHIVOS (DESPLEGABLE)
+    # ============================================================
+    with st.expander("📂 Ver origen detallado de cada archivo", expanded=False):
+        st.markdown("""
+        ### 📂 Origen de los archivos utilizados en el Cierre Diario
+        
+        | Concepto | Archivo | Estado |
+        |----------|---------|--------|
+        """)
+        
+        # Cuentas por cobrar
+        if archivo_cxc_reportado:
+            st.markdown(f"| 💰 Cuentas por cobrar | `{archivo_cxc_reportado.name}` | ✅ Cargado |")
+        else:
+            st.markdown("| 💰 Cuentas por cobrar | **NO CARGADO** | ❌ No disponible |")
+        
+        # Inventario
+        if archivo_inventario_reportado:
+            st.markdown(f"| 📦 Inventario | `{archivo_inventario_reportado.name}` | ✅ Cargado |")
+        else:
+            st.markdown("| 📦 Inventario | **NO CARGADO** | ❌ No disponible |")
+        
+        # Cuentas por pagar
+        if archivo_cxp_reportado:
+            st.markdown(f"| 📋 Cuentas por pagar | `{archivo_cxp_reportado.name}` | ✅ Cargado |")
+        else:
+            st.markdown("| 📋 Cuentas por pagar | **NO CARGADO** | ❌ No disponible |")
+        
+        # Transferencias en tránsito
+        if archivo_tb:
+            st.markdown(f"| 🔄 Transferencias en tránsito | `{archivo_tb.name}` | ✅ Cargado |")
+        else:
+            st.markdown("| 🔄 Transferencias en tránsito | **NO CARGADO** | ❌ No disponible |")
+        
+        # Bancos
+        if archivo_estado_cuenta:
+            st.markdown(f"| 🏦 Bancos | `{archivo_estado_cuenta.name}` | ✅ Cargado |")
+        else:
+            st.markdown("| 🏦 Bancos | **NO CARGADO** | ❌ No disponible |")
+        
+        st.markdown("""
+        
+        ### 📌 Valores extraídos:
+        """)
+        
+        # Mostrar los valores extraídos con su origen
+        st.markdown(f"""
+        | Concepto | Valor | Origen |
+        |----------|-------|--------|
+        | Cuentas por cobrar | {formato_venezolano(cx_c_cierre)} | {origen_archivos.get('CxC', 'NO DISPONIBLE')} |
+        | Inventario | {formato_venezolano(inventario_cierre)} | {origen_archivos.get('Inventario', 'NO DISPONIBLE')} |
+        | Bancos | {formato_venezolano(bancos_cierre)} | {origen_archivos.get('Bancos', 'NO DISPONIBLE')} |
+        | Cuentas por pagar | {formato_venezolano(cx_p_cierre)} | {origen_archivos.get('CxP', 'NO DISPONIBLE')} |
+        | Transferencias en tránsito | {formato_venezolano(transito_cierre)} | {origen_archivos.get('Tránsito', 'NO DISPONIBLE')} |
+        """)
+
+    # ============================================================
+    # 7. RESUMEN DEL CIERRE DIARIO
     # ============================================================
     st.markdown("---")
     st.markdown("#### 📊 Resumen del Cierre Diario")
@@ -1251,9 +1504,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         )
 
     # ============================================================
-    # 7. DETALLE DE LA VALIDACIÓN
+    # 8. DETALLE DE LA VALIDACIÓN (DESPLEGABLE)
     # ============================================================
-    with st.expander("📌 Detalle del Cierre Diario"):
+    with st.expander("📌 Detalle del Cierre Diario", expanded=False):
         st.markdown(f"""
         ### 📊 Cierre Diario - {fecha_procesar.strftime('%Y-%m-%d')}
         
