@@ -1285,9 +1285,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     
     # 🔥 CORREGIDO: 
     # - total_ingresos = del estado de cuenta (columna Crédito/Ingresos)
-    # - total_egresos = del iPago (Pagos proveedores + Gastos)
-    # - Bancos = Bancos inicial + Ingresos (estado de cuenta) - Total Egresos (iPago)
-    bancos_calculado = safe_number(st.session_state.saldos['bancos']) + total_ingresos - total_egresos
+    # - total_egresos_banco = del estado de cuenta (columna Débito/Egresos)
+    # - Bancos = Bancos inicial + Ingresos (estado de cuenta) - Egresos (estado de cuenta)
+    bancos_calculado = safe_number(st.session_state.saldos['bancos']) + total_ingresos - total_egresos_banco
     
     # 🔥 CxP = CxP inicial + Recepciones - Pagos proveedores
     cx_p_calculado = safe_number(st.session_state.saldos['cx_p']) + recepcion_total - pagos_proveedores
@@ -1307,7 +1307,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     with col_b2:
         st.metric("📈 Ingresos (estado de cuenta)", formato_venezolano(total_ingresos))
     with col_b3:
-        st.metric("📉 Total Egresos (iPago)", formato_venezolano(total_egresos))
+        st.metric("📉 Egresos (estado de cuenta)", formato_venezolano(total_egresos_banco))
     with col_b4:
         st.metric("🏁 Bancos calculado", formato_venezolano(bancos_calculado))
     
@@ -1341,7 +1341,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
-    # COMPARACIÓN VS VALORES REPORTADOS
+    # COMPARACIÓN VS VALORES REPORTADOS - CORREGIDO
     # ============================================================
     st.markdown("#### 📋 Comparación vs Valores Reportados")
 
@@ -1403,6 +1403,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             return f"Transferencias pendientes por {formato_venezolano(abs(diferencia))}"
         return ""
 
+    # --- Inventario ---
     resultados_data.append(crear_fila_comparacion(
         "Inventario",
         "Inv. inicial + Recepción - Costo facturación",
@@ -1412,6 +1413,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'inventario'
     ))
 
+    # --- Cuentas por cobrar ---
     resultados_data.append(crear_fila_comparacion(
         "Cuentas por cobrar",
         "CxC inicial + Facturación - Cobranzas - Notas crédito clientes",
@@ -1421,19 +1423,22 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'cx_c'
     ))
 
+    # --- 🔥 BANCOS - CORREGIDO ---
+    # El valor reportado es el saldo final del estado de cuenta
     resultados_data.append({
         "Cuenta": "Bancos",
-        "Fórmula": "Bancos inicial + Ingresos (estado de cuenta) - (Pagos proveedores + Gastos)",
+        "Fórmula": "Bancos inicial + Ingresos (estado de cuenta) - Egresos (estado de cuenta)",
         "Información día anterior": formato_venezolano(bancos_anterior),
         "Calculado": formato_venezolano(bancos_calculado),
-        "Reportado": "-",
-        "Diferencia": "-",
+        "Reportado": formato_venezolano(saldo_final),
+        "Diferencia": formatear_diferencia(bancos_calculado, saldo_final),
         "Ajuste": 0,
-        "Diferencia Ajustada": "-",
+        "Diferencia Ajustada": formatear_diferencia(bancos_calculado, saldo_final),
         "Justificación": "-",
-        "Origen": "Calculado con ingresos del estado de cuenta"
+        "Origen": "Saldo final del estado de cuenta"
     })
 
+    # --- Cuentas por pagar ---
     resultados_data.append(crear_fila_comparacion(
         "Cuentas por pagar",
         "CxP inicial + Recepciones - Pagos proveedores",
@@ -1443,6 +1448,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'cx_p'
     ))
 
+    # --- Transferencias en tránsito ---
     resultados_data.append(crear_fila_comparacion(
         "Transferencias en tránsito",
         "Tránsito inicial + Ingresos del día - Cobranzas",
@@ -1452,6 +1458,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'transito'
     ))
 
+    # --- Capital de Trabajo Neto ---
     resultados_data.append({
         "Cuenta": "Capital de Trabajo Neto",
         "Fórmula": "(Inv + CxC + Bancos) - (CxP + Tránsito)",
@@ -1465,6 +1472,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         "Origen": "Calculado automáticamente"
     })
 
+    # Mostrar tabla de comparación
     df_comparacion = pd.DataFrame(resultados_data)
     st.dataframe(df_comparacion, use_container_width=True, hide_index=True)
 
@@ -2070,7 +2078,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         **Fórmulas clave:**  
         🔄 Transferencias en tránsito = Tránsito inicial + Ingresos del día - Cobranzas  
         📋 Cuentas por pagar = CxP inicial + Recepciones - Pagos proveedores  
-        🏦 Bancos = Bancos inicial + Ingresos (estado de cuenta) - Total Egresos (iPago)
+        🏦 Bancos = Bancos inicial + Ingresos (estado de cuenta) - Egresos (estado de cuenta)
         
         **Cierre Diario:**  
         🏁 Capital de Trabajo Neto = (CxC + Inventario + Bancos) - (CxP + Transferencias en tránsito)
