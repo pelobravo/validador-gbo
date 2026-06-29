@@ -101,6 +101,19 @@ class Database:
             )
         ''')
         
+        # 🔥 NUEVA TABLA: Ajustes diarios
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ajustes_diarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fecha DATE NOT NULL,
+                cuenta TEXT NOT NULL,
+                monto_ajuste REAL DEFAULT 0,
+                justificacion TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(fecha, cuenta)
+            )
+        ''')
+        
         conn.commit()
         conn.close()
     
@@ -229,7 +242,7 @@ class Database:
         return df
     
     # ============================================================
-    # 🔥 NUEVO MÉTODO: OBTENER HISTORIAL POR RANGO DE FECHAS
+    # OBTENER HISTORIAL POR RANGO DE FECHAS
     # ============================================================
     def obtener_historial_por_fechas(self, fecha_desde, fecha_hasta):
         """
@@ -332,3 +345,78 @@ class Database:
         
         conn.commit()
         conn.close()
+    
+    # ============================================================
+    # 🔥 NUEVO MÉTODO: GUARDAR AJUSTES
+    # ============================================================
+    def guardar_ajustes(self, fecha, ajustes):
+        """
+        Guarda los ajustes realizados en la comparación de valores.
+        
+        Args:
+            fecha (str): Fecha en formato YYYY-MM-DD
+            ajustes (dict): Diccionario con los ajustes y justificaciones
+                           Ejemplo: {
+                               'inventario': {'monto': 100.50, 'justificacion': 'Ajuste por merma'},
+                               'cx_c': {'monto': 0, 'justificacion': ''},
+                               ...
+                           }
+        
+        Returns:
+            bool: True si se guardó correctamente, False en caso contrario
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            for cuenta, datos in ajustes.items():
+                monto = datos.get('monto', 0)
+                justificacion = datos.get('justificacion', '')
+                
+                cursor.execute('''
+                    INSERT OR REPLACE INTO ajustes_diarios 
+                    (fecha, cuenta, monto_ajuste, justificacion)
+                    VALUES (?, ?, ?, ?)
+                ''', (fecha, cuenta, monto, justificacion))
+            
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error al guardar ajustes: {str(e)}")
+            return False
+    
+    def obtener_ajustes(self, fecha):
+        """
+        Obtiene los ajustes guardados para una fecha específica.
+        
+        Args:
+            fecha (str): Fecha en formato YYYY-MM-DD
+        
+        Returns:
+            dict: Diccionario con los ajustes y justificaciones
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT cuenta, monto_ajuste, justificacion
+                FROM ajustes_diarios
+                WHERE fecha = ?
+            ''', (fecha,))
+            
+            resultados = cursor.fetchall()
+            conn.close()
+            
+            ajustes = {}
+            for cuenta, monto, justificacion in resultados:
+                ajustes[cuenta] = {
+                    'monto': monto,
+                    'justificacion': justificacion
+                }
+            
+            return ajustes
+        except Exception as e:
+            print(f"Error al obtener ajustes: {str(e)}")
+            return {}
