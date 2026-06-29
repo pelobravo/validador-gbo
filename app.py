@@ -1,4 +1,4 @@
-# app.py - Con campos para saldos iniciales manuales - VERSIÓN COMPLETA CON CIERRE DIARIO (USANDO ARCHIVOS DE VERIFICACIÓN)
+# app.py - Con campos para saldos iniciales manuales - VERSIÓN COMPLETA CON CIERRE DIARIO (SOLO ARCHIVOS DE VERIFICACIÓN)
 
 import streamlit as st
 import pandas as pd
@@ -1037,64 +1037,103 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
-    # 🔥 CIERRE DIARIO - USANDO ARCHIVOS DE VERIFICACIÓN
+    # 🔥 CIERRE DIARIO - SOLO ARCHIVOS DE VERIFICACIÓN
     # ============================================================
     st.markdown("#### 📊 CIERRE DIARIO - Capital de Trabajo Neto")
 
     # ============================================================
-    # 1. OBTENER VALORES DE LOS ARCHIVOS DE VERIFICACIÓN
+    # 1. VALIDAR QUE LOS ARCHIVOS DE VERIFICACIÓN ESTÉN CARGADOS
     # ============================================================
 
-    # Si los archivos de verificación NO fueron cargados, usar valores calculados
-    if archivo_inventario_reportado:
-        inventario_cierre = saldos_reportados.get('Inventario')
-        if inventario_cierre is None:
-            inventario_cierre = inventario_calculado
-        st.info(f"📦 Inventario: **DESDE ARCHIVO** → {formato_venezolano(inventario_cierre)}")
-    else:
-        inventario_cierre = inventario_calculado
-        st.warning(f"📦 Inventario: **USANDO CALCULADO** (no se cargó archivo de inventario) → {formato_venezolano(inventario_cierre)}")
+    archivos_faltantes = []
+    if not archivo_cxc_reportado:
+        archivos_faltantes.append("📄 Cuentas por cobrar (CxC)")
+    if not archivo_cxp_reportado:
+        archivos_faltantes.append("📄 Cuentas por pagar (CxP)")
+    if not archivo_inventario_reportado:
+        archivos_faltantes.append("📄 Inventario")
+    if not archivo_tb:
+        archivos_faltantes.append("📄 Transferencias en tránsito (TB)")
 
+    if archivos_faltantes:
+        st.warning(f"""
+        ⚠️ **Faltan archivos de verificación para el Cierre Diario:**
+        
+        {', '.join(archivos_faltantes)}
+        
+        **El Cierre Diario SOLO usa valores de los archivos de verificación.**
+        Carga los archivos faltantes para obtener el Capital de Trabajo Neto correcto.
+        """)
+        
+        st.info("ℹ️ **Valores disponibles parcialmente:**")
+
+    # ============================================================
+    # 2. OBTENER VALORES DE ARCHIVOS DE VERIFICACIÓN (SOLO)
+    # ============================================================
+
+    # 🔥 CxC: SOLO del archivo de verificación
     if archivo_cxc_reportado:
         cx_c_cierre = saldos_reportados.get('Cuentas por cobrar')
-        if cx_c_cierre is None:
-            cx_c_cierre = cx_c_calculado
-        st.info(f"💰 CxC: **DESDE ARCHIVO** → {formato_venezolano(cx_c_cierre)}")
+        if cx_c_cierre is None or cx_c_cierre == 0:
+            st.error("❌ **Error:** No se pudo extraer el valor de Cuentas por cobrar del archivo.")
+            cx_c_cierre = 0
+        else:
+            st.success(f"💰 CxC: **DESDE ARCHIVO** → {formato_venezolano(cx_c_cierre)}")
     else:
-        cx_c_cierre = cx_c_calculado
-        st.warning(f"💰 CxC: **USANDO CALCULADO** (no se cargó archivo de CxC) → {formato_venezolano(cx_c_cierre)}")
+        cx_c_cierre = 0
+        st.warning(f"💰 CxC: **NO DISPONIBLE** (falta archivo) → 0,00")
 
+    # 🔥 Inventario: SOLO del archivo de verificación
+    if archivo_inventario_reportado:
+        inventario_cierre = saldos_reportados.get('Inventario')
+        if inventario_cierre is None or inventario_cierre == 0:
+            st.error("❌ **Error:** No se pudo extraer el valor de Inventario del archivo.")
+            inventario_cierre = 0
+        else:
+            st.success(f"📦 Inventario: **DESDE ARCHIVO** → {formato_venezolano(inventario_cierre)}")
+    else:
+        inventario_cierre = 0
+        st.warning(f"📦 Inventario: **NO DISPONIBLE** (falta archivo) → 0,00")
+
+    # 🔥 CxP: SOLO del archivo de verificación
     if archivo_cxp_reportado:
         cx_p_cierre = saldos_reportados.get('Cuentas por pagar')
-        if cx_p_cierre is None:
-            cx_p_cierre = cx_p_calculado
-        st.info(f"📋 CxP: **DESDE ARCHIVO** → {formato_venezolano(cx_p_cierre)}")
+        if cx_p_cierre is None or cx_p_cierre == 0:
+            st.error("❌ **Error:** No se pudo extraer el valor de Cuentas por pagar del archivo.")
+            cx_p_cierre = 0
+        else:
+            st.success(f"📋 CxP: **DESDE ARCHIVO** → {formato_venezolano(cx_p_cierre)}")
     else:
-        cx_p_cierre = cx_p_calculado
-        st.warning(f"📋 CxP: **USANDO CALCULADO** (no se cargó archivo de CxP) → {formato_venezolano(cx_p_cierre)}")
+        cx_p_cierre = 0
+        st.warning(f"📋 CxP: **NO DISPONIBLE** (falta archivo) → 0,00")
 
+    # 🔥 Tránsito: SOLO del archivo TB
     if archivo_tb:
         transito_cierre = saldos_reportados.get('Transferencias en tránsito')
-        if transito_cierre is None:
-            transito_cierre = transito_calculado
-        st.info(f"🔄 Tránsito: **DESDE ARCHIVO** → {formato_venezolano(transito_cierre)}")
+        if transito_cierre is None or transito_cierre == 0:
+            st.error("❌ **Error:** No se pudo extraer el valor de Transferencias en tránsito del archivo.")
+            transito_cierre = 0
+        else:
+            st.success(f"🔄 Tránsito: **DESDE ARCHIVO** → {formato_venezolano(transito_cierre)}")
     else:
-        transito_cierre = transito_calculado
-        st.warning(f"🔄 Tránsito: **USANDO CALCULADO** (no se cargó archivo TB) → {formato_venezolano(transito_cierre)}")
+        transito_cierre = 0
+        st.warning(f"🔄 Tránsito: **NO DISPONIBLE** (falta archivo) → 0,00")
 
-    # Bancos SIEMPRE del estado de cuenta
+    # 🔥 Bancos: SIEMPRE del estado de cuenta (archivo obligatorio)
     bancos_cierre = saldo_final
-    st.info(f"🏦 Bancos: **DESDE ESTADO DE CUENTA** → {formato_venezolano(bancos_cierre)}")
+    st.success(f"🏦 Bancos: **DESDE ESTADO DE CUENTA** → {formato_venezolano(bancos_cierre)}")
 
-    # Asegurar valores numéricos
-    inventario_cierre = safe_number(inventario_cierre)
+    # ============================================================
+    # 3. ASEGURAR VALORES NUMÉRICOS
+    # ============================================================
     cx_c_cierre = safe_number(cx_c_cierre)
+    inventario_cierre = safe_number(inventario_cierre)
     bancos_cierre = safe_number(bancos_cierre)
     cx_p_cierre = safe_number(cx_p_cierre)
     transito_cierre = safe_number(transito_cierre)
 
     # ============================================================
-    # 2. CALCULAR ACTIVOS Y PASIVOS OPERATIVOS
+    # 4. CALCULAR ACTIVOS Y PASIVOS OPERATIVOS
     # ============================================================
 
     activos_operativos = cx_c_cierre + inventario_cierre + bancos_cierre
@@ -1102,7 +1141,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     capital_neto = activos_operativos - pasivos_operativos
 
     # ============================================================
-    # 3. MOSTRAR TABLA DEL CIERRE DIARIO
+    # 5. MOSTRAR TABLA DEL CIERRE DIARIO
     # ============================================================
 
     st.markdown("#### 📋 Detalle del Cierre Diario")
@@ -1111,13 +1150,13 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     cierre_detalle = [
         {
             "Concepto": "📦 Inventario",
-            "Origen": "Archivo de verificación" if archivo_inventario_reportado else "Calculado",
+            "Origen": "Archivo de verificación" if archivo_inventario_reportado else "NO DISPONIBLE",
             "Tipo": "ACTIVO",
             "Monto": formato_venezolano(inventario_cierre)
         },
         {
             "Concepto": "💰 Cuentas por cobrar",
-            "Origen": "Archivo de verificación" if archivo_cxc_reportado else "Calculado",
+            "Origen": "Archivo de verificación" if archivo_cxc_reportado else "NO DISPONIBLE",
             "Tipo": "ACTIVO",
             "Monto": formato_venezolano(cx_c_cierre)
         },
@@ -1135,13 +1174,13 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         },
         {
             "Concepto": "📋 Cuentas por pagar",
-            "Origen": "Archivo de verificación" if archivo_cxp_reportado else "Calculado",
+            "Origen": "Archivo de verificación" if archivo_cxp_reportado else "NO DISPONIBLE",
             "Tipo": "PASIVO",
             "Monto": formato_venezolano(cx_p_cierre)
         },
         {
             "Concepto": "🔄 Transferencias en tránsito",
-            "Origen": "Archivo de verificación" if archivo_tb else "Calculado",
+            "Origen": "Archivo de verificación" if archivo_tb else "NO DISPONIBLE",
             "Tipo": "PASIVO",
             "Monto": formato_venezolano(transito_cierre)
         },
@@ -1182,7 +1221,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.dataframe(styled_df, use_container_width=True)
 
     # ============================================================
-    # 4. RESUMEN DEL CIERRE DIARIO
+    # 6. RESUMEN DEL CIERRE DIARIO
     # ============================================================
     st.markdown("---")
     st.markdown("#### 📊 Resumen del Cierre Diario")
@@ -1212,7 +1251,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         )
 
     # ============================================================
-    # 5. DETALLE DE LA VALIDACIÓN
+    # 7. DETALLE DE LA VALIDACIÓN
     # ============================================================
     with st.expander("📌 Detalle del Cierre Diario"):
         st.markdown(f"""
@@ -1221,14 +1260,14 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         | Concepto | Origen | Valor |
         |----------|--------|-------|
         | **ACTIVOS OPERATIVOS** | | |
-        | Cuentas por cobrar | {'Archivo CxC' if archivo_cxc_reportado else 'Calculado'} | {formato_venezolano(cx_c_cierre)} |
-        | Inventario | {'Archivo Inventario' if archivo_inventario_reportado else 'Calculado'} | {formato_venezolano(inventario_cierre)} |
+        | Cuentas por cobrar | {'Archivo CxC' if archivo_cxc_reportado else '❌ NO DISPONIBLE'} | {formato_venezolano(cx_c_cierre)} |
+        | Inventario | {'Archivo Inventario' if archivo_inventario_reportado else '❌ NO DISPONIBLE'} | {formato_venezolano(inventario_cierre)} |
         | Bancos | Estado de cuenta | {formato_venezolano(bancos_cierre)} |
         | | **Total Activos** | **{formato_venezolano(activos_operativos)}** |
         | | | |
         | **PASIVOS OPERATIVOS** | | |
-        | Cuentas por pagar | {'Archivo CxP' if archivo_cxp_reportado else 'Calculado'} | {formato_venezolano(cx_p_cierre)} |
-        | Transferencias en tránsito | {'Archivo TB' if archivo_tb else 'Calculado'} | {formato_venezolano(transito_cierre)} |
+        | Cuentas por pagar | {'Archivo CxP' if archivo_cxp_reportado else '❌ NO DISPONIBLE'} | {formato_venezolano(cx_p_cierre)} |
+        | Transferencias en tránsito | {'Archivo TB' if archivo_tb else '❌ NO DISPONIBLE'} | {formato_venezolano(transito_cierre)} |
         | | **Total Pasivos** | **{formato_venezolano(pasivos_operativos)}** |
         | | | |
         | **🏁 CAPITAL DE TRABAJO NETO** | Activos - Pasivos | **{formato_venezolano(capital_neto)}** |
@@ -1238,6 +1277,17 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             st.success(f"✅ Capital de Trabajo Neto POSITIVO: {formato_venezolano(capital_neto)}")
         else:
             st.error(f"❌ Capital de Trabajo Neto NEGATIVO: {formato_venezolano(capital_neto)}")
+
+        st.markdown("""
+        ### ⚠️ Importante
+        **El Cierre Diario utiliza EXCLUSIVAMENTE los valores de los archivos de verificación:**
+        - Cuentas por cobrar → Archivo CxC
+        - Inventario → Archivo Inventario
+        - Cuentas por pagar → Archivo CxP
+        - Transferencias en tránsito → Archivo TB
+        
+        **NO utiliza valores calculados** de facturación, cobranzas o egresos.
+        """)
     
     st.markdown("---")
     
@@ -1404,12 +1454,14 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         **Cierre Diario:**  
         🏁 Capital de Trabajo Neto = (CxC + Inventario + Bancos) - (CxP + Transferencias en tránsito)
         
-        **Los valores del Cierre Diario se toman de los archivos de verificación:**
+        **Los valores del Cierre Diario se toman EXCLUSIVAMENTE de los archivos de verificación:**
         - CxC → Archivo "CUENTAS POR COBRAR"
         - Inventario → Archivo "INVENTARIO"
         - CxP → Archivo "CUENTAS POR PAGAR"
         - Tránsito → Archivo "TB.xlsx"
         - Bancos → Estado de cuenta bancario
+        
+        **NO se utilizan valores calculados** para el Cierre Diario.
         """)
 
 else:
