@@ -288,7 +288,7 @@ class ProcesadorArchivos:
         except Exception as e:
             return df
     
-    # ===================== FUNCIÓN REEMPLAZADA COMPLETAMENTE: FACTURACIÓN =====================
+    # ===================== FACTURACIÓN =====================
     
     @staticmethod
     def procesar_facturacion(df):
@@ -323,7 +323,7 @@ class ProcesadorArchivos:
 
         return 0.0, 0.0, 0, 0.0
     
-    # ===================== 🔥 CAMBIO 1: COBRANZAS MODIFICADA =====================
+    # ===================== COBRANZAS =====================
     
     @staticmethod
     def procesar_cobranzas(df):
@@ -356,7 +356,7 @@ class ProcesadorArchivos:
 
         return 0.0, 0, 0.0
     
-    # ===================== 🔥 CAMBIO 2: EGRESOS MODIFICADA =====================
+    # ===================== EGRESOS =====================
     
     @staticmethod
     def procesar_egresos(df):
@@ -396,7 +396,7 @@ class ProcesadorArchivos:
             total
         )
     
-    # ===================== 🔥 CAMBIO 3: ESTADO DE CUENTA MODIFICADA =====================
+    # ===================== ESTADO DE CUENTA =====================
     
     @staticmethod
     def procesar_estado_cuenta(df, saldo_inicial=0):
@@ -487,7 +487,7 @@ class ProcesadorArchivos:
             total_egresos
         )
     
-    # ===================== 🔥 NUEVA FUNCIÓN 4: obtener_total_egresos_ipago =====================
+    # ===================== OBTENER TOTAL EGRESOS IPAGO =====================
     
     @staticmethod
     def obtener_total_egresos_ipago(df):
@@ -529,7 +529,7 @@ class ProcesadorArchivos:
         
         return total
     
-    # ===================== FUNCIONES NO MODIFICADAS =====================
+    # ===================== RECEPCIONES =====================
     
     @staticmethod
     def procesar_recepciones(df):
@@ -663,6 +663,8 @@ class ProcesadorArchivos:
         
         return total_recepcion, compras_credito, cantidad, promedio
     
+    # ===================== NOTAS DE CRÉDITO =====================
+    
     @staticmethod
     def procesar_notas_credito(df):
         """
@@ -703,6 +705,8 @@ class ProcesadorArchivos:
         
         return total, cantidad, promedio
     
+    # ===================== COSTO DE FACTURACIÓN =====================
+    
     @staticmethod
     def procesar_costo_facturacion(df):
         """
@@ -734,10 +738,14 @@ class ProcesadorArchivos:
         
         return 0.0
     
+    # ===================== 🔥 EXTRAER SALDO REPORTADO (MEJORADO) =====================
+    
     @staticmethod
     def extraer_saldo_reportado(df, tipo):
         """
         Extrae saldo reportado de archivos de verificación.
+        Mejorado para detectar correctamente "Total Compañia" en archivos SAP.
+        Diseñado para funcionar con múltiples analistas y bancos.
         
         Args:
             df: DataFrame de pandas
@@ -751,15 +759,35 @@ class ProcesadorArchivos:
         
         df = ProcesadorArchivos._limpiar_columnas(df)
         
+        # 🔥 ESTRATEGIA 1: Buscar "Total Compañia" o "Total Compañía"
+        for idx, row in df.iterrows():
+            texto_fila = ' '.join(
+                [str(x) for x in row.values if pd.notna(x)]
+            ).lower()
+
+            if 'total compañia' in texto_fila or 'total compania' in texto_fila or 'total compañía' in texto_fila:
+                numeros = []
+                for valor in row.values:
+                    try:
+                        num = ProcesadorArchivos._convertir_numero_europeo(valor)
+                        if not pd.isna(num) and num > 0:
+                            numeros.append(float(num))
+                    except:
+                        pass
+                
+                if numeros:
+                    # Tomar el número más grande (debería ser el total)
+                    return max(numeros)
+        
+        # 🔥 ESTRATEGIA 2: Buscar "Total" + "Compañ" en la misma fila
         if tipo in ['cxc', 'cxp']:
             for idx, row in df.iterrows():
                 texto_fila = ' '.join(
                     [str(x) for x in row.values if pd.notna(x)]
                 ).lower()
-
-                if 'total compañía' in texto_fila or 'total compania' in texto_fila:
+                
+                if 'total' in texto_fila and ('compañ' in texto_fila or 'compan' in texto_fila):
                     numeros = []
-
                     for valor in row.values:
                         try:
                             num = ProcesadorArchivos._convertir_numero_europeo(valor)
@@ -767,19 +795,19 @@ class ProcesadorArchivos:
                                 numeros.append(float(num))
                         except:
                             pass
-
+                    
                     if numeros:
-                        return numeros[0]
+                        return max(numeros)
         
+        # 🔥 ESTRATEGIA 3: Buscar "Total" en la fila (para inventario)
         if tipo == 'inventario':
             for idx, row in df.iterrows():
                 texto_fila = ' '.join(
                     [str(x) for x in row.values if pd.notna(x)]
                 ).lower()
 
-                if 'total' in texto_fila:
+                if 'totales:' in texto_fila or 'total' in texto_fila:
                     numeros = []
-
                     for valor in row.values:
                         try:
                             num = ProcesadorArchivos._convertir_numero_europeo(valor)
@@ -791,45 +819,61 @@ class ProcesadorArchivos:
                     if numeros:
                         return max(numeros)
         
-        if tipo == 'bancos':
-            saldo_col = ProcesadorArchivos._buscar_columna(
-                df, 
-                'saldo', 'saldo_final', 'balance', 'disponible'
-            )
-            if saldo_col:
+        # 🔥 ESTRATEGIA 4: Buscar en la última fila que tenga números grandes
+        for idx in range(len(df) - 1, -1, -1):
+            row = df.iloc[idx]
+            texto_fila = ' '.join(
+                [str(x) for x in row.values if pd.notna(x)]
+            ).lower()
+            
+            # Buscar filas que contengan "Total" o que tengan números grandes
+            if 'total' in texto_fila or 'suma' in texto_fila:
+                numeros = []
+                for valor in row.values:
+                    try:
+                        num = ProcesadorArchivos._convertir_numero_europeo(valor)
+                        if not pd.isna(num) and num > 0:
+                            numeros.append(float(num))
+                    except:
+                        pass
+                
+                if numeros and max(numeros) > 1000:
+                    return max(numeros)
+        
+        # 🔥 ESTRATEGIA 5: Buscar en la última fila de datos
+        if len(df) > 0:
+            ultima_fila = df.iloc[-1]
+            numeros = []
+            for valor in ultima_fila.values:
                 try:
-                    valores = []
-                    for val in df[saldo_col]:
-                        num = ProcesadorArchivos._convertir_numero_europeo(val)
-                        if not pd.isna(num):
-                            valores.append(num)
-                    if len(valores) > 0:
-                        return float(valores[-1])
+                    num = ProcesadorArchivos._convertir_numero_europeo(valor)
+                    if not pd.isna(num) and num > 0:
+                        numeros.append(float(num))
                 except:
                     pass
+            
+            if numeros and max(numeros) > 1000:
+                return max(numeros)
         
+        # 🔥 ESTRATEGIA 6: Buscar en columnas específicas
         saldo_col = ProcesadorArchivos._buscar_columna(
             df, 
             'saldo', 'total', 'monto', 'valor', 'importe', 'balance',
-            'saldo_final', 'saldo_actual', 'disponible'
+            'saldo_final', 'saldo_actual', 'disponible', 'Total'
         )
         
         if saldo_col:
             try:
+                # Buscar el valor más grande en esa columna
                 valores = []
                 for val in df[saldo_col]:
                     num = ProcesadorArchivos._convertir_numero_europeo(val)
-                    if not pd.isna(num):
+                    if not pd.isna(num) and num > 0:
                         valores.append(num)
                 
-                if len(valores) == 1:
-                    return float(valores[0])
-                else:
-                    for val in reversed(valores):
-                        if val > 0:
-                            return float(val)
-                    return float(valores[-1]) if valores else None
+                if valores:
+                    return float(max(valores))
             except:
-                return None
+                pass
         
         return None
