@@ -1,4 +1,4 @@
-# app.py - Con campos para saldos iniciales manuales - VERSIÓN COMPLETA CON FILTRO DE FECHAS
+# app.py - Con campos para saldos iniciales manuales - VERSIÓN COMPLETA CON FILTRO DE FECHAS FUNCIONAL
 
 import streamlit as st
 import pandas as pd
@@ -52,6 +52,21 @@ def formato_venezolano(valor):
         return f"{float(valor):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
     except (ValueError, TypeError):
         return "0,00"
+
+def formato_venezolano_desde_str(valor_str):
+    """
+    Convierte un string con formato venezolano a número para cálculos
+    """
+    if valor_str is None or valor_str == "-" or valor_str == "":
+        return 0
+    try:
+        if isinstance(valor_str, str):
+            # Remover puntos de miles y reemplazar coma decimal
+            limpio = valor_str.replace('.', '').replace(',', '.')
+            return float(limpio)
+        return float(valor_str)
+    except (ValueError, TypeError):
+        return 0
 
 # ============================================================
 # FUNCIÓN HELPER PARA VALORES SEGUROS
@@ -213,12 +228,16 @@ if 'usuario_actual' not in st.session_state:
     st.session_state.usuario_actual = None
 
 # ============================================================
-# INICIALIZAR FILTRO DE FECHAS
+# INICIALIZAR FILTRO DE FECHAS Y FLAGS
 # ============================================================
 if 'fecha_desde' not in st.session_state:
     st.session_state.fecha_desde = datetime.now() - pd.Timedelta(days=7)
 if 'fecha_hasta' not in st.session_state:
     st.session_state.fecha_hasta = datetime.now()
+if 'mostrar_historial' not in st.session_state:
+    st.session_state.mostrar_historial = False
+if 'historial_data' not in st.session_state:
+    st.session_state.historial_data = None
 
 # ============================================================
 # FUNCIONES AUXILIARES
@@ -540,7 +559,7 @@ with st.sidebar:
     st.markdown("---")
     
     # ============================================================
-    # 🔥 NUEVO: FILTRO POR RANGO DE FECHAS
+    # 🔥 FILTRO POR RANGO DE FECHAS - CORREGIDO
     # ============================================================
     st.markdown("#### 📅 Filtro por Rango de Fechas")
     
@@ -563,13 +582,56 @@ with st.sidebar:
         if st.button("🔍 Aplicar Filtro", use_container_width=True):
             st.session_state.fecha_desde = fecha_desde
             st.session_state.fecha_hasta = fecha_hasta
+            st.session_state.mostrar_historial = True
             st.rerun()
     
     with col_btn_f2:
         if st.button("🔄 Resetear", use_container_width=True):
             st.session_state.fecha_desde = datetime.now() - pd.Timedelta(days=7)
             st.session_state.fecha_hasta = datetime.now()
+            st.session_state.mostrar_historial = False
+            st.session_state.historial_data = None
             st.rerun()
+    
+    # Mostrar historial automáticamente después de aplicar filtro
+    if st.session_state.get('mostrar_historial', False):
+        desde = st.session_state.fecha_desde
+        hasta = st.session_state.fecha_hasta
+        
+        historial = db.obtener_historial_por_fechas(
+            desde.strftime('%Y-%m-%d'), 
+            hasta.strftime('%Y-%m-%d')
+        )
+        
+        if not historial.empty:
+            # Guardar en session_state para usarlo en el área principal
+            st.session_state.historial_data = historial.copy()
+            
+            # Formatear columnas numéricas para mostrar
+            df_mostrar = historial.copy()
+            columnas_numericas = ['inventario', 'cx_c', 'bancos', 'cx_p', 'transito', 'capital']
+            for col in columnas_numericas:
+                if col in df_mostrar.columns:
+                    df_mostrar[col] = df_mostrar[col].apply(formato_venezolano)
+            
+            st.dataframe(df_mostrar, use_container_width=True)
+            st.caption(f"📊 Mostrando registros desde {desde.strftime('%d/%m/%Y')} hasta {hasta.strftime('%d/%m/%Y')}")
+            
+            # Resumen del período
+            col_res1, col_res2, col_res3 = st.columns(3)
+            with col_res1:
+                st.metric("📊 Total de días", len(historial))
+            with col_res2:
+                if 'capital' in historial.columns and len(historial) > 0:
+                    capital_inicial_val = safe_number(historial.iloc[0]['capital'])
+                    capital_final_val = safe_number(historial.iloc[-1]['capital'])
+                    st.metric("📈 Variación capital", formato_venezolano(capital_final_val - capital_inicial_val))
+            with col_res3:
+                if 'capital' in historial.columns and len(historial) > 0:
+                    st.metric("🏁 Capital final", formato_venezolano(safe_number(historial.iloc[-1]['capital'])))
+        else:
+            st.info("No hay registros en el rango de fechas seleccionado")
+            st.session_state.historial_data = None
     
     st.markdown("---")
     
@@ -632,6 +694,38 @@ st.markdown("""
     <p style="color: #666; font-size: 1rem;">Capital de Trabajo Neto Operativo</p>
 </div>
 """, unsafe_allow_html=True)
+
+# ============================================================
+# MOSTRAR HISTORIAL FILTRADO EN EL ÁREA PRINCIPAL
+# ============================================================
+if st.session_state.get('mostrar_historial', False) and st.session_state.get('historial_data') is not None:
+    with st.expander("📊 Historial Filtrado", expanded=True):
+        historial = st.session_state.historial_data
+        df_mostrar = historial.copy()
+        columnas_numericas = ['inventario', 'cx_c', 'bancos', 'cx_p', 'transito', 'capital']
+        for col in columnas_numericas:
+            if col in df_mostrar.columns:
+                df_mostrar[col] = df_mostrar[col].apply(formato_venezolano)
+        
+        st.dataframe(df_mostrar, use_container_width=True)
+        
+        # Gráfico de evolución del capital
+        if 'capital' in historial.columns and len(historial) > 1:
+            try:
+                import matplotlib.pyplot as plt
+                fig, ax = plt.subplots(figsize=(10, 4))
+                # Ordenar por fecha ascendente para el gráfico
+                historial_ordenado = historial.sort_values('fecha')
+                ax.plot(historial_ordenado['fecha'], historial_ordenado['capital'], marker='o', linewidth=2, color='#667eea')
+                ax.set_title('Evolución del Capital de Trabajo Neto', fontsize=14, fontweight='bold')
+                ax.set_xlabel('Fecha')
+                ax.set_ylabel('Capital (Bs.)')
+                ax.grid(True, alpha=0.3)
+                plt.xticks(rotation=45)
+                plt.tight_layout()
+                st.pyplot(fig)
+            except:
+                pass
 
 # ============================================================
 # PROCESAMIENTO PRINCIPAL
@@ -1044,68 +1138,44 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             st.success("✅ Saldos guardados correctamente")
     
     with col_btn2:
-        if st.button("📜 Ver historial filtrado", use_container_width=True):
-            # Obtener fechas del filtro
-            desde = st.session_state.get('fecha_desde', datetime.now() - pd.Timedelta(days=7))
-            hasta = st.session_state.get('fecha_hasta', datetime.now())
-            
-            # Consultar historial con filtro
-            historial = db.obtener_historial_por_fechas(
-                desde.strftime('%Y-%m-%d'), 
-                hasta.strftime('%Y-%m-%d')
-            )
-            
-            if not historial.empty:
-                # Formatear columnas numéricas
-                columnas_numericas = ['inventario', 'cx_c', 'bancos', 'cx_p', 'transito', 'capital']
-                for col in columnas_numericas:
-                    if col in historial.columns:
-                        historial[col] = historial[col].apply(formato_venezolano)
-                
-                st.dataframe(historial, use_container_width=True)
-                st.caption(f"📊 Mostrando registros desde {desde.strftime('%d/%m/%Y')} hasta {hasta.strftime('%d/%m/%Y')}")
-                
-                # Resumen del período
-                col_res1, col_res2, col_res3 = st.columns(3)
-                with col_res1:
-                    st.metric("📊 Total de días", len(historial))
-                with col_res2:
-                    if 'capital' in historial.columns:
-                        capital_inicial_val = safe_number(historial.iloc[0]['capital'])
-                        capital_final_val = safe_number(historial.iloc[-1]['capital'])
-                        st.metric("📈 Variación capital", formato_venezolano(capital_final_val - capital_inicial_val))
+        if st.button("📊 Ver gráfico evolución", use_container_width=True):
+            historial = db.obtener_historial_saldos_completo(30)
+            if not historial.empty and len(historial) > 1:
+                try:
+                    import matplotlib.pyplot as plt
+                    historial_ordenado = historial.sort_values('fecha')
+                    
+                    fig, axes = plt.subplots(2, 1, figsize=(12, 8))
+                    
+                    # Gráfico 1: Evolución del Capital
+                    axes[0].plot(historial_ordenado['fecha'], historial_ordenado['capital'], 
+                                marker='o', linewidth=2, color='#667eea')
+                    axes[0].set_title('Evolución del Capital de Trabajo Neto', fontsize=14, fontweight='bold')
+                    axes[0].set_xlabel('Fecha')
+                    axes[0].set_ylabel('Capital (Bs.)')
+                    axes[0].grid(True, alpha=0.3)
+                    axes[0].tick_params(axis='x', rotation=45)
+                    
+                    # Gráfico 2: Componentes del Capital
+                    axes[1].plot(historial_ordenado['fecha'], historial_ordenado['inventario'], 
+                                marker='s', linewidth=2, label='Inventario', color='#28a745')
+                    axes[1].plot(historial_ordenado['fecha'], historial_ordenado['cx_c'], 
+                                marker='^', linewidth=2, label='CxC', color='#17a2b8')
+                    axes[1].plot(historial_ordenado['fecha'], historial_ordenado['bancos'], 
+                                marker='d', linewidth=2, label='Bancos', color='#ffc107')
+                    axes[1].set_title('Evolución de Componentes del Capital', fontsize=14, fontweight='bold')
+                    axes[1].set_xlabel('Fecha')
+                    axes[1].set_ylabel('Monto (Bs.)')
+                    axes[1].legend()
+                    axes[1].grid(True, alpha=0.3)
+                    axes[1].tick_params(axis='x', rotation=45)
+                    
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                except Exception as e:
+                    st.warning(f"No se pudo generar el gráfico: {str(e)}")
             else:
-                st.info("No hay registros en el rango de fechas seleccionado")
-    
-    # ============================================================
-    # RESUMEN DEL PERÍODO SELECCIONADO
-    # ============================================================
-    with st.expander("📊 Resumen del Período"):
-        desde = st.session_state.get('fecha_desde', datetime.now() - pd.Timedelta(days=7))
-        hasta = st.session_state.get('fecha_hasta', datetime.now())
-        
-        historial = db.obtener_historial_por_fechas(
-            desde.strftime('%Y-%m-%d'), 
-            hasta.strftime('%Y-%m-%d')
-        )
-        
-        if not historial.empty:
-            col_r1, col_r2, col_r3, col_r4 = st.columns(4)
-            
-            with col_r1:
-                st.metric("📅 Días", len(historial))
-            with col_r2:
-                capital_inicial = safe_number(historial.iloc[0]['capital'])
-                st.metric("📈 Capital Inicio", formato_venezolano(capital_inicial))
-            with col_r3:
-                capital_final = safe_number(historial.iloc[-1]['capital'])
-                st.metric("📉 Capital Fin", formato_venezolano(capital_final))
-            with col_r4:
-                variacion = capital_final - capital_inicial
-                signo = "📈" if variacion > 0 else "📉" if variacion < 0 else "➖"
-                st.metric(f"{signo} Variación", formato_venezolano(variacion))
-        else:
-            st.info("No hay datos en el período seleccionado")
+                st.info("No hay suficientes datos históricos para generar gráficos (mínimo 2 días)")
     
     # ============================================================
     # REGLAS DE NEGOCIO
