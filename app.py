@@ -1,4 +1,4 @@
-# app.py - Con campos para saldos iniciales manuales - VERSIÓN COMPLETA CON CIERRE DIARIO Y VISUALIZACIÓN DE ARCHIVOS
+# app.py - Con campos para saldos iniciales manuales - VERSIÓN COMPLETA CON KPIS DE SALDOS INICIALES
 
 import streamlit as st
 import pandas as pd
@@ -517,51 +517,6 @@ def mostrar_tabla_activos_pasivos(inventario, cx_c, bancos, cx_p, transito, capi
     return html
 
 # ============================================================
-# FUNCIÓN PARA KPI CON COLORES DIFERENCIADOS
-# ============================================================
-def mostrar_kpi_con_color(titulo, valor, tipo, popover_content=None):
-    """
-    Muestra un KPI con colores diferenciados según el tipo:
-    - activos: verde
-    - pasivos: rojo
-    - capital_positivo: verde oscuro
-    - capital_negativo: rojo oscuro
-    - capital: azul (por defecto)
-    """
-    
-    # Determinar la clase CSS según el tipo
-    if tipo == "activos":
-        clase = "kpi-card-activos"
-    elif tipo == "pasivos":
-        clase = "kpi-card-pasivos"
-    elif tipo == "capital_positivo":
-        clase = "kpi-card-capital-positivo"
-    elif tipo == "capital_negativo":
-        clase = "kpi-card-capital-negativo"
-    else:
-        clase = "kpi-card-capital"
-    
-    # Valor formateado
-    valor_formateado = formato_venezolano(valor)
-    
-    # Construir el HTML del KPI
-    html = f"""
-    <div class="{clase}">
-        <div class="label">{titulo}</div>
-        <div class="value">{valor_formateado}</div>
-        <div class="sub-label">💡 Haz clic para ver detalle</div>
-    </div>
-    """
-    
-    # Mostrar como popover si hay contenido
-    if popover_content:
-        with st.popover("", use_container_width=True):
-            st.markdown(popover_content)
-        st.markdown(html, unsafe_allow_html=True)
-    else:
-        st.markdown(html, unsafe_allow_html=True)
-
-# ============================================================
 # LOGIN CON LOGO Y TÍTULO CENTRADO
 # ============================================================
 def mostrar_login():
@@ -964,21 +919,142 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             | 🏁 Capital anterior | {formato_venezolano(st.session_state.saldos['capital_anterior'])} | 📂 Calculado del día anterior |
             """)
     
-    # Saldos iniciales resumidos
-    st.markdown("#### 📌 Saldos Iniciales (Resumen)")
-    
-    col1, col2, col3, col4, col5 = st.columns(5)
-    with col1:
-        st.metric("📦 Inventario", formato_venezolano(st.session_state.saldos['inventario']))
-    with col2:
-        st.metric("💰 CxC", formato_venezolano(st.session_state.saldos['cx_c']))
-    with col3:
-        st.metric("🏦 Bancos", formato_venezolano(st.session_state.saldos['bancos']))
-    with col4:
-        st.metric("📋 CxP", formato_venezolano(st.session_state.saldos['cx_p']))
-    with col5:
-        st.metric("🔄 Tránsito", formato_venezolano(st.session_state.saldos['transito']))
-    
+    # ============================================================
+    # SALDOS INICIALES - KPIs CON COLORES DIFERENCIADOS
+    # ============================================================
+    st.markdown("#### 📌 Saldos Iniciales (Día Anterior)")
+    st.caption("💡 Estos son los saldos que vienen del día anterior")
+
+    # Crear 5 columnas para los 5 KPIs
+    col_kpi_inv, col_kpi_cxc, col_kpi_ban, col_kpi_cxp, col_kpi_tran = st.columns(5)
+
+    # Función para crear KPI con color y borde
+    def mostrar_kpi_inicial(col, titulo, valor, color, icono):
+        """
+        Muestra un KPI de saldo inicial con color personalizado
+        """
+        # Determinar la clase CSS según el color
+        if color == "verde":
+            clase = "kpi-inicial-verde"
+            borde = "#27ae60"
+            fondo = "linear-gradient(135deg, #1a8a4a 0%, #2ecc71 100%)"
+        elif color == "azul":
+            clase = "kpi-inicial-azul"
+            borde = "#2980b9"
+            fondo = "linear-gradient(135deg, #1a5276 0%, #3498db 100%)"
+        elif color == "naranja":
+            clase = "kpi-inicial-naranja"
+            borde = "#e67e22"
+            fondo = "linear-gradient(135deg, #d35400 0%, #f39c12 100%)"
+        elif color == "rojo":
+            clase = "kpi-inicial-rojo"
+            borde = "#c0392b"
+            fondo = "linear-gradient(135deg, #922b21 0%, #e74c3c 100%)"
+        elif color == "morado":
+            clase = "kpi-inicial-morado"
+            borde = "#8e44ad"
+            fondo = "linear-gradient(135deg, #6c3483 0%, #af7ac5 100%)"
+        else:
+            clase = "kpi-inicial-default"
+            borde = "#667eea"
+            fondo = "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+        
+        valor_formateado = formato_venezolano(valor)
+        
+        html = f"""
+        <style>
+            .{clase} {{
+                background: {fondo};
+                border-radius: 16px;
+                padding: 18px 12px;
+                text-align: center;
+                color: white;
+                box-shadow: 0 8px 20px -5px rgba(0,0,0,0.15);
+                border: 3px solid {borde};
+                transition: transform 0.2s, box-shadow 0.2s;
+                height: 100%;
+                min-height: 120px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+            }}
+            .{clase}:hover {{
+                transform: translateY(-3px);
+                box-shadow: 0 12px 30px -5px rgba(0,0,0,0.25);
+            }}
+            .{clase} .label {{
+                font-size: 0.8rem;
+                opacity: 0.95;
+                letter-spacing: 0.3px;
+                font-weight: 500;
+            }}
+            .{clase} .value {{
+                font-size: 1.5rem;
+                font-weight: 700;
+                margin-top: 6px;
+                letter-spacing: 0.3px;
+                font-family: 'Courier New', monospace;
+            }}
+            .{clase} .icon {{
+                font-size: 1.2rem;
+                margin-bottom: 2px;
+            }}
+        </style>
+        <div class="{clase}">
+            <div class="icon">{icono}</div>
+            <div class="label">{titulo}</div>
+            <div class="value">{valor_formateado}</div>
+        </div>
+        """
+        with col:
+            st.markdown(html, unsafe_allow_html=True)
+
+    # Mostrar los 5 KPIs con colores diferenciados
+    with col_kpi_inv:
+        mostrar_kpi_inicial(
+            col_kpi_inv, 
+            "Inventario", 
+            st.session_state.saldos['inventario'], 
+            "verde",
+            "📦"
+        )
+
+    with col_kpi_cxc:
+        mostrar_kpi_inicial(
+            col_kpi_cxc, 
+            "Cuentas por Cobrar", 
+            st.session_state.saldos['cx_c'], 
+            "azul",
+            "💰"
+        )
+
+    with col_kpi_ban:
+        mostrar_kpi_inicial(
+            col_kpi_ban, 
+            "Bancos", 
+            st.session_state.saldos['bancos'], 
+            "naranja",
+            "🏦"
+        )
+
+    with col_kpi_cxp:
+        mostrar_kpi_inicial(
+            col_kpi_cxp, 
+            "Cuentas por Pagar", 
+            st.session_state.saldos['cx_p'], 
+            "rojo",
+            "📋"
+        )
+
+    with col_kpi_tran:
+        mostrar_kpi_inicial(
+            col_kpi_tran, 
+            "Tránsito", 
+            st.session_state.saldos['transito'], 
+            "morado",
+            "🔄"
+        )
+
     st.markdown("---")
     
     # ============================================================
