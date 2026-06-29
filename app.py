@@ -1,4 +1,4 @@
-# app.py - Con campos para saldos iniciales manuales - VERSIÓN COMPLETA CON KPIS DE SALDOS INICIALES
+# app.py - Con campos para saldos iniciales manuales - VERSIÓN COMPLETA CON CIERRE DIARIO Y VISUALIZACIÓN DE ARCHIVOS
 
 import streamlit as st
 import pandas as pd
@@ -236,6 +236,132 @@ st.markdown("""
         font-size: 0.7rem;
         opacity: 0.7;
         margin-top: 5px;
+    }
+    
+    /* KPI Iniciales - Saldos del día anterior */
+    .kpi-inicial-verde {
+        background: linear-gradient(135deg, #1a8a4a 0%, #2ecc71 100%);
+        border-radius: 16px;
+        padding: 18px 12px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 8px 20px -5px rgba(46, 204, 113, 0.3);
+        border: 3px solid #27ae60;
+        transition: transform 0.2s, box-shadow 0.2s;
+        height: 100%;
+        min-height: 120px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    
+    .kpi-inicial-verde:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 30px -5px rgba(46, 204, 113, 0.4);
+    }
+    
+    .kpi-inicial-azul {
+        background: linear-gradient(135deg, #1a5276 0%, #3498db 100%);
+        border-radius: 16px;
+        padding: 18px 12px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 8px 20px -5px rgba(52, 152, 219, 0.3);
+        border: 3px solid #2980b9;
+        transition: transform 0.2s, box-shadow 0.2s;
+        height: 100%;
+        min-height: 120px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    
+    .kpi-inicial-azul:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 30px -5px rgba(52, 152, 219, 0.4);
+    }
+    
+    .kpi-inicial-naranja {
+        background: linear-gradient(135deg, #d35400 0%, #f39c12 100%);
+        border-radius: 16px;
+        padding: 18px 12px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 8px 20px -5px rgba(243, 156, 18, 0.3);
+        border: 3px solid #e67e22;
+        transition: transform 0.2s, box-shadow 0.2s;
+        height: 100%;
+        min-height: 120px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    
+    .kpi-inicial-naranja:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 30px -5px rgba(243, 156, 18, 0.4);
+    }
+    
+    .kpi-inicial-rojo {
+        background: linear-gradient(135deg, #922b21 0%, #e74c3c 100%);
+        border-radius: 16px;
+        padding: 18px 12px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 8px 20px -5px rgba(231, 76, 60, 0.3);
+        border: 3px solid #c0392b;
+        transition: transform 0.2s, box-shadow 0.2s;
+        height: 100%;
+        min-height: 120px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    
+    .kpi-inicial-rojo:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 30px -5px rgba(231, 76, 60, 0.4);
+    }
+    
+    .kpi-inicial-morado {
+        background: linear-gradient(135deg, #6c3483 0%, #af7ac5 100%);
+        border-radius: 16px;
+        padding: 18px 12px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 8px 20px -5px rgba(175, 122, 197, 0.3);
+        border: 3px solid #8e44ad;
+        transition: transform 0.2s, box-shadow 0.2s;
+        height: 100%;
+        min-height: 120px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    
+    .kpi-inicial-morado:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 30px -5px rgba(175, 122, 197, 0.4);
+    }
+    
+    .kpi-inicial .label {
+        font-size: 0.8rem;
+        opacity: 0.95;
+        letter-spacing: 0.3px;
+        font-weight: 500;
+    }
+    
+    .kpi-inicial .value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-top: 6px;
+        letter-spacing: 0.3px;
+        font-family: 'Courier New', monospace;
+    }
+    
+    .kpi-inicial .icon {
+        font-size: 1.2rem;
+        margin-bottom: 2px;
     }
     
     .dataframe {
@@ -515,6 +641,39 @@ def mostrar_tabla_activos_pasivos(inventario, cx_c, bancos, cx_p, transito, capi
     </table>
     """
     return html
+
+# ============================================================
+# FUNCIÓN PARA MOSTRAR KPI INICIAL
+# ============================================================
+def mostrar_kpi_inicial(col, titulo, valor, color, icono):
+    """
+    Muestra un KPI de saldo inicial con color personalizado
+    """
+    # Determinar la clase CSS según el color
+    if color == "verde":
+        clase = "kpi-inicial-verde"
+    elif color == "azul":
+        clase = "kpi-inicial-azul"
+    elif color == "naranja":
+        clase = "kpi-inicial-naranja"
+    elif color == "rojo":
+        clase = "kpi-inicial-rojo"
+    elif color == "morado":
+        clase = "kpi-inicial-morado"
+    else:
+        clase = "kpi-inicial-default"
+    
+    valor_formateado = formato_venezolano(valor)
+    
+    html = f"""
+    <div class="{clase}">
+        <div class="icon">{icono}</div>
+        <div class="label">{titulo}</div>
+        <div class="value">{valor_formateado}</div>
+    </div>
+    """
+    with col:
+        st.markdown(html, unsafe_allow_html=True)
 
 # ============================================================
 # LOGIN CON LOGO Y TÍTULO CENTRADO
@@ -928,87 +1087,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     # Crear 5 columnas para los 5 KPIs
     col_kpi_inv, col_kpi_cxc, col_kpi_ban, col_kpi_cxp, col_kpi_tran = st.columns(5)
 
-    # Función para crear KPI con color y borde
-    def mostrar_kpi_inicial(col, titulo, valor, color, icono):
-        """
-        Muestra un KPI de saldo inicial con color personalizado
-        """
-        # Determinar la clase CSS según el color
-        if color == "verde":
-            clase = "kpi-inicial-verde"
-            borde = "#27ae60"
-            fondo = "linear-gradient(135deg, #1a8a4a 0%, #2ecc71 100%)"
-        elif color == "azul":
-            clase = "kpi-inicial-azul"
-            borde = "#2980b9"
-            fondo = "linear-gradient(135deg, #1a5276 0%, #3498db 100%)"
-        elif color == "naranja":
-            clase = "kpi-inicial-naranja"
-            borde = "#e67e22"
-            fondo = "linear-gradient(135deg, #d35400 0%, #f39c12 100%)"
-        elif color == "rojo":
-            clase = "kpi-inicial-rojo"
-            borde = "#c0392b"
-            fondo = "linear-gradient(135deg, #922b21 0%, #e74c3c 100%)"
-        elif color == "morado":
-            clase = "kpi-inicial-morado"
-            borde = "#8e44ad"
-            fondo = "linear-gradient(135deg, #6c3483 0%, #af7ac5 100%)"
-        else:
-            clase = "kpi-inicial-default"
-            borde = "#667eea"
-            fondo = "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-        
-        valor_formateado = formato_venezolano(valor)
-        
-        html = f"""
-        <style>
-            .{clase} {{
-                background: {fondo};
-                border-radius: 16px;
-                padding: 18px 12px;
-                text-align: center;
-                color: white;
-                box-shadow: 0 8px 20px -5px rgba(0,0,0,0.15);
-                border: 3px solid {borde};
-                transition: transform 0.2s, box-shadow 0.2s;
-                height: 100%;
-                min-height: 120px;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-            }}
-            .{clase}:hover {{
-                transform: translateY(-3px);
-                box-shadow: 0 12px 30px -5px rgba(0,0,0,0.25);
-            }}
-            .{clase} .label {{
-                font-size: 0.8rem;
-                opacity: 0.95;
-                letter-spacing: 0.3px;
-                font-weight: 500;
-            }}
-            .{clase} .value {{
-                font-size: 1.5rem;
-                font-weight: 700;
-                margin-top: 6px;
-                letter-spacing: 0.3px;
-                font-family: 'Courier New', monospace;
-            }}
-            .{clase} .icon {{
-                font-size: 1.2rem;
-                margin-bottom: 2px;
-            }}
-        </style>
-        <div class="{clase}">
-            <div class="icon">{icono}</div>
-            <div class="label">{titulo}</div>
-            <div class="value">{valor_formateado}</div>
-        </div>
-        """
-        with col:
-            st.markdown(html, unsafe_allow_html=True)
-
     # Mostrar los 5 KPIs con colores diferenciados
     with col_kpi_inv:
         mostrar_kpi_inicial(
@@ -1174,13 +1252,42 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         except Exception as e:
             st.warning(f"⚠️ Error al procesar notas de crédito proveedores: {str(e)}")
     
-    # PROCESAMIENTO DE MOVIMIENTOS
+    # ============================================================
+    # PROCESAMIENTO DE MOVIMIENTOS - CON FILTRO DE PROVEEDORES
+    # ============================================================
     try:
         facturacion, _, _, _ = ProcesadorArchivos.procesar_facturacion(df_facturacion)
         cobranzas, _, _ = ProcesadorArchivos.procesar_cobranzas(df_cobranzas)
-        pagos_proveedores, pagos_gastos, _, _ = ProcesadorArchivos.procesar_egresos(df_egresos)
         
-        saldo_inicial_bancos, ingresos_id, ingresos_no_id, egresos_bancarios, saldo_final, total_ingresos, total_egresos = ProcesadorArchivos.procesar_estado_cuenta(
+        # 🔥 PROCESAR EGRESOS CON FILTRO DE PROVEEDORES DE MERCANCIA
+        pagos_proveedores, pagos_gastos, total_egresos, df_proveedores = ProcesadorArchivos.procesar_egresos(df_egresos)
+        
+        # Mostrar detalle de proveedores filtrados
+        if not df_proveedores.empty:
+            with st.expander("📋 Detalle de PROVEEDORES DE MERCANCIA (filtrados)", expanded=False):
+                st.success(f"✅ Se encontraron {len(df_proveedores)} registros de PROVEEDORES DE MERCANCIA")
+                
+                # Mostrar el DataFrame con los proveedores filtrados
+                st.dataframe(df_proveedores, use_container_width=True)
+                
+                # Mostrar el total
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("💰 Pagos a Proveedores de Mercancía", formato_venezolano(pagos_proveedores))
+                with col2:
+                    st.metric("📦 Otros Gastos", formato_venezolano(pagos_gastos))
+        else:
+            st.warning("⚠️ No se encontraron registros de PROVEEDORES DE MERCANCIA en el archivo de egresos")
+            st.info("ℹ️ Asegúrate de que la columna D (Concepto) tenga 'PROVEEDORES DE MERCANCIA'")
+            
+            # Mostrar los conceptos disponibles para ayudar al usuario
+            if len(df_egresos.columns) >= 4:
+                col_concepto = df_egresos.columns[3]
+                conceptos_unicos = df_egresos[col_concepto].unique()
+                st.write("📌 Conceptos encontrados en el archivo:")
+                st.write(conceptos_unicos)
+        
+        saldo_inicial_bancos, ingresos_id, ingresos_no_id, egresos_bancarios, saldo_final, total_ingresos, total_egresos_banco = ProcesadorArchivos.procesar_estado_cuenta(
             df_estado_cuenta, st.session_state.saldos['bancos']
         )
     except Exception as e:
@@ -1205,7 +1312,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     ingresos_totales = ingresos_id + ingresos_no_id
     
     # ============================================================
-    # TABLA MOVIMIENTOS DEL DÍA
+    # TABLA MOVIMIENTOS DEL DÍA - ACTUALIZADA
     # ============================================================
     st.markdown("#### 📋 Movimientos del día procesados")
     
@@ -1215,7 +1322,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             "Costo de Facturación",
             "Cobranzas",
             "Recepción de Mercancía",
-            "Egresos iPago",
+            "Pagos a Proveedores de Mercancía",
+            "Otros Gastos",
             "Estado de Cuenta Bancario",
             "Transferencias en Tránsito"
         ],
@@ -1224,12 +1332,21 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             formato_venezolano(costo_facturacion),
             formato_venezolano(cobranzas),
             formato_venezolano(recepcion_total),
-            formato_venezolano(pagos_proveedores + pagos_gastos),
+            formato_venezolano(pagos_proveedores),
+            formato_venezolano(pagos_gastos),
             formato_venezolano(saldo_final),
             formato_venezolano(saldos_reportados.get('Transferencias en tránsito', 0))
         ]
     }
     st.dataframe(pd.DataFrame(mov_data), use_container_width=True, hide_index=True)
+    
+    # Mostrar resumen de egresos
+    st.info(f"""
+    📊 **Resumen de Egresos iPago:**
+    - 🏪 Proveedores de Mercancía: {formato_venezolano(pagos_proveedores)}
+    - 📦 Otros Gastos: {formato_venezolano(pagos_gastos)}
+    - 📌 Total Egresos: {formato_venezolano(total_egresos)}
+    """)
     
     st.markdown("---")
     
@@ -2139,8 +2256,8 @@ else:
         ### Egresos iPago
         | Fecha Pago | Proveedor | Tipo de Egreso | Monto | Referencia |
         |------------|-----------|----------------|-------|------------|
-        | 2026-06-15 | OLEICA | Proveedor | 2055920.65 | 0329208731225 |
-        | 2026-06-15 | HIDROBOLIVAR | Fijo | 36438.29 | 0429716006476 |
+        | 2026-06-15 | OLEICA | PROVEEDORES DE MERCANCIA | 2055920.65 | 0329208731225 |
+        | 2026-06-15 | HIDROBOLIVAR | GASTOS FIJOS | 36438.29 | 0429716006476 |
         
         ### Estado de cuenta bancario
         | Fecha | Referencia | Descripción | Crédito | Débito |
