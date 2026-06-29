@@ -875,84 +875,93 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         return ""
     
     # ============================================================
-    # TABLA COMPARATIVA CON REPORTADOS
+    # TABLA COMPARATIVA CON REPORTADOS - CON "INFORMACIÓN DÍA ANTERIOR"
     # ============================================================
     st.markdown("#### 📋 Comparación vs Valores Reportados")
-    
+
     # Obtener valores reportados
     inventario_reportado = saldos_reportados.get('Inventario')
     cx_c_reportado = saldos_reportados.get('Cuentas por cobrar')
     cx_p_reportado = saldos_reportados.get('Cuentas por pagar')
     transito_reportado = saldos_reportados.get('Transferencias en tránsito')
-    
+
+    # Obtener valores del día anterior (desde session_state)
+    inventario_anterior = safe_number(st.session_state.saldos.get('inventario', 0))
+    cx_c_anterior = safe_number(st.session_state.saldos.get('cx_c', 0))
+    bancos_anterior = safe_number(st.session_state.saldos.get('bancos', 0))
+    cx_p_anterior = safe_number(st.session_state.saldos.get('cx_p', 0))
+    transito_anterior = safe_number(st.session_state.saldos.get('transito', 0))
+
     resultados_data = []
-    
+
     # Inventario
-    diff_inventario = inventario_calculado - (inventario_reportado if inventario_reportado is not None else 0)
     resultados_data.append({
         "Cuenta": "Inventario",
         "Fórmula": "Inv. inicial + Recepción - Costo facturación",
+        "Información día anterior": formato_venezolano(inventario_anterior),
         "Calculado": formato_venezolano(inventario_calculado),
         "Reportado": formato_venezolano(inventario_reportado) if inventario_reportado is not None else "-",
         "Diferencia": formatear_diferencia(inventario_calculado, inventario_reportado),
         "Origen": explicar_diferencia("Inventario", inventario_calculado, inventario_reportado if inventario_reportado is not None else 0)
     })
-    
+
     # Cuentas por cobrar
-    diff_cx_c = cx_c_calculado - (cx_c_reportado if cx_c_reportado is not None else 0)
     resultados_data.append({
         "Cuenta": "Cuentas por cobrar",
         "Fórmula": "CxC inicial + Facturación - Cobranzas - Notas crédito clientes",
+        "Información día anterior": formato_venezolano(cx_c_anterior),
         "Calculado": formato_venezolano(cx_c_calculado),
         "Reportado": formato_venezolano(cx_c_reportado) if cx_c_reportado is not None else "-",
         "Diferencia": formatear_diferencia(cx_c_calculado, cx_c_reportado),
         "Origen": explicar_diferencia("Cuentas por cobrar", cx_c_calculado, cx_c_reportado if cx_c_reportado is not None else 0)
     })
-    
+
     # Bancos
     resultados_data.append({
         "Cuenta": "Bancos",
         "Fórmula": "Bancos inicial + Ingresos - (Pagos proveedores + Gastos)",
+        "Información día anterior": formato_venezolano(bancos_anterior),
         "Calculado": formato_venezolano(bancos_calculado),
         "Reportado": "-",
         "Diferencia": "-",
         "Origen": "Tomado del estado de cuenta"
     })
-    
+
     # Cuentas por pagar
-    diff_cx_p = cx_p_calculado - (cx_p_reportado if cx_p_reportado is not None else 0)
     resultados_data.append({
         "Cuenta": "Cuentas por pagar",
         "Fórmula": "CxP inicial + Recepciones - Pagos proveedores",
+        "Información día anterior": formato_venezolano(cx_p_anterior),
         "Calculado": formato_venezolano(cx_p_calculado),
         "Reportado": formato_venezolano(cx_p_reportado) if cx_p_reportado is not None else "-",
         "Diferencia": formatear_diferencia(cx_p_calculado, cx_p_reportado),
         "Origen": explicar_diferencia("Cuentas por pagar", cx_p_calculado, cx_p_reportado if cx_p_reportado is not None else 0)
     })
-    
+
     # Transferencias en tránsito
-    diff_transito = transito_calculado - (transito_reportado if transito_reportado is not None else 0)
     resultados_data.append({
         "Cuenta": "Transferencias en tránsito",
         "Fórmula": "Tránsito inicial + Ingresos del día - Cobranzas",
+        "Información día anterior": formato_venezolano(transito_anterior),
         "Calculado": formato_venezolano(transito_calculado),
         "Reportado": formato_venezolano(transito_reportado) if transito_reportado is not None else "-",
         "Diferencia": formatear_diferencia(transito_calculado, transito_reportado),
         "Origen": explicar_diferencia("Transferencias en tránsito", transito_calculado, transito_reportado if transito_reportado is not None else 0)
     })
-    
+
     # Capital de Trabajo Neto
     resultados_data.append({
         "Cuenta": "Capital de Trabajo Neto",
         "Fórmula": "(Inv + CxC + Bancos) - (CxP + Tránsito)",
+        "Información día anterior": "-",
         "Calculado": formato_venezolano(capital_calculado),
         "Reportado": "-",
         "Diferencia": "-",
         "Origen": "Calculado automáticamente"
     })
-    
+
     st.dataframe(pd.DataFrame(resultados_data), use_container_width=True, hide_index=True)
-    
+
     st.markdown("---")
     
     # ============================================================
