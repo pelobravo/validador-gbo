@@ -228,6 +228,39 @@ class Database:
         conn.close()
         return df
     
+    # ============================================================
+    # 🔥 NUEVO MÉTODO: OBTENER HISTORIAL POR RANGO DE FECHAS
+    # ============================================================
+    def obtener_historial_por_fechas(self, fecha_desde, fecha_hasta):
+        """
+        Obtiene el historial de saldos en un rango de fechas
+        
+        Args:
+            fecha_desde (str): Fecha de inicio en formato YYYY-MM-DD
+            fecha_hasta (str): Fecha de fin en formato YYYY-MM-DD
+        
+        Returns:
+            DataFrame: Historial de saldos en el rango de fechas
+        """
+        conn = sqlite3.connect(self.db_path)
+        df = pd.read_sql_query(
+            """SELECT 
+                fecha, 
+                inventario, 
+                cx_c, 
+                bancos, 
+                cx_p, 
+                transito, 
+                capital,
+                created_at
+            FROM saldos_diarios 
+            WHERE fecha BETWEEN ? AND ?
+            ORDER BY fecha DESC""",
+            conn, params=[fecha_desde, fecha_hasta]
+        )
+        conn.close()
+        return df
+    
     def obtener_inconsistencias(self, fecha=None):
         """Obtiene las inconsistencias registradas"""
         conn = sqlite3.connect(self.db_path)
