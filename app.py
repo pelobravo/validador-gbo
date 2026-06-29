@@ -1,4 +1,4 @@
-# app.py - Con campos para saldos iniciales manuales - VERSIÓN COMPLETA CON CIERRE DIARIO (SOLO ARCHIVOS DE VERIFICACIÓN)
+# app.py - Con campos para saldos iniciales manuales - VERSIÓN COMPLETA CON CIERRE DIARIO Y VISUALIZACIÓN DE ARCHIVOS
 
 import streamlit as st
 import pandas as pd
@@ -9,6 +9,7 @@ from PIL import Image
 import io
 import numpy as np
 import re
+import matplotlib.pyplot as plt
 
 # Importar módulos del sistema
 from config import USUARIOS, validar_carpetas
@@ -69,6 +70,41 @@ def formato_venezolano_desde_str(valor_str):
         return 0
 
 # ============================================================
+# FUNCIÓN PARA MOSTRAR ARCHIVO CON FORMATO
+# ============================================================
+def mostrar_archivo_con_formato(df, nombre_archivo, titulo):
+    """
+    Muestra un DataFrame con formato mejorado y estadísticas básicas
+    """
+    if df is None or df.empty:
+        st.warning(f"⚠️ El archivo {nombre_archivo} está vacío")
+        return
+    
+    with st.expander(f"📄 {titulo} - {nombre_archivo}", expanded=False):
+        # Mostrar estadísticas básicas
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("📊 Filas", len(df))
+        with col2:
+            st.metric("📋 Columnas", len(df.columns))
+        with col3:
+            # Intentar mostrar el total si hay una columna de montos
+            columnas_numericas = df.select_dtypes(include=['number']).columns
+            if len(columnas_numericas) > 0:
+                total = df[columnas_numericas[0]].sum()
+                st.metric("💰 Total", formato_venezolano(total))
+        
+        # Mostrar el DataFrame completo con estilo
+        st.dataframe(
+            df.style.background_gradient(subset=columnas_numericas, cmap='Blues', low=0.1, high=0.9),
+            use_container_width=True,
+            height=400
+        )
+        
+        # Mostrar nombres de columnas
+        st.caption(f"📌 Columnas: {', '.join(df.columns)}")
+
+# ============================================================
 # FUNCIÓN HELPER PARA VALORES SEGUROS
 # ============================================================
 def safe_number(value, default=0):
@@ -102,6 +138,12 @@ st.markdown("""
         text-align: center;
         color: white;
         box-shadow: 0 10px 25px -5px rgba(102, 126, 234, 0.3);
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+    
+    .kpi-card:hover {
+        transform: translateY(-3px);
     }
     
     .kpi-card .label {
@@ -197,6 +239,15 @@ st.markdown("""
         height: 2px;
         border: none;
     }
+    
+    .popover-hint {
+        color: #667eea;
+        font-size: 0.8rem;
+        text-align: center;
+        margin-top: -5px;
+        margin-bottom: 10px;
+        opacity: 0.7;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -238,6 +289,8 @@ if 'mostrar_historial' not in st.session_state:
     st.session_state.mostrar_historial = False
 if 'historial_data' not in st.session_state:
     st.session_state.historial_data = None
+if 'archivos_cargados' not in st.session_state:
+    st.session_state.archivos_cargados = {}
 
 # ============================================================
 # FUNCIONES AUXILIARES
@@ -712,7 +765,6 @@ if st.session_state.get('mostrar_historial', False) and st.session_state.get('hi
         # Gráfico de evolución del capital
         if 'capital' in historial.columns and len(historial) > 1:
             try:
-                import matplotlib.pyplot as plt
                 fig, ax = plt.subplots(figsize=(10, 4))
                 historial_ordenado = historial.sort_values('fecha')
                 ax.plot(historial_ordenado['fecha'], historial_ordenado['capital'], marker='o', linewidth=2, color='#667eea')
@@ -797,12 +849,21 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     
     st.markdown("---")
     
-    # Leer archivos de movimientos
+    # ============================================================
+    # LECTURA DE ARCHIVOS DE MOVIMIENTOS CON VISUALIZACIÓN
+    # ============================================================
     try:
         df_facturacion = pd.read_excel(archivo_facturacion)
+        mostrar_archivo_con_formato(df_facturacion, archivo_facturacion.name, "Facturación Diaria")
+        
         df_cobranzas = pd.read_excel(archivo_cobranzas)
+        mostrar_archivo_con_formato(df_cobranzas, archivo_cobranzas.name, "Cobranzas Procesadas")
+        
         df_egresos = pd.read_excel(archivo_egresos)
+        mostrar_archivo_con_formato(df_egresos, archivo_egresos.name, "Egresos iPago")
+        
         df_estado_cuenta = pd.read_excel(archivo_estado_cuenta)
+        mostrar_archivo_con_formato(df_estado_cuenta, archivo_estado_cuenta.name, "Estado de Cuenta Bancario")
     except Exception as e:
         st.error(f"❌ Error al leer archivos Excel: {str(e)}")
         st.stop()
@@ -815,6 +876,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     if archivo_recepciones:
         try:
             df_recepciones = pd.read_excel(archivo_recepciones)
+            mostrar_archivo_con_formato(df_recepciones, archivo_recepciones.name, "Recepción de Mercancía")
             recepcion_total, compras_credito, _, _ = ProcesadorArchivos.procesar_recepciones(df_recepciones)
             st.info(f"✅ Recepción de mercancía procesada: {formato_venezolano(recepcion_total)}")
         except Exception as e:
@@ -829,6 +891,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     if archivo_costo_facturacion:
         try:
             df_costo = pd.read_excel(archivo_costo_facturacion)
+            mostrar_archivo_con_formato(df_costo, archivo_costo_facturacion.name, "Costo de Facturación")
             costo_facturacion = ProcesadorArchivos.procesar_costo_facturacion(df_costo)
             st.success(f"✅ Costo de facturación cargado: {formato_venezolano(costo_facturacion)}")
         except Exception as e:
@@ -836,36 +899,51 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     else:
         st.info("ℹ️ No se cargó archivo de costo de facturación. El costo se mantendrá en 0.")
     
-    # Archivos de verificación
+    # ============================================================
+    # ARCHIVOS DE VERIFICACIÓN - CON VISUALIZACIÓN
+    # ============================================================
     saldos_reportados = {}
+    archivos_cargados = {}
     
+    # --- CUENTAS POR COBRAR ---
     if archivo_cxc_reportado:
         try:
             df_cxc_rep = pd.read_excel(archivo_cxc_reportado)
             saldos_reportados['Cuentas por cobrar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxc_rep, 'cxc')
+            archivos_cargados['CxC'] = df_cxc_rep
+            mostrar_archivo_con_formato(df_cxc_rep, archivo_cxc_reportado.name, "Cuentas por Cobrar")
         except Exception as e:
             st.warning(f"⚠️ Error al leer CxC reportado: {str(e)}")
     
+    # --- CUENTAS POR PAGAR ---
     if archivo_cxp_reportado:
         try:
             df_cxp_rep = pd.read_excel(archivo_cxp_reportado)
             saldos_reportados['Cuentas por pagar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxp_rep, 'cxp')
+            archivos_cargados['CxP'] = df_cxp_rep
+            mostrar_archivo_con_formato(df_cxp_rep, archivo_cxp_reportado.name, "Cuentas por Pagar")
         except Exception as e:
             st.warning(f"⚠️ Error al leer CxP reportado: {str(e)}")
     
+    # --- INVENTARIO ---
     if archivo_inventario_reportado:
         try:
             df_inv_rep = pd.read_excel(archivo_inventario_reportado)
             saldos_reportados['Inventario'] = ProcesadorArchivos.extraer_saldo_reportado(df_inv_rep, 'inventario')
+            archivos_cargados['Inventario'] = df_inv_rep
+            mostrar_archivo_con_formato(df_inv_rep, archivo_inventario_reportado.name, "Inventario")
         except Exception as e:
             st.warning(f"⚠️ Error al leer Inventario reportado: {str(e)}")
     
+    # --- TRANSFERENCIAS EN TRÁNSITO (TB) ---
     if archivo_tb:
         try:
             df_tb = pd.read_excel(archivo_tb)
             transito_reportado = extraer_transito_reportado(df_tb, st.session_state.saldos['transito'])
             if transito_reportado is not None:
                 saldos_reportados['Transferencias en tránsito'] = transito_reportado
+                archivos_cargados['Tránsito'] = df_tb
+                mostrar_archivo_con_formato(df_tb, archivo_tb.name, "Transferencias en Tránsito")
         except Exception as e:
             st.warning(f"⚠️ Error al leer TB.xlsx: {str(e)}")
     
@@ -874,6 +952,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     if archivo_notas_credito_cliente:
         try:
             df_notas_cliente = pd.read_excel(archivo_notas_credito_cliente)
+            mostrar_archivo_con_formato(df_notas_cliente, archivo_notas_credito_cliente.name, "Notas de Crédito Clientes")
             notas_credito_cliente, _, _ = ProcesadorArchivos.procesar_notas_credito(df_notas_cliente)
         except Exception as e:
             st.warning(f"⚠️ Error al procesar notas de crédito clientes: {str(e)}")
@@ -882,6 +961,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     if archivo_notas_credito_proveedor:
         try:
             df_notas_proveedor = pd.read_excel(archivo_notas_credito_proveedor)
+            mostrar_archivo_con_formato(df_notas_proveedor, archivo_notas_credito_proveedor.name, "Notas de Crédito Proveedores")
             notas_credito_proveedor, _, _ = ProcesadorArchivos.procesar_notas_credito(df_notas_proveedor)
         except Exception as e:
             st.warning(f"⚠️ Error al procesar notas de crédito proveedores: {str(e)}")
@@ -1116,6 +1196,35 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     # Mostrar tabla de comparación
     df_comparacion = pd.DataFrame(resultados_data)
     st.dataframe(df_comparacion, use_container_width=True, hide_index=True)
+
+    # ============================================================
+    # 🔥 BOTONES PARA VER ARCHIVOS ORIGINALES
+    # ============================================================
+    st.markdown("---")
+    st.markdown("#### 📂 Ver archivos originales")
+    st.caption("💡 Haz clic en los botones para ver el contenido completo de cada archivo")
+
+    # Crear una fila de botones para ver cada archivo
+    archivos_verificacion = [
+        ("CxC", archivo_cxc_reportado, "Cuentas por cobrar"),
+        ("Inventario", archivo_inventario_reportado, "Inventario"),
+        ("CxP", archivo_cxp_reportado, "Cuentas por pagar"),
+        ("Tránsito", archivo_tb, "Transferencias en tránsito")
+    ]
+
+    cols = st.columns(4)
+    for col, (nombre, archivo, titulo) in zip(cols, archivos_verificacion):
+        with col:
+            if archivo and archivos_cargados.get(titulo) is not None:
+                if st.button(f"📄 Ver {nombre}", key=f"btn_{nombre}", use_container_width=True):
+                    # Mostrar el DataFrame en un expander
+                    mostrar_archivo_con_formato(
+                        archivos_cargados[titulo], 
+                        archivo.name, 
+                        f"Archivo {titulo}"
+                    )
+            else:
+                st.button(f"❌ {nombre} no cargado", disabled=True, use_container_width=True)
 
     # ============================================================
     # 🔥 FORMULARIO DE AJUSTES
@@ -1474,34 +1583,81 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         """)
 
     # ============================================================
-    # 7. RESUMEN DEL CIERRE DIARIO
+    # 7. RESUMEN DEL CIERRE DIARIO - CON KPIS CLICABLES
     # ============================================================
     st.markdown("---")
     st.markdown("#### 📊 Resumen del Cierre Diario")
+    st.caption("💡 Haz clic en cada KPI para ver su composición detallada")
 
     col_c1, col_c2, col_c3 = st.columns(3)
 
     with col_c1:
-        st.metric(
-            "📈 Activos Operativos",
-            formato_venezolano(activos_operativos),
-            help="CxC + Inventario + Bancos"
-        )
+        # KPI de Activos con popover
+        with st.popover("📈 Ver detalle de Activos", use_container_width=True):
+            st.markdown("##### Composición de Activos Operativos")
+            st.markdown(f"""
+            | Concepto | Monto | Archivo Origen |
+            |----------|-------|----------------|
+            | **Cuentas por cobrar** | {formato_venezolano(cx_c_cierre)} | {'✅ Cargado' if archivo_cxc_reportado else '❌ No disponible'} |
+            | **Inventario** | {formato_venezolano(inventario_cierre)} | {'✅ Cargado' if archivo_inventario_reportado else '❌ No disponible'} |
+            | **Bancos** | {formato_venezolano(bancos_cierre)} | ✅ Estado de cuenta |
+            | **TOTAL ACTIVOS** | **{formato_venezolano(activos_operativos)}** |  |
+            """)
+            st.caption("✅ Valores tomados de los archivos de verificación.")
+            
+            # Mostrar gráfico de barras si hay datos
+            if cx_c_cierre > 0 or inventario_cierre > 0 or bancos_cierre > 0:
+                fig, ax = plt.subplots(figsize=(6, 3))
+                componentes = ['CxC', 'Inventario', 'Bancos']
+                valores = [cx_c_cierre, inventario_cierre, bancos_cierre]
+                colores = ['#17a2b8', '#28a745', '#ffc107']
+                ax.bar(componentes, valores, color=colores)
+                ax.set_title('Composición de Activos', fontsize=10)
+                ax.set_ylabel('Monto (Bs.)')
+                plt.tight_layout()
+                st.pyplot(fig)
+        
+        st.metric("📈 Activos Operativos", formato_venezolano(activos_operativos))
 
     with col_c2:
-        st.metric(
-            "📉 Pasivos Operativos",
-            formato_venezolano(pasivos_operativos),
-            help="CxP + Transferencias en tránsito"
-        )
+        # KPI de Pasivos con popover
+        with st.popover("📉 Ver detalle de Pasivos", use_container_width=True):
+            st.markdown("##### Composición de Pasivos Operativos")
+            st.markdown(f"""
+            | Concepto | Monto | Archivo Origen |
+            |----------|-------|----------------|
+            | **Cuentas por pagar** | {formato_venezolano(cx_p_cierre)} | {'✅ Cargado' if archivo_cxp_reportado else '❌ No disponible'} |
+            | **Transferencias en tránsito** | {formato_venezolano(transito_cierre)} | {'✅ Cargado' if archivo_tb else '❌ No disponible'} |
+            | **TOTAL PASIVOS** | **{formato_venezolano(pasivos_operativos)}** |  |
+            """)
+            st.caption("✅ Valores tomados de los archivos de verificación.")
+        
+        st.metric("📉 Pasivos Operativos", formato_venezolano(pasivos_operativos))
 
     with col_c3:
         signo = "✅" if capital_neto >= 0 else "❌"
-        st.metric(
-            f"{signo} Capital de Trabajo Neto",
-            formato_venezolano(capital_neto),
-            delta_color="normal" if capital_neto >= 0 else "inverse"
-        )
+        # KPI de Capital con popover
+        with st.popover("🏁 Ver detalle del Capital", use_container_width=True):
+            st.markdown("##### Cálculo del Capital de Trabajo Neto")
+            st.markdown(f"""
+            | Concepto | Fórmula | Monto |
+            |----------|---------|-------|
+            | **Activos Operativos** | CxC + Inv. + Bancos | {formato_venezolano(activos_operativos)} |
+            | **Pasivos Operativos** | CxP + Tránsito | {formato_venezolano(pasivos_operativos)} |
+            | **CAPITAL DE TRABAJO NETO** | Activos - Pasivos | **{formato_venezolano(capital_neto)}** |
+            """)
+            
+            # Mostrar relación Activos vs Pasivos
+            if pasivos_operativos > 0:
+                ratio = activos_operativos / pasivos_operativos
+                st.metric("📊 Ratio Activos/Pasivos", f"{ratio:.2f}x")
+            
+            if capital_neto >= 0:
+                st.success(f"✅ Capital de Trabajo Neto POSITIVO: {formato_venezolano(capital_neto)}")
+            else:
+                st.error(f"❌ Capital de Trabajo Neto NEGATIVO: {formato_venezolano(capital_neto)}")
+        
+        st.metric(f"{signo} Capital de Trabajo Neto", formato_venezolano(capital_neto))
 
     # ============================================================
     # 8. DETALLE DE LA VALIDACIÓN (DESPLEGABLE)
@@ -1649,7 +1805,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             historial = db.obtener_historial_saldos_completo(30)
             if not historial.empty and len(historial) > 1:
                 try:
-                    import matplotlib.pyplot as plt
                     historial_ordenado = historial.sort_values('fecha')
                     
                     fig, axes = plt.subplots(2, 1, figsize=(12, 8))
