@@ -895,11 +895,11 @@ with st.sidebar:
     
     st.markdown("#### 📂 Archivos del día")
     
-    archivo_facturacion = st.file_uploader("Facturación diaria", type=["xlsx", "xls"], key="fact")
-    archivo_cobranzas = st.file_uploader("Cobranzas procesadas", type=["xlsx", "xls"], key="cob")
-    archivo_recepciones = st.file_uploader("Recepciones del día (OPCIONAL)", type=["xlsx", "xls"], key="rec")
-    archivo_egresos = st.file_uploader("Egresos iPago", type=["xlsx", "xls"], key="egr")
-    archivo_estado_cuenta = st.file_uploader("Estado de cuenta bancario", type=["xlsx", "xls"], key="estado")
+    archivo_facturacion = st.file_uploader("Facturación diaria", type=["xlsx", "xls"], key="fact", help="Suba el archivo de ventas/facturación del día")
+    archivo_cobranzas = st.file_uploader("Cobranzas procesadas", type=["xlsx", "xls"], key="cob", help="Suba el archivo de cobranzas procesadas")
+    archivo_recepciones = st.file_uploader("Recepciones del día (OPCIONAL)", type=["xlsx", "xls"], key="rec", help="Suba el archivo de recepciones de mercancía si aplica")
+    archivo_egresos = st.file_uploader("Pago de proveedores de mercancía", type=["xlsx", "xls"], key="egr", help="Suba el archivo de egresos/pagos a proveedores")
+    archivo_estado_cuenta = st.file_uploader("Estado de cuenta bancario", type=["xlsx", "xls"], key="estado", help="Suba el estado de cuenta bancario del día")
     archivo_notas_credito_cliente = st.file_uploader("Notas de crédito (clientes)", type=["xlsx", "xls"], key="notas_cliente")
     archivo_notas_credito_proveedor = st.file_uploader("Notas de crédito (proveedores)", type=["xlsx", "xls"], key="notas_proveedor")
     
@@ -966,14 +966,24 @@ if st.session_state.get('mostrar_historial', False) and st.session_state.get('hi
         
         if 'capital' in historial.columns and len(historial) > 1:
             try:
-                fig, ax = plt.subplots(figsize=(10, 4))
+                fig, ax = plt.subplots(figsize=(10, 4.5))
+                fig.patch.set_facecolor('#f8f9fa')
+                ax.set_facecolor('#ffffff')
+                
                 historial_ordenado = historial.sort_values('fecha')
-                ax.plot(historial_ordenado['fecha'], historial_ordenado['capital'], marker='o', linewidth=2, color='#667eea')
-                ax.set_title('Evolución del Capital de Trabajo Neto', fontsize=14, fontweight='bold')
-                ax.set_xlabel('Fecha')
-                ax.set_ylabel('Capital (Bs.)')
-                ax.grid(True, alpha=0.3)
-                plt.xticks(rotation=45)
+                ax.plot(historial_ordenado['fecha'], historial_ordenado['capital'], marker='o', markersize=6, linewidth=2.5, color='#3498db', label='Capital Neto')
+                
+                ax.set_title('Evolución del Capital de Trabajo Neto', fontsize=12, fontweight='bold', color='#2c3e50', pad=15)
+                ax.set_xlabel('Fecha', fontsize=10, color='#2c3e50', labelpad=10)
+                ax.set_ylabel('Capital (Bs.)', fontsize=10, color='#2c3e50')
+                
+                ax.grid(True, linestyle='--', alpha=0.5, color='#cccccc')
+                ax.spines['top'].set_visible(False)
+                ax.spines['right'].set_visible(False)
+                ax.spines['left'].set_color('#cccccc')
+                ax.spines['bottom'].set_color('#cccccc')
+                
+                plt.xticks(rotation=45, ha='right')
                 plt.tight_layout()
                 st.pyplot(fig)
             except:
@@ -1058,7 +1068,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         mostrar_archivo_con_formato(df_cobranzas, archivo_cobranzas.name, "Cobranzas Procesadas")
         
         df_egresos = pd.read_excel(archivo_egresos)
-        mostrar_archivo_con_formato(df_egresos, archivo_egresos.name, "Egresos iPago")
+        mostrar_archivo_con_formato(df_egresos, archivo_egresos.name, "Pago de proveedores de mercancía")
         
         df_estado_cuenta = pd.read_excel(archivo_estado_cuenta)
         mostrar_archivo_con_formato(df_estado_cuenta, archivo_estado_cuenta.name, "Estado de Cuenta Bancario")
@@ -1187,8 +1197,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 with col2:
                     st.metric("📦 Otros Gastos", formato_venezolano(pagos_gastos))
         else:
-            st.warning("⚠️ No se encontraron registros de PROVEEDORES DE MERCANCIA en el archivo de egresos")
-            st.info("ℹ️ Asegúrate de que la columna 'Tipo de Pago' tenga 'PROVEEDORES DE MERCANCIA'")
+            st.warning("⚠️ No se encontraron registros de PROVEEDORES DE MERCANCIA en el archivo de pago de proveedores")
+            st.info("ℹ️ Asegúrate de que la columna 'Tipo de Pago' tenga exactamente 'PROVEEDORES DE MERCANCIA'")
             
             # Mostrar los tipos de pago disponibles para ayudar al usuario
             if len(df_egresos.columns) >= 4:
@@ -1251,7 +1261,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.dataframe(pd.DataFrame(mov_data), use_container_width=True, hide_index=True)
     
     st.info(f"""
-    📊 **Resumen de Egresos iPago:**
+    📊 **Resumen de Pago de proveedores de mercancía:**
     - 🏪 Proveedores de Mercancía: {formato_venezolano(pagos_proveedores)}
     - 📦 Otros Gastos: {formato_venezolano(pagos_gastos)}
     - 📌 Total Egresos: {formato_venezolano(total_egresos)}
@@ -1520,6 +1530,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 st.session_state.ajustes
             )
             
+            st.toast("✅ Ajustes guardados en la base de datos", icon="💾")
             st.success("✅ Ajustes guardados correctamente")
             st.rerun()
     
@@ -1670,6 +1681,25 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
 
     styled_df = df_cierre.style.apply(color_cierre_rows, axis=1).hide(axis='index')
     st.dataframe(styled_df, use_container_width=True)
+
+    # Botón para descargar el Cierre Diario en Excel (Mejora Premium)
+    try:
+        output_excel = io.BytesIO()
+        with pd.ExcelWriter(output_excel, engine='openpyxl') as writer:
+            df_excel = df_cierre.drop(columns=['Tipo'])
+            df_excel.to_excel(writer, index=False, sheet_name='Cierre Diario')
+        excel_data = output_excel.getvalue()
+        
+        st.download_button(
+            label="📥 Descargar Reporte de Cierre (Excel)",
+            data=excel_data,
+            file_name=f"cierre_diario_{fecha_procesar.strftime('%Y-%m-%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            help="Descarga el balance del Cierre Diario en un archivo Excel"
+        )
+    except Exception as e:
+        st.caption(f"No se pudo generar el botón de descarga: {str(e)}")
 
     with st.expander("📂 Ver origen detallado de cada archivo", expanded=False):
         st.markdown("""
@@ -1957,6 +1987,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             st.session_state.saldos['transito'] = transito_final
             st.session_state.saldos['capital_anterior'] = capital_calculado
             
+            st.toast("✅ Saldos de cierre guardados y listos para el día siguiente", icon="💾")
             st.success("✅ Saldos guardados correctamente")
     
     with col_btn2:
@@ -1966,28 +1997,39 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 try:
                     historial_ordenado = historial.sort_values('fecha')
                     
-                    fig, axes = plt.subplots(2, 1, figsize=(12, 8))
+                    fig, axes = plt.subplots(2, 1, figsize=(12, 9))
+                    fig.patch.set_facecolor('#f8f9fa')
                     
+                    # Gráfico 1: Capital Neto
+                    axes[0].set_facecolor('#ffffff')
                     axes[0].plot(historial_ordenado['fecha'], historial_ordenado['capital'], 
-                                marker='o', linewidth=2, color='#667eea')
-                    axes[0].set_title('Evolución del Capital de Trabajo Neto', fontsize=14, fontweight='bold')
-                    axes[0].set_xlabel('Fecha')
-                    axes[0].set_ylabel('Capital (Bs.)')
-                    axes[0].grid(True, alpha=0.3)
-                    axes[0].tick_params(axis='x', rotation=45)
+                                marker='o', markersize=6, linewidth=2.5, color='#3498db')
+                    axes[0].set_title('Evolución del Capital de Trabajo Neto', fontsize=12, fontweight='bold', color='#2c3e50', pad=10)
+                    axes[0].set_ylabel('Capital (Bs.)', color='#2c3e50')
+                    axes[0].grid(True, linestyle='--', alpha=0.5, color='#cccccc')
+                    axes[0].spines['top'].set_visible(False)
+                    axes[0].spines['right'].set_visible(False)
+                    axes[0].spines['left'].set_color('#cccccc')
+                    axes[0].spines['bottom'].set_color('#cccccc')
+                    axes[0].tick_params(axis='x', rotation=30)
                     
+                    # Gráfico 2: Componentes
+                    axes[1].set_facecolor('#ffffff')
                     axes[1].plot(historial_ordenado['fecha'], historial_ordenado['inventario'], 
-                                marker='s', linewidth=2, label='Inventario', color='#28a745')
+                                marker='s', markersize=5, linewidth=2, label='Inventario', color='#2ecc71')
                     axes[1].plot(historial_ordenado['fecha'], historial_ordenado['cx_c'], 
-                                marker='^', linewidth=2, label='CxC', color='#17a2b8')
+                                marker='^', markersize=5, linewidth=2, label='CxC', color='#1abc9c')
                     axes[1].plot(historial_ordenado['fecha'], historial_ordenado['bancos'], 
-                                marker='d', linewidth=2, label='Bancos', color='#ffc107')
-                    axes[1].set_title('Evolución de Componentes del Capital', fontsize=14, fontweight='bold')
-                    axes[1].set_xlabel('Fecha')
-                    axes[1].set_ylabel('Monto (Bs.)')
-                    axes[1].legend()
-                    axes[1].grid(True, alpha=0.3)
-                    axes[1].tick_params(axis='x', rotation=45)
+                                marker='d', markersize=5, linewidth=2, label='Bancos', color='#f39c12')
+                    axes[1].set_title('Evolución de Componentes del Capital', fontsize=12, fontweight='bold', color='#2c3e50', pad=10)
+                    axes[1].set_ylabel('Monto (Bs.)', color='#2c3e50')
+                    axes[1].legend(frameon=True, facecolor='#ffffff', edgecolor='#cccccc')
+                    axes[1].grid(True, linestyle='--', alpha=0.5, color='#cccccc')
+                    axes[1].spines['top'].set_visible(False)
+                    axes[1].spines['right'].set_visible(False)
+                    axes[1].spines['left'].set_color('#cccccc')
+                    axes[1].spines['bottom'].set_color('#cccccc')
+                    axes[1].tick_params(axis='x', rotation=30)
                     
                     plt.tight_layout()
                     st.pyplot(fig)
@@ -2008,7 +2050,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         | Cobranzas | Disminuye CxC / Aumenta bancos |
         | Notas de crédito (clientes) | Disminuye CxC |
         | Notas de crédito (proveedores) | Disminuye CxP |
-        | Egresos iPago | Disminuye bancos |
+        | Pago de proveedores de mercancía | Disminuye bancos |
         | Estado de Cuenta Bancario | Determina saldo final bancario |
         | Transferencias en tránsito | Se toma desde TB |
         
@@ -2031,7 +2073,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
 
 else:
     st.info("👈 Carga los archivos obligatorios del día en la barra lateral para comenzar la validación")
-    st.info("📌 **Archivos obligatorios:** Facturación, Cobranzas, Egresos iPago y Estado de Cuenta")
+    st.info("📌 **Archivos obligatorios:** Facturación, Cobranzas, Pago de proveedores de mercancía y Estado de Cuenta")
     st.info("ℹ️ **Archivos opcionales:** Recepción de mercancía, Notas de crédito, Costo de facturación")
     
     with st.expander("📋 Formatos esperados de los archivos"):
@@ -2053,7 +2095,7 @@ else:
         | 0000000587 | MOLINOS NACIONALES | 15/06/2026 | 21612.5 |
         | Total General: | | | 21612.5 |
         
-        ### Egresos iPago
+        ### Pago de proveedores de mercancía
         | Fecha Pago | Empresa | Proveedor | Tipo de Pago | Tipo de Egreso | Cuenta | Monto | Monto USD |
         |------------|---------|-----------|--------------|----------------|--------|-------|-----------|
         | 2026-06-17 | CORPORACION GUAYANA | MOLINOS NACIONALES | PROVEEDORES DE MERCANCIA | Proveedor | BODEGUITA GUAYANA | 5967800 | 10000.00 |
