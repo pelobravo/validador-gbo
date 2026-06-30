@@ -980,7 +980,7 @@ else:
     st.sidebar.info("📌 No hay saldos previos. Ingrese los saldos manualmente o guarde al finalizar el día.")
 
 # ============================================================
-# SIDEBAR CORPORATIVA - DISEÑO MEJORADO
+# SIDEBAR CORPORATIVA
 # ============================================================
 with st.sidebar:
     st.markdown("""
@@ -1165,7 +1165,7 @@ with st.sidebar:
     st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
     
     # ============================================================
-    # SECCIÓN: ARCHIVOS - DISTRIBUCIÓN MEJORADA
+    # SECCIÓN: ARCHIVOS
     # ============================================================
     st.markdown('<div class="sidebar-section-title">📂 Archivos del Día</div>', unsafe_allow_html=True)
     
@@ -1333,10 +1333,10 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             """)
     
     # ============================================================
-    # 🔥 SALDOS INICIALES - KPIs CORPORATIVOS (CORREGIDO)
+    # SALDOS INICIALES - KPIs CORPORATIVOS (CORREGIDO)
     # ============================================================
-    st.markdown("#### 📌 Saldos Iniciales")
-    st.caption("💡 Estos son los saldos del día anterior (desde la base de datos)")
+    st.markdown("#### 📌 Saldos Iniciales (Día Anterior)")
+    st.caption("💡 Estos son los saldos que vienen del día anterior")
 
     col_kpi_inv, col_kpi_cxc, col_kpi_ban, col_kpi_cxp, col_kpi_tran = st.columns(5)
 
@@ -1345,10 +1345,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     with col_kpi_cxc:
         mostrar_kpi_inicial(col_kpi_cxc, "Cuentas por Cobrar", st.session_state.saldos['cx_c'], "azul", "💰")
     with col_kpi_ban:
-        # 🔥 CORREGIDO: Usa el saldo inicial del estado de cuenta si está disponible
-        # Si saldo_inicial_bancos es 0 (no se cargó archivo), usa el valor guardado
-        valor_bancos = saldo_inicial_bancos if saldo_inicial_bancos > 0 else st.session_state.saldos['bancos']
-        mostrar_kpi_inicial(col_kpi_ban, "Bancos", valor_bancos, "naranja", "🏦")
+        # 🔥 CORREGIDO: Usa el valor guardado en la base de datos
+        mostrar_kpi_inicial(col_kpi_ban, "Bancos", st.session_state.saldos['bancos'], "naranja", "🏦")
     with col_kpi_cxp:
         mostrar_kpi_inicial(col_kpi_cxp, "Cuentas por Pagar", st.session_state.saldos['cx_p'], "rojo", "📋")
     with col_kpi_tran:
@@ -1395,7 +1393,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         st.info("ℹ️ No se cargó archivo de Recepción. Se usará valor 0,00 para inventario.")
     
     # ============================================================
-    # COSTO DE FACTURACIÓN - DEBE EXTRAER DE COLUMNA E
+    # COSTO DE FACTURACIÓN
     # ============================================================
     costo_facturacion = 0.0
     if archivo_costo_facturacion:
@@ -1580,26 +1578,35 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
-    # 🔥 CÁLCULOS Y VALIDACIONES - CORREGIDO
+    # 🔥 SALDO DEL ESTADO DE CUENTA (NUEVA SECCIÓN)
+    # ============================================================
+    st.markdown("#### 📊 Saldo del Estado de Cuenta")
+    st.caption("💡 Este es el saldo que viene del archivo de estado de cuenta")
+
+    col_ec1, col_ec2, col_ec3, col_ec4 = st.columns(4)
+    with col_ec1:
+        st.metric("🏦 Saldo Inicial", formato_venezolano(saldo_inicial_bancos))
+    with col_ec2:
+        st.metric("📈 Ingresos", formato_venezolano(total_ingresos))
+    with col_ec3:
+        st.metric("📉 Egresos", formato_venezolano(total_egresos_banco))
+    with col_ec4:
+        st.metric("🏁 Saldo Final", formato_venezolano(saldo_final))
+
+    st.markdown("---")
+    
+    # ============================================================
+    # CÁLCULOS Y VALIDACIONES
     # ============================================================
     
     inventario_calculado = safe_number(st.session_state.saldos['inventario']) + recepcion_total - costo_facturacion
     cx_c_calculado = safe_number(st.session_state.saldos['cx_c']) + facturacion - cobranzas - notas_credito_cliente
     
-    # 🔥 CORREGIDO: 
-    # - saldo_inicial_bancos = del estado de cuenta (SALDO INICIAL)
-    # - total_ingresos = del estado de cuenta (INGRESOS)
-    # - total_egresos_banco = del estado de cuenta (EGRESOS)
-    # - Bancos = Saldo Inicial del estado de cuenta + Ingresos - Egresos
+    # 🔥 Bancos = Saldo Inicial del estado de cuenta + Ingresos - Egresos
     bancos_calculado = safe_number(saldo_inicial_bancos) + total_ingresos - total_egresos_banco
     
-    # 🔥 CxP = CxP inicial + Recepciones - Pagos proveedores
     cx_p_calculado = safe_number(st.session_state.saldos['cx_p']) + recepcion_total - pagos_proveedores
-    
-    # 🔥 Tránsito = Tránsito inicial + Ingresos del día - Cobranzas
     transito_calculado = safe_number(st.session_state.saldos['transito']) + ingresos_totales - cobranzas
-    
-    # 🔥 Capital = (Inventario + CxC + Bancos) - (CxP + Tránsito)
     capital_calculado = (inventario_calculado + cx_c_calculado + bancos_calculado) - (cx_p_calculado + transito_calculado)
     
     # Mostrar información detallada del cálculo de Bancos
@@ -1728,7 +1735,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'cx_c'
     ))
 
-    # 🔥 BANCOS - CORREGIDO
     resultados_data.append({
         "Cuenta": "Bancos",
         "Fórmula": "Saldo Inicial (estado de cuenta) + Ingresos - Egresos",
