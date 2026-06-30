@@ -1165,7 +1165,7 @@ with st.sidebar:
     st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
     
     # ============================================================
-    # SECCIÓN: ARCHIVOS
+    # SECCIÓN: ARCHIVOS - DISTRIBUCIÓN MEJORADA
     # ============================================================
     st.markdown('<div class="sidebar-section-title">📂 Archivos del Día</div>', unsafe_allow_html=True)
     
@@ -1392,7 +1392,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         st.info("ℹ️ No se cargó archivo de Recepción. Se usará valor 0,00 para inventario.")
     
     # ============================================================
-    # COSTO DE FACTURACIÓN
+    # COSTO DE FACTURACIÓN - DEBE EXTRAER DE COLUMNA E
     # ============================================================
     costo_facturacion = 0.0
     if archivo_costo_facturacion:
@@ -1577,6 +1577,24 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
+    # 🔥 SALDO DEL ESTADO DE CUENTA
+    # ============================================================
+    st.markdown("#### 📊 Saldo del Estado de Cuenta")
+    st.caption("💡 Este es el saldo que viene del archivo de estado de cuenta")
+
+    col_ec1, col_ec2, col_ec3, col_ec4 = st.columns(4)
+    with col_ec1:
+        st.metric("🏦 Saldo Inicial", formato_venezolano(saldo_inicial_bancos))
+    with col_ec2:
+        st.metric("📈 Ingresos", formato_venezolano(total_ingresos))
+    with col_ec3:
+        st.metric("📉 Egresos", formato_venezolano(total_egresos_banco))
+    with col_ec4:
+        st.metric("🏁 Saldo Final", formato_venezolano(saldo_final))
+
+    st.markdown("---")
+    
+    # ============================================================
     # CÁLCULOS Y VALIDACIONES
     # ============================================================
     
@@ -1719,11 +1737,11 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'cx_c'
     ))
 
-    # --- 🔥 BANCOS - CORREGIDO ---
+    # --- 🔥 BANCOS - CORREGIDO (usa saldo_inicial_bancos del archivo) ---
     resultados_data.append({
         "Cuenta": "Bancos",
         "Fórmula": "Saldo Inicial (estado de cuenta) + Ingresos - Egresos",
-        "Información día anterior": formato_venezolano(st.session_state.saldos['bancos']) if st.session_state.saldos['bancos'] > 0 else "-",
+        "Información día anterior": formato_venezolano(saldo_inicial_bancos) if saldo_inicial_bancos > 0 else "-",
         "Calculado": formato_venezolano(bancos_calculado),
         "Reportado": formato_venezolano(saldo_final) if saldo_final > 0 else "-",
         "Diferencia": formatear_diferencia(bancos_calculado, saldo_final) if saldo_final > 0 else "-",
@@ -2318,7 +2336,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 saldos_guardar
             )
             
-            # 🔥 Actualizar session_state con los valores guardados
             st.session_state.saldos['inventario'] = inventario_final
             st.session_state.saldos['cx_c'] = cx_c_final
             st.session_state.saldos['bancos'] = bancos_final
