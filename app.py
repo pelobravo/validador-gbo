@@ -1333,17 +1333,20 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             """)
     
     # ============================================================
-    # SALDOS INICIALES - KPIs (SOLO 4 PRIMEROS, BANCOS SE MUESTRA DESPUÉS)
+    # SALDOS INICIALES - KPIs
     # ============================================================
     st.markdown("#### 📌 Saldos Iniciales (Día Anterior)")
     st.caption("💡 Estos son los saldos que vienen del día anterior")
 
-    col_kpi_inv, col_kpi_cxc, col_kpi_cxp, col_kpi_tran = st.columns(4)
+    col_kpi_inv, col_kpi_cxc, col_kpi_ban, col_kpi_cxp, col_kpi_tran = st.columns(5)
 
     with col_kpi_inv:
         mostrar_kpi_inicial(col_kpi_inv, "Inventario", st.session_state.saldos['inventario'], "verde", "📦")
     with col_kpi_cxc:
         mostrar_kpi_inicial(col_kpi_cxc, "Cuentas por Cobrar", st.session_state.saldos['cx_c'], "azul", "💰")
+    with col_kpi_ban:
+        # 🔥 Usa el valor guardado en la base de datos (día anterior)
+        mostrar_kpi_inicial(col_kpi_ban, "Bancos", st.session_state.saldos['bancos'], "naranja", "🏦")
     with col_kpi_cxp:
         mostrar_kpi_inicial(col_kpi_cxp, "Cuentas por Pagar", st.session_state.saldos['cx_p'], "rojo", "📋")
     with col_kpi_tran:
@@ -1575,18 +1578,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
-    # 🔥 KPI DE BANCOS (AHORA DENTRO DEL PROCESAMIENTO)
-    # ============================================================
-    st.markdown("#### 📌 Saldo Bancario del Día")
-    st.caption("💡 Este es el saldo final del estado de cuenta")
-
-    col_kpi_ban = st.columns(1)
-    with col_kpi_ban[0]:
-        mostrar_kpi_inicial(col_kpi_ban[0], "Bancos (Saldo Final)", saldo_final, "naranja", "🏦")
-
-    st.markdown("---")
-    
-    # ============================================================
     # CÁLCULOS Y VALIDACIONES
     # ============================================================
     
@@ -1646,7 +1637,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
-    # 🔥 COMPARACIÓN VS VALORES REPORTADOS - CORREGIDO (Capital de Trabajo Neto)
+    # 🔥 COMPARACIÓN VS VALORES REPORTADOS - CORREGIDO
     # ============================================================
     st.markdown("#### 📋 Comparación vs Valores Reportados")
 
@@ -1657,10 +1648,12 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
 
     inventario_anterior = safe_number(st.session_state.saldos.get('inventario', 0))
     cx_c_anterior = safe_number(st.session_state.saldos.get('cx_c', 0))
-    bancos_anterior = safe_number(st.session_state.saldos.get('bancos', 0))
     cx_p_anterior = safe_number(st.session_state.saldos.get('cx_p', 0))
     transito_anterior = safe_number(st.session_state.saldos.get('transito', 0))
     capital_anterior = safe_number(st.session_state.saldos.get('capital_anterior', 0))
+
+    # 🔥 BANCOS ANTERIOR: Usa saldo_final del archivo (para que coincida con el KPI)
+    bancos_anterior = saldo_final if saldo_final > 0 else safe_number(st.session_state.saldos.get('bancos', 0))
 
     if 'ajustes' not in st.session_state:
         st.session_state.ajustes = {
@@ -1729,11 +1722,11 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'cx_c'
     ))
 
-    # --- Bancos ---
+    # --- 🔥 BANCOS - CORREGIDO (usa saldo_final como día anterior) ---
     resultados_data.append({
         "Cuenta": "Bancos",
         "Fórmula": "Saldo Inicial (estado de cuenta) + Ingresos - Egresos",
-        "Información día anterior": formato_venezolano(bancos_anterior) if bancos_anterior > 0 else "-",
+        "Información día anterior": formato_venezolano(saldo_final) if saldo_final > 0 else "-",
         "Calculado": formato_venezolano(bancos_calculado),
         "Reportado": formato_venezolano(saldo_final) if saldo_final > 0 else "-",
         "Diferencia": formatear_diferencia(bancos_calculado, saldo_final) if saldo_final > 0 else "-",
@@ -1763,13 +1756,13 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'transito'
     ))
 
-    # --- 🔥 Capital de Trabajo Neto - CORREGIDO ---
+    # --- Capital de Trabajo Neto ---
     resultados_data.append({
         "Cuenta": "Capital de Trabajo Neto",
         "Fórmula": "(Inv + CxC + Bancos) - (CxP + Tránsito)",
         "Información día anterior": formato_venezolano(capital_anterior) if capital_anterior > 0 else "-",
         "Calculado": formato_venezolano(capital_calculado),
-        "Reportado": formato_venezolano(capital_calculado),  # 🔥 Es el mismo que calculado
+        "Reportado": formato_venezolano(capital_calculado),
         "Diferencia": formatear_diferencia(capital_calculado, capital_anterior) if capital_anterior > 0 else "-",
         "Ajuste": 0,
         "Diferencia Ajustada": "-",
@@ -2328,6 +2321,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 saldos_guardar
             )
             
+            # 🔥 Actualizar session_state con los valores guardados
             st.session_state.saldos['inventario'] = inventario_final
             st.session_state.saldos['cx_c'] = cx_c_final
             st.session_state.saldos['bancos'] = bancos_final
@@ -2336,6 +2330,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             st.session_state.saldos['capital_anterior'] = capital_calculado
             
             st.success("✅ Saldos guardados correctamente")
+            st.rerun()
     
     with col_btn2:
         if st.button("📊 Ver gráfico evolución", use_container_width=True):
