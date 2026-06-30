@@ -1333,22 +1333,17 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             """)
     
     # ============================================================
-    # 🔥 SALDOS INICIALES - KPIs CORPORATIVOS (CORREGIDO)
+    # 🔥 SALDOS INICIALES - KPIs (SOLO 4 PRIMEROS, BANCOS SE MUESTRA DESPUÉS)
     # ============================================================
-    st.markdown("#### 📌 Saldos Iniciales")
-    st.caption("💡 Estos son los saldos del día anterior (desde la base de datos)")
+    st.markdown("#### 📌 Saldos Iniciales (Día Anterior)")
+    st.caption("💡 Estos son los saldos que vienen del día anterior")
 
-    col_kpi_inv, col_kpi_cxc, col_kpi_ban, col_kpi_cxp, col_kpi_tran = st.columns(5)
+    col_kpi_inv, col_kpi_cxc, col_kpi_cxp, col_kpi_tran = st.columns(4)
 
     with col_kpi_inv:
         mostrar_kpi_inicial(col_kpi_inv, "Inventario", st.session_state.saldos['inventario'], "verde", "📦")
     with col_kpi_cxc:
         mostrar_kpi_inicial(col_kpi_cxc, "Cuentas por Cobrar", st.session_state.saldos['cx_c'], "azul", "💰")
-    with col_kpi_ban:
-        # 🔥 CORREGIDO: Muestra el saldo final del estado de cuenta si está disponible
-        # Si saldo_final > 0 (archivo cargado), usa ese valor, sino usa el de la base de datos
-        valor_bancos = saldo_final if saldo_final > 0 else st.session_state.saldos['bancos']
-        mostrar_kpi_inicial(col_kpi_ban, "Bancos", valor_bancos, "naranja", "🏦")
     with col_kpi_cxp:
         mostrar_kpi_inicial(col_kpi_cxp, "Cuentas por Pagar", st.session_state.saldos['cx_p'], "rojo", "📋")
     with col_kpi_tran:
@@ -1580,20 +1575,14 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
-    # 🔥 SALDO DEL ESTADO DE CUENTA
+    # 🔥 KPI DE BANCOS (AHORA DENTRO DEL PROCESAMIENTO)
     # ============================================================
-    st.markdown("#### 📊 Saldo del Estado de Cuenta")
-    st.caption("💡 Este es el saldo que viene del archivo de estado de cuenta")
+    st.markdown("#### 📌 Saldo Bancario del Día")
+    st.caption("💡 Este es el saldo final del estado de cuenta")
 
-    col_ec1, col_ec2, col_ec3, col_ec4 = st.columns(4)
-    with col_ec1:
-        st.metric("🏦 Saldo Inicial", formato_venezolano(saldo_inicial_bancos))
-    with col_ec2:
-        st.metric("📈 Ingresos", formato_venezolano(total_ingresos))
-    with col_ec3:
-        st.metric("📉 Egresos", formato_venezolano(total_egresos_banco))
-    with col_ec4:
-        st.metric("🏁 Saldo Final", formato_venezolano(saldo_final))
+    col_kpi_ban = st.columns(1)
+    with col_kpi_ban[0]:
+        mostrar_kpi_inicial(col_kpi_ban[0], "Bancos (Saldo Final)", saldo_final, "naranja", "🏦")
 
     st.markdown("---")
     
