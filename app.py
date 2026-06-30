@@ -1333,7 +1333,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             """)
     
     # ============================================================
-    # 🔥 SALDOS INICIALES - KPIs (SOLO 4 PRIMEROS, BANCOS SE MUESTRA DESPUÉS)
+    # SALDOS INICIALES - KPIs (SOLO 4 PRIMEROS, BANCOS SE MUESTRA DESPUÉS)
     # ============================================================
     st.markdown("#### 📌 Saldos Iniciales (Día Anterior)")
     st.caption("💡 Estos son los saldos que vienen del día anterior")
@@ -1646,7 +1646,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
-    # COMPARACIÓN VS VALORES REPORTADOS
+    # 🔥 COMPARACIÓN VS VALORES REPORTADOS - CORREGIDO (Capital de Trabajo Neto)
     # ============================================================
     st.markdown("#### 📋 Comparación vs Valores Reportados")
 
@@ -1660,6 +1660,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     bancos_anterior = safe_number(st.session_state.saldos.get('bancos', 0))
     cx_p_anterior = safe_number(st.session_state.saldos.get('cx_p', 0))
     transito_anterior = safe_number(st.session_state.saldos.get('transito', 0))
+    capital_anterior = safe_number(st.session_state.saldos.get('capital_anterior', 0))
 
     if 'ajustes' not in st.session_state:
         st.session_state.ajustes = {
@@ -1684,10 +1685,10 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         return {
             "Cuenta": cuenta,
             "Fórmula": formula,
-            "Información día anterior": formato_venezolano(valor_anterior),
+            "Información día anterior": formato_venezolano(valor_anterior) if valor_anterior > 0 else "-",
             "Calculado": formato_venezolano(valor_calculado),
-            "Reportado": formato_venezolano(valor_reportado) if valor_reportado is not None else "-",
-            "Diferencia": formatear_diferencia(valor_calculado, valor_reportado),
+            "Reportado": formato_venezolano(valor_reportado) if valor_reportado is not None and valor_reportado > 0 else "-",
+            "Diferencia": formatear_diferencia(valor_calculado, valor_reportado) if valor_reportado is not None and valor_reportado > 0 else "-",
             "Ajuste": monto_ajuste,
             "Diferencia Ajustada": estado_ajuste,
             "Justificación": justificacion if justificacion else "-",
@@ -1708,6 +1709,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             return f"Transferencias pendientes por {formato_venezolano(abs(diferencia))}"
         return ""
 
+    # --- Inventario ---
     resultados_data.append(crear_fila_comparacion(
         "Inventario",
         "Inv. inicial + Recepción - Costo facturación",
@@ -1717,6 +1719,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'inventario'
     ))
 
+    # --- Cuentas por cobrar ---
     resultados_data.append(crear_fila_comparacion(
         "Cuentas por cobrar",
         "CxC inicial + Facturación - Cobranzas - Notas crédito clientes",
@@ -1726,19 +1729,21 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'cx_c'
     ))
 
+    # --- Bancos ---
     resultados_data.append({
         "Cuenta": "Bancos",
         "Fórmula": "Saldo Inicial (estado de cuenta) + Ingresos - Egresos",
-        "Información día anterior": formato_venezolano(bancos_anterior),
+        "Información día anterior": formato_venezolano(bancos_anterior) if bancos_anterior > 0 else "-",
         "Calculado": formato_venezolano(bancos_calculado),
-        "Reportado": formato_venezolano(saldo_final),
-        "Diferencia": formatear_diferencia(bancos_calculado, saldo_final),
+        "Reportado": formato_venezolano(saldo_final) if saldo_final > 0 else "-",
+        "Diferencia": formatear_diferencia(bancos_calculado, saldo_final) if saldo_final > 0 else "-",
         "Ajuste": 0,
-        "Diferencia Ajustada": formatear_diferencia(bancos_calculado, saldo_final),
+        "Diferencia Ajustada": "-",
         "Justificación": "-",
         "Origen": "Saldo final del estado de cuenta"
     })
 
+    # --- Cuentas por pagar ---
     resultados_data.append(crear_fila_comparacion(
         "Cuentas por pagar",
         "CxP inicial + Recepciones - Pagos proveedores",
@@ -1748,6 +1753,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'cx_p'
     ))
 
+    # --- Transferencias en tránsito ---
     resultados_data.append(crear_fila_comparacion(
         "Transferencias en tránsito",
         "Tránsito inicial + Ingresos del día - Cobranzas",
@@ -1757,19 +1763,21 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'transito'
     ))
 
+    # --- 🔥 Capital de Trabajo Neto - CORREGIDO ---
     resultados_data.append({
         "Cuenta": "Capital de Trabajo Neto",
         "Fórmula": "(Inv + CxC + Bancos) - (CxP + Tránsito)",
-        "Información día anterior": "-",
+        "Información día anterior": formato_venezolano(capital_anterior) if capital_anterior > 0 else "-",
         "Calculado": formato_venezolano(capital_calculado),
-        "Reportado": "-",
-        "Diferencia": "-",
+        "Reportado": formato_venezolano(capital_calculado),  # 🔥 Es el mismo que calculado
+        "Diferencia": formatear_diferencia(capital_calculado, capital_anterior) if capital_anterior > 0 else "-",
         "Ajuste": 0,
         "Diferencia Ajustada": "-",
         "Justificación": "-",
         "Origen": "Calculado automáticamente"
     })
 
+    # Mostrar tabla de comparación
     df_comparacion = pd.DataFrame(resultados_data)
     st.dataframe(df_comparacion, use_container_width=True, hide_index=True)
 
