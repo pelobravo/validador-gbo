@@ -1345,7 +1345,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     with col_kpi_cxc:
         mostrar_kpi_inicial(col_kpi_cxc, "Cuentas por Cobrar", st.session_state.saldos['cx_c'], "azul", "💰")
     with col_kpi_ban:
-        # 🔥 Usa el valor guardado en la base de datos (día anterior)
         mostrar_kpi_inicial(col_kpi_ban, "Bancos", st.session_state.saldos['bancos'], "naranja", "🏦")
     with col_kpi_cxp:
         mostrar_kpi_inicial(col_kpi_cxp, "Cuentas por Pagar", st.session_state.saldos['cx_p'], "rojo", "📋")
@@ -1648,12 +1647,10 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
 
     inventario_anterior = safe_number(st.session_state.saldos.get('inventario', 0))
     cx_c_anterior = safe_number(st.session_state.saldos.get('cx_c', 0))
+    bancos_anterior = safe_number(st.session_state.saldos.get('bancos', 0))
     cx_p_anterior = safe_number(st.session_state.saldos.get('cx_p', 0))
     transito_anterior = safe_number(st.session_state.saldos.get('transito', 0))
     capital_anterior = safe_number(st.session_state.saldos.get('capital_anterior', 0))
-
-    # 🔥 BANCOS ANTERIOR: Usa saldo_final del archivo (para que coincida con el KPI)
-    bancos_anterior = saldo_final if saldo_final > 0 else safe_number(st.session_state.saldos.get('bancos', 0))
 
     if 'ajustes' not in st.session_state:
         st.session_state.ajustes = {
@@ -1722,11 +1719,11 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'cx_c'
     ))
 
-    # --- 🔥 BANCOS - CORREGIDO (usa saldo_final como día anterior) ---
+    # --- 🔥 BANCOS - CORREGIDO ---
     resultados_data.append({
         "Cuenta": "Bancos",
         "Fórmula": "Saldo Inicial (estado de cuenta) + Ingresos - Egresos",
-        "Información día anterior": formato_venezolano(saldo_final) if saldo_final > 0 else "-",
+        "Información día anterior": formato_venezolano(st.session_state.saldos['bancos']) if st.session_state.saldos['bancos'] > 0 else "-",
         "Calculado": formato_venezolano(bancos_calculado),
         "Reportado": formato_venezolano(saldo_final) if saldo_final > 0 else "-",
         "Diferencia": formatear_diferencia(bancos_calculado, saldo_final) if saldo_final > 0 else "-",
