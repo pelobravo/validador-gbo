@@ -1333,10 +1333,10 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             """)
     
     # ============================================================
-    # SALDOS INICIALES - KPIs CORPORATIVOS (CORREGIDO)
+    # 🔥 SALDOS INICIALES - KPIs CORPORATIVOS (CORREGIDO)
     # ============================================================
-    st.markdown("#### 📌 Saldos Iniciales (Día Anterior)")
-    st.caption("💡 Estos son los saldos que vienen del día anterior")
+    st.markdown("#### 📌 Saldos Iniciales")
+    st.caption("💡 Estos son los saldos del día anterior (desde la base de datos)")
 
     col_kpi_inv, col_kpi_cxc, col_kpi_ban, col_kpi_cxp, col_kpi_tran = st.columns(5)
 
@@ -1345,8 +1345,10 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     with col_kpi_cxc:
         mostrar_kpi_inicial(col_kpi_cxc, "Cuentas por Cobrar", st.session_state.saldos['cx_c'], "azul", "💰")
     with col_kpi_ban:
-        # 🔥 CORREGIDO: Usa el valor guardado en la base de datos
-        mostrar_kpi_inicial(col_kpi_ban, "Bancos", st.session_state.saldos['bancos'], "naranja", "🏦")
+        # 🔥 CORREGIDO: Muestra el saldo final del estado de cuenta si está disponible
+        # Si saldo_final > 0 (archivo cargado), usa ese valor, sino usa el de la base de datos
+        valor_bancos = saldo_final if saldo_final > 0 else st.session_state.saldos['bancos']
+        mostrar_kpi_inicial(col_kpi_ban, "Bancos", valor_bancos, "naranja", "🏦")
     with col_kpi_cxp:
         mostrar_kpi_inicial(col_kpi_cxp, "Cuentas por Pagar", st.session_state.saldos['cx_p'], "rojo", "📋")
     with col_kpi_tran:
@@ -1578,7 +1580,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
-    # 🔥 SALDO DEL ESTADO DE CUENTA (NUEVA SECCIÓN)
+    # 🔥 SALDO DEL ESTADO DE CUENTA
     # ============================================================
     st.markdown("#### 📊 Saldo del Estado de Cuenta")
     st.caption("💡 Este es el saldo que viene del archivo de estado de cuenta")
