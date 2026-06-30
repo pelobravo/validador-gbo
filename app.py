@@ -116,7 +116,7 @@ def safe_string(value, default=""):
     return str(value)
 
 # ============================================================
-# CSS PERSONALIZADO - DISEÑO CORPORATIVO MODERNO
+# CSS PERSONALIZADO - DISEÑO CORPORATIVO MODERNO (CORREGIDO)
 # ============================================================
 st.markdown("""
 <style>
@@ -262,15 +262,102 @@ st.markdown("""
         background: linear-gradient(135deg, #d4b85a, #f0d878);
     }
     
-    [data-testid="stSidebar"] .stFileUploader label {
-        color: rgba(255,255,255,0.7) !important;
-        font-weight: 500;
-        font-size: 0.8rem;
+    /* ============================================================
+       🔥 FILE UPLOADER - VISIBILIDAD MEJORADA
+       ============================================================ */
+    
+    /* Contenedor del file uploader */
+    [data-testid="stFileUploader"] {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 10px;
+        padding: 8px 12px;
+        margin-bottom: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        transition: all 0.3s ease;
     }
     
-    [data-testid="stSidebar"] .stFileUploader p {
-        color: rgba(255,255,255,0.4) !important;
+    [data-testid="stFileUploader"]:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(201, 168, 76, 0.15);
     }
+    
+    /* Label del file uploader - TEXTO BLANCO VISIBLE */
+    [data-testid="stFileUploader"] label {
+        color: #ffffff !important;
+        font-weight: 600 !important;
+        font-size: 0.82rem !important;
+        opacity: 1 !important;
+        letter-spacing: 0.3px;
+    }
+    
+    [data-testid="stFileUploader"] label .stMarkdown {
+        color: #ffffff !important;
+    }
+    
+    /* Texto de ayuda del file uploader */
+    [data-testid="stFileUploader"] .stMarkdown p {
+        color: rgba(255, 255, 255, 0.5) !important;
+        font-size: 0.7rem !important;
+    }
+    
+    [data-testid="stFileUploader"] .stMarkdown small {
+        color: rgba(255, 255, 255, 0.35) !important;
+    }
+    
+    /* Área de drop del file uploader */
+    [data-testid="stFileUploader"] .stFileUploaderDropzone {
+        background: rgba(255, 255, 255, 0.03) !important;
+        border: 1px dashed rgba(255, 255, 255, 0.1) !important;
+        border-radius: 8px !important;
+    }
+    
+    [data-testid="stFileUploader"] .stFileUploaderDropzone:hover {
+        background: rgba(255, 255, 255, 0.06) !important;
+        border-color: rgba(201, 168, 76, 0.2) !important;
+    }
+    
+    /* Texto dentro del área de drop */
+    [data-testid="stFileUploader"] .stFileUploaderDropzone p {
+        color: rgba(255, 255, 255, 0.4) !important;
+    }
+    
+    [data-testid="stFileUploader"] .stFileUploaderDropzone .stMarkdown {
+        color: rgba(255, 255, 255, 0.4) !important;
+    }
+    
+    /* Badge de archivos cargados */
+    [data-testid="stFileUploader"] .stFileUploaderFile {
+        background: rgba(46, 204, 113, 0.1) !important;
+        border: 1px solid rgba(46, 204, 113, 0.15) !important;
+        border-radius: 6px !important;
+        padding: 6px 10px !important;
+    }
+    
+    [data-testid="stFileUploader"] .stFileUploaderFile .stMarkdown {
+        color: #2ecc71 !important;
+    }
+    
+    [data-testid="stFileUploader"] .stFileUploaderFile button {
+        color: #e74c3c !important;
+    }
+    
+    /* Forzar color blanco en todos los labels de uploaders */
+    .stFileUploader > label {
+        color: #ffffff !important;
+        font-weight: 600 !important;
+    }
+    
+    .stFileUploader > label > div {
+        color: #ffffff !important;
+    }
+    
+    .stFileUploader > label span {
+        color: #ffffff !important;
+    }
+    
+    /* ============================================================
+       FIN FILE UPLOADER
+       ============================================================ */
     
     [data-testid="stSidebar"] .stDateInput label {
         color: rgba(255,255,255,0.7) !important;
@@ -528,45 +615,6 @@ st.markdown("""
         margin-bottom: 10px;
         border-bottom: 1px solid rgba(255,255,255,0.05);
         padding-bottom: 8px;
-    }
-    
-    /* ==================== FILE UPLOADER MEJORADO ==================== */
-    .upload-section {
-        background: rgba(255,255,255,0.03);
-        border-radius: 10px;
-        padding: 12px 14px;
-        margin-bottom: 6px;
-        border: 1px solid rgba(255,255,255,0.04);
-        transition: all 0.3s ease;
-    }
-    
-    .upload-section:hover {
-        background: rgba(255,255,255,0.06);
-        border-color: rgba(201, 168, 76, 0.1);
-    }
-    
-    .upload-section .upload-label {
-        font-size: 0.75rem;
-        color: rgba(255,255,255,0.6);
-        font-weight: 500;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    
-    .upload-section .upload-label .badge {
-        font-size: 0.55rem;
-        padding: 2px 8px;
-        border-radius: 10px;
-        background: rgba(46, 204, 113, 0.2);
-        color: #2ecc71;
-        font-weight: 600;
-        text-transform: uppercase;
-    }
-    
-    .upload-section .upload-label .badge.optional {
-        background: rgba(243, 156, 18, 0.15);
-        color: #f39c12;
     }
     
     /* ==================== DIVISORES ==================== */
@@ -1099,13 +1147,13 @@ with st.sidebar:
     st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
     
     # ============================================================
-    # SECCIÓN: ARCHIVOS - DISTRIBUCIÓN MEJORADA
+    # SECCIÓN: ARCHIVOS - DISTRIBUCIÓN MEJORADA CON VISIBILIDAD
     # ============================================================
     st.markdown('<div class="sidebar-section-title">📂 Archivos del Día</div>', unsafe_allow_html=True)
     
     # Archivos Obligatorios
     st.markdown("""
-    <div style="font-size:0.7rem; color:rgba(255,255,255,0.4); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px;">
+    <div style="font-size:0.65rem; color:rgba(255,255,255,0.3); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.03); padding-bottom:4px;">
         📌 Obligatorios
     </div>
     """, unsafe_allow_html=True)
@@ -1117,7 +1165,7 @@ with st.sidebar:
     
     # Archivos Opcionales
     st.markdown("""
-    <div style="font-size:0.7rem; color:rgba(255,255,255,0.3); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:6px;">
+    <div style="font-size:0.65rem; color:rgba(255,255,255,0.25); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.03); padding-bottom:4px;">
         📎 Opcionales
     </div>
     """, unsafe_allow_html=True)
@@ -1128,7 +1176,7 @@ with st.sidebar:
     
     # Archivos de Costos
     st.markdown("""
-    <div style="font-size:0.7rem; color:rgba(255,255,255,0.3); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:6px;">
+    <div style="font-size:0.65rem; color:rgba(255,255,255,0.25); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.03); padding-bottom:4px;">
         📊 Costos
     </div>
     """, unsafe_allow_html=True)
@@ -1137,7 +1185,7 @@ with st.sidebar:
     
     # Archivos de Verificación
     st.markdown("""
-    <div style="font-size:0.7rem; color:rgba(255,255,255,0.3); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:6px;">
+    <div style="font-size:0.65rem; color:rgba(255,255,255,0.25); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.03); padding-bottom:4px;">
         🔍 Verificación
     </div>
     """, unsafe_allow_html=True)
