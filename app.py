@@ -116,7 +116,7 @@ def safe_string(value, default=""):
     return str(value)
 
 # ============================================================
-# CSS PERSONALIZADO - DISEÑO CORPORATIVO MODERNO (CORREGIDO)
+# CSS PERSONALIZADO - DISEÑO CORPORATIVO MODERNO
 # ============================================================
 st.markdown("""
 <style>
@@ -266,92 +266,110 @@ st.markdown("""
        🔥 FILE UPLOADER - VISIBILIDAD MEJORADA
        ============================================================ */
     
-    /* Contenedor del file uploader */
-    [data-testid="stFileUploader"] {
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 10px;
-        padding: 8px 12px;
-        margin-bottom: 4px;
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        transition: all 0.3s ease;
-    }
-    
-    [data-testid="stFileUploader"]:hover {
-        background: rgba(255, 255, 255, 0.08);
-        border-color: rgba(201, 168, 76, 0.15);
-    }
-    
-    /* Label del file uploader - TEXTO BLANCO VISIBLE */
-    [data-testid="stFileUploader"] label {
+    /* Forzar color blanco en TODOS los textos del file uploader */
+    .stFileUploader label,
+    .stFileUploader label span,
+    .stFileUploader label div,
+    .stFileUploader label p,
+    .stFileUploader .stMarkdown,
+    .stFileUploader .stMarkdown p,
+    .stFileUploader .stMarkdown small,
+    .stFileUploader .stMarkdown span,
+    .stFileUploader [data-testid="stFileUploaderDropzone"] p,
+    .stFileUploader [data-testid="stFileUploaderDropzone"] span,
+    .stFileUploader [data-testid="stFileUploaderDropzone"] div {
         color: #ffffff !important;
-        font-weight: 600 !important;
-        font-size: 0.82rem !important;
         opacity: 1 !important;
-        letter-spacing: 0.3px;
     }
     
-    [data-testid="stFileUploader"] label .stMarkdown {
-        color: #ffffff !important;
-    }
-    
-    /* Texto de ayuda del file uploader */
-    [data-testid="stFileUploader"] .stMarkdown p {
-        color: rgba(255, 255, 255, 0.5) !important;
-        font-size: 0.7rem !important;
-    }
-    
-    [data-testid="stFileUploader"] .stMarkdown small {
-        color: rgba(255, 255, 255, 0.35) !important;
-    }
-    
-    /* Área de drop del file uploader */
-    [data-testid="stFileUploader"] .stFileUploaderDropzone {
-        background: rgba(255, 255, 255, 0.03) !important;
-        border: 1px dashed rgba(255, 255, 255, 0.1) !important;
-        border-radius: 8px !important;
-    }
-    
-    [data-testid="stFileUploader"] .stFileUploaderDropzone:hover {
+    /* Contenedor del file uploader */
+    .stFileUploader {
         background: rgba(255, 255, 255, 0.06) !important;
+        border-radius: 10px !important;
+        padding: 8px 12px !important;
+        margin-bottom: 4px !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .stFileUploader:hover {
+        background: rgba(255, 255, 255, 0.10) !important;
         border-color: rgba(201, 168, 76, 0.2) !important;
     }
     
-    /* Texto dentro del área de drop */
-    [data-testid="stFileUploader"] .stFileUploaderDropzone p {
-        color: rgba(255, 255, 255, 0.4) !important;
-    }
-    
-    [data-testid="stFileUploader"] .stFileUploaderDropzone .stMarkdown {
-        color: rgba(255, 255, 255, 0.4) !important;
-    }
-    
-    /* Badge de archivos cargados */
-    [data-testid="stFileUploader"] .stFileUploaderFile {
-        background: rgba(46, 204, 113, 0.1) !important;
-        border: 1px solid rgba(46, 204, 113, 0.15) !important;
-        border-radius: 6px !important;
-        padding: 6px 10px !important;
-    }
-    
-    [data-testid="stFileUploader"] .stFileUploaderFile .stMarkdown {
-        color: #2ecc71 !important;
-    }
-    
-    [data-testid="stFileUploader"] .stFileUploaderFile button {
-        color: #e74c3c !important;
-    }
-    
-    /* Forzar color blanco en todos los labels de uploaders */
+    /* Label del file uploader - TEXTO BLANCO VISIBLE */
     .stFileUploader > label {
         color: #ffffff !important;
         font-weight: 600 !important;
+        font-size: 0.85rem !important;
+        opacity: 1 !important;
+        display: block !important;
+        margin-bottom: 4px !important;
     }
     
-    .stFileUploader > label > div {
+    .stFileUploader > label .stMarkdown {
         color: #ffffff !important;
     }
     
     .stFileUploader > label span {
+        color: #ffffff !important;
+    }
+    
+    /* Texto de ayuda del file uploader */
+    .stFileUploader .stMarkdown p {
+        color: rgba(255, 255, 255, 0.6) !important;
+        font-size: 0.7rem !important;
+    }
+    
+    .stFileUploader .stMarkdown small {
+        color: rgba(255, 255, 255, 0.4) !important;
+    }
+    
+    /* Área de drop del file uploader */
+    .stFileUploader [data-testid="stFileUploaderDropzone"] {
+        background: rgba(255, 255, 255, 0.04) !important;
+        border: 1px dashed rgba(255, 255, 255, 0.12) !important;
+        border-radius: 8px !important;
+        padding: 10px !important;
+    }
+    
+    .stFileUploader [data-testid="stFileUploaderDropzone"]:hover {
+        background: rgba(255, 255, 255, 0.08) !important;
+        border-color: rgba(201, 168, 76, 0.25) !important;
+    }
+    
+    /* Texto dentro del área de drop */
+    .stFileUploader [data-testid="stFileUploaderDropzone"] p {
+        color: rgba(255, 255, 255, 0.5) !important;
+        font-size: 0.8rem !important;
+    }
+    
+    .stFileUploader [data-testid="stFileUploaderDropzone"] .stMarkdown {
+        color: rgba(255, 255, 255, 0.5) !important;
+    }
+    
+    /* Badge de archivos cargados */
+    .stFileUploader [data-testid="stFileUploaderFile"] {
+        background: rgba(46, 204, 113, 0.12) !important;
+        border: 1px solid rgba(46, 204, 113, 0.2) !important;
+        border-radius: 6px !important;
+        padding: 6px 10px !important;
+    }
+    
+    .stFileUploader [data-testid="stFileUploaderFile"] .stMarkdown {
+        color: #2ecc71 !important;
+    }
+    
+    .stFileUploader [data-testid="stFileUploaderFile"] button {
+        color: #e74c3c !important;
+    }
+    
+    /* Forzar en todos los elementos del uploader */
+    .stFileUploader * {
+        color: #ffffff !important;
+    }
+    
+    .stFileUploader .stMarkdown * {
         color: #ffffff !important;
     }
     
@@ -1147,7 +1165,7 @@ with st.sidebar:
     st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
     
     # ============================================================
-    # SECCIÓN: ARCHIVOS - DISTRIBUCIÓN MEJORADA CON VISIBILIDAD
+    # SECCIÓN: ARCHIVOS - DISTRIBUCIÓN MEJORADA
     # ============================================================
     st.markdown('<div class="sidebar-section-title">📂 Archivos del Día</div>', unsafe_allow_html=True)
     
@@ -1559,15 +1577,26 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
-    # CÁLCULOS Y VALIDACIONES
+    # 🔥 CÁLCULOS Y VALIDACIONES - CORREGIDO (USA saldo_inicial_bancos)
     # ============================================================
     
     inventario_calculado = safe_number(st.session_state.saldos['inventario']) + recepcion_total - costo_facturacion
     cx_c_calculado = safe_number(st.session_state.saldos['cx_c']) + facturacion - cobranzas - notas_credito_cliente
     
-    bancos_calculado = safe_number(st.session_state.saldos['bancos']) + total_ingresos - total_egresos_banco
+    # 🔥 CORREGIDO: 
+    # - saldo_inicial_bancos = del estado de cuenta (SALDO INICIAL)
+    # - total_ingresos = del estado de cuenta (INGRESOS)
+    # - total_egresos_banco = del estado de cuenta (EGRESOS)
+    # - Bancos = Saldo Inicial del estado de cuenta + Ingresos - Egresos
+    bancos_calculado = safe_number(saldo_inicial_bancos) + total_ingresos - total_egresos_banco
+    
+    # 🔥 CxP = CxP inicial + Recepciones - Pagos proveedores
     cx_p_calculado = safe_number(st.session_state.saldos['cx_p']) + recepcion_total - pagos_proveedores
+    
+    # 🔥 Tránsito = Tránsito inicial + Ingresos del día - Cobranzas
     transito_calculado = safe_number(st.session_state.saldos['transito']) + ingresos_totales - cobranzas
+    
+    # 🔥 Capital = (Inventario + CxC + Bancos) - (CxP + Tránsito)
     capital_calculado = (inventario_calculado + cx_c_calculado + bancos_calculado) - (cx_p_calculado + transito_calculado)
     
     # Mostrar información detallada del cálculo de Bancos
@@ -1575,7 +1604,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     
     col_b1, col_b2, col_b3, col_b4 = st.columns(4)
     with col_b1:
-        st.metric("🏦 Bancos inicial", formato_venezolano(st.session_state.saldos['bancos']))
+        st.metric("🏦 Saldo Inicial (estado de cuenta)", formato_venezolano(saldo_inicial_bancos))
     with col_b2:
         st.metric("📈 Ingresos (estado de cuenta)", formato_venezolano(total_ingresos))
     with col_b3:
@@ -1597,8 +1626,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             st.metric("✅ Diferencia", "0,00", delta="✅ Coincide")
         else:
             st.metric("⚠️ Diferencia", formato_venezolano(diferencia_bancos), delta=f"{'📈' if diferencia_bancos > 0 else '📉'} {formato_venezolano(abs(diferencia_bancos))}")
+            st.warning(f"⚠️ Hay una diferencia de {formato_venezolano(diferencia_bancos)} entre el Bancos calculado y el saldo final del estado de cuenta.")
     
-    st.info(f"ℹ️ **Saldo Inicial Bancario (desde estado de cuenta):** {formato_venezolano(saldo_inicial_bancos)} Bs.")
+    st.markdown("---")
     
     # ============================================================
     # ACTIVOS vs PASIVOS
@@ -1693,9 +1723,10 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'cx_c'
     ))
 
+    # 🔥 BANCOS - CORREGIDO
     resultados_data.append({
         "Cuenta": "Bancos",
-        "Fórmula": "Bancos inicial + Ingresos (estado de cuenta) - Egresos (estado de cuenta)",
+        "Fórmula": "Saldo Inicial (estado de cuenta) + Ingresos - Egresos",
         "Información día anterior": formato_venezolano(bancos_anterior),
         "Calculado": formato_venezolano(bancos_calculado),
         "Reportado": formato_venezolano(saldo_final),
@@ -1951,6 +1982,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         transito_cierre = 0
         st.warning(f"🔄 Tránsito: **NO DISPONIBLE** (falta archivo) → 0,00")
 
+    # 🔥 Bancos: usa el saldo final del estado de cuenta
     bancos_cierre = saldo_final
     st.success(f"🏦 Bancos: **DESDE ESTADO DE CUENTA** → {formato_venezolano(bancos_cierre)}")
 
@@ -2354,7 +2386,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         **Fórmulas clave:**  
         🔄 Transferencias en tránsito = Tránsito inicial + Ingresos del día - Cobranzas  
         📋 Cuentas por pagar = CxP inicial + Recepciones - Pagos proveedores  
-        🏦 Bancos = Bancos inicial + Ingresos (estado de cuenta) - Egresos (estado de cuenta)
+        🏦 Bancos = Saldo Inicial (estado de cuenta) + Ingresos - Egresos
         
         **Cierre Diario:**  
         🏁 Capital de Trabajo Neto = (CxC + Inventario + Bancos) - (CxP + Transferencias en tránsito)
