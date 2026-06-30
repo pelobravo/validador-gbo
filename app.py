@@ -1333,10 +1333,10 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             """)
     
     # ============================================================
-    # SALDOS INICIALES - KPIs CORPORATIVOS
+    # 🔥 SALDOS INICIALES - KPIs CORPORATIVOS (CORREGIDO)
     # ============================================================
-    st.markdown("#### 📌 Saldos Iniciales (Día Anterior)")
-    st.caption("💡 Estos son los saldos que vienen del día anterior")
+    st.markdown("#### 📌 Saldos Iniciales")
+    st.caption("💡 Estos son los saldos del día anterior (desde la base de datos)")
 
     col_kpi_inv, col_kpi_cxc, col_kpi_ban, col_kpi_cxp, col_kpi_tran = st.columns(5)
 
@@ -1345,7 +1345,10 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     with col_kpi_cxc:
         mostrar_kpi_inicial(col_kpi_cxc, "Cuentas por Cobrar", st.session_state.saldos['cx_c'], "azul", "💰")
     with col_kpi_ban:
-        mostrar_kpi_inicial(col_kpi_ban, "Bancos", st.session_state.saldos['bancos'], "naranja", "🏦")
+        # 🔥 CORREGIDO: Usa el saldo inicial del estado de cuenta si está disponible
+        # Si saldo_inicial_bancos es 0 (no se cargó archivo), usa el valor guardado
+        valor_bancos = saldo_inicial_bancos if saldo_inicial_bancos > 0 else st.session_state.saldos['bancos']
+        mostrar_kpi_inicial(col_kpi_ban, "Bancos", valor_bancos, "naranja", "🏦")
     with col_kpi_cxp:
         mostrar_kpi_inicial(col_kpi_cxp, "Cuentas por Pagar", st.session_state.saldos['cx_p'], "rojo", "📋")
     with col_kpi_tran:
@@ -1577,7 +1580,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
-    # 🔥 CÁLCULOS Y VALIDACIONES - CORREGIDO (USA saldo_inicial_bancos)
+    # 🔥 CÁLCULOS Y VALIDACIONES - CORREGIDO
     # ============================================================
     
     inventario_calculado = safe_number(st.session_state.saldos['inventario']) + recepcion_total - costo_facturacion
@@ -1627,6 +1630,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         else:
             st.metric("⚠️ Diferencia", formato_venezolano(diferencia_bancos), delta=f"{'📈' if diferencia_bancos > 0 else '📉'} {formato_venezolano(abs(diferencia_bancos))}")
             st.warning(f"⚠️ Hay una diferencia de {formato_venezolano(diferencia_bancos)} entre el Bancos calculado y el saldo final del estado de cuenta.")
+    
+    st.info(f"ℹ️ **Saldo Inicial Bancario (desde estado de cuenta):** {formato_venezolano(saldo_inicial_bancos)} Bs.")
     
     st.markdown("---")
     
@@ -1982,7 +1987,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         transito_cierre = 0
         st.warning(f"🔄 Tránsito: **NO DISPONIBLE** (falta archivo) → 0,00")
 
-    # 🔥 Bancos: usa el saldo final del estado de cuenta
     bancos_cierre = saldo_final
     st.success(f"🏦 Bancos: **DESDE ESTADO DE CUENTA** → {formato_venezolano(bancos_cierre)}")
 
