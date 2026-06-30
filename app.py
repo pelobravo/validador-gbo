@@ -116,333 +116,474 @@ def safe_string(value, default=""):
     return str(value)
 
 # ============================================================
-# CSS PERSONALIZADO
+# CSS PERSONALIZADO - DISEÑO CORPORATIVO MODERNO
 # ============================================================
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    /* ==================== IMPORTAR FUENTES ==================== */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+    @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css');
     
+    /* ==================== RESET Y BASE ==================== */
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
+        background: #f0f4f8;
     }
     
-    .kpi-card-activos {
-        background: linear-gradient(135deg, #1a8a4a 0%, #2ecc71 100%);
-        border-radius: 20px;
-        padding: 25px 20px;
-        text-align: center;
-        color: white;
-        box-shadow: 0 10px 25px -5px rgba(46, 204, 113, 0.4);
-        border: 3px solid #27ae60;
-        cursor: pointer;
-        transition: transform 0.2s, box-shadow 0.2s;
-    }
-    
-    .kpi-card-activos:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 15px 35px -5px rgba(46, 204, 113, 0.5);
-    }
-    
-    .kpi-card-pasivos {
-        background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%);
-        border-radius: 20px;
-        padding: 25px 20px;
-        text-align: center;
-        color: white;
-        box-shadow: 0 10px 25px -5px rgba(231, 76, 60, 0.4);
-        border: 3px solid #e74c3c;
-        cursor: pointer;
-        transition: transform 0.2s, box-shadow 0.2s;
-    }
-    
-    .kpi-card-pasivos:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 15px 35px -5px rgba(231, 76, 60, 0.5);
-    }
-    
-    .kpi-card-capital {
-        background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
-        border-radius: 20px;
-        padding: 25px 20px;
-        text-align: center;
-        color: white;
-        box-shadow: 0 10px 25px -5px rgba(52, 152, 219, 0.4);
-        border: 3px solid #2980b9;
-        cursor: pointer;
-        transition: transform 0.2s, box-shadow 0.2s;
-    }
-    
-    .kpi-card-capital:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 15px 35px -5px rgba(52, 152, 219, 0.5);
-    }
-    
-    .kpi-card-capital-positivo {
-        background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
-        border-radius: 20px;
-        padding: 25px 20px;
-        text-align: center;
-        color: white;
-        box-shadow: 0 10px 25px -5px rgba(46, 204, 113, 0.4);
-        border: 3px solid #27ae60;
-        cursor: pointer;
-        transition: transform 0.2s, box-shadow 0.2s;
-    }
-    
-    .kpi-card-capital-positivo:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 15px 35px -5px rgba(46, 204, 113, 0.5);
-    }
-    
-    .kpi-card-capital-negativo {
-        background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%);
-        border-radius: 20px;
-        padding: 25px 20px;
-        text-align: center;
-        color: white;
-        box-shadow: 0 10px 25px -5px rgba(231, 76, 60, 0.4);
-        border: 3px solid #e74c3c;
-        cursor: pointer;
-        transition: transform 0.2s, box-shadow 0.2s;
-    }
-    
-    .kpi-card-capital-negativo:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 15px 35px -5px rgba(231, 76, 60, 0.5);
-    }
-    
-    .kpi-card .label {
-        font-size: 0.9rem;
-        opacity: 0.95;
-        letter-spacing: 0.5px;
-        font-weight: 500;
-    }
-    
-    .kpi-card .value {
-        font-size: 2.2rem;
-        font-weight: 700;
-        margin-top: 10px;
-        letter-spacing: 0.5px;
-        font-family: 'Courier New', monospace;
-    }
-    
-    .kpi-card .sub-label {
-        font-size: 0.7rem;
-        opacity: 0.7;
-        margin-top: 5px;
-    }
-    
-    .kpi-inicial-verde {
-        background: linear-gradient(135deg, #1a8a4a 0%, #2ecc71 100%);
+    /* ==================== HEADER CORPORATIVO ==================== */
+    .corporate-header {
+        background: linear-gradient(135deg, #0a1628 0%, #1a3a5c 50%, #2a4a6c 100%);
+        padding: 20px 30px;
         border-radius: 16px;
-        padding: 18px 12px;
-        text-align: center;
-        color: white;
-        box-shadow: 0 8px 20px -5px rgba(46, 204, 113, 0.3);
-        border: 3px solid #27ae60;
-        transition: transform 0.2s, box-shadow 0.2s;
-        height: 100%;
-        min-height: 120px;
+        margin-bottom: 25px;
+        box-shadow: 0 8px 32px rgba(10, 22, 40, 0.3);
         display: flex;
-        flex-direction: column;
-        justify-content: center;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        border: 1px solid rgba(201, 168, 76, 0.15);
     }
     
-    .kpi-inicial-verde:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 12px 30px -5px rgba(46, 204, 113, 0.4);
-    }
-    
-    .kpi-inicial-azul {
-        background: linear-gradient(135deg, #1a5276 0%, #3498db 100%);
-        border-radius: 16px;
-        padding: 18px 12px;
-        text-align: center;
-        color: white;
-        box-shadow: 0 8px 20px -5px rgba(52, 152, 219, 0.3);
-        border: 3px solid #2980b9;
-        transition: transform 0.2s, box-shadow 0.2s;
-        height: 100%;
-        min-height: 120px;
+    .corporate-header .brand {
         display: flex;
-        flex-direction: column;
-        justify-content: center;
+        align-items: center;
+        gap: 16px;
     }
     
-    .kpi-inicial-azul:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 12px 30px -5px rgba(52, 152, 219, 0.4);
-    }
-    
-    .kpi-inicial-naranja {
-        background: linear-gradient(135deg, #d35400 0%, #f39c12 100%);
-        border-radius: 16px;
-        padding: 18px 12px;
-        text-align: center;
-        color: white;
-        box-shadow: 0 8px 20px -5px rgba(243, 156, 18, 0.3);
-        border: 3px solid #e67e22;
-        transition: transform 0.2s, box-shadow 0.2s;
-        height: 100%;
-        min-height: 120px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-    }
-    
-    .kpi-inicial-naranja:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 12px 30px -5px rgba(243, 156, 18, 0.4);
-    }
-    
-    .kpi-inicial-rojo {
-        background: linear-gradient(135deg, #922b21 0%, #e74c3c 100%);
-        border-radius: 16px;
-        padding: 18px 12px;
-        text-align: center;
-        color: white;
-        box-shadow: 0 8px 20px -5px rgba(231, 76, 60, 0.3);
-        border: 3px solid #c0392b;
-        transition: transform 0.2s, box-shadow 0.2s;
-        height: 100%;
-        min-height: 120px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-    }
-    
-    .kpi-inicial-rojo:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 12px 30px -5px rgba(231, 76, 60, 0.4);
-    }
-    
-    .kpi-inicial-morado {
-        background: linear-gradient(135deg, #6c3483 0%, #af7ac5 100%);
-        border-radius: 16px;
-        padding: 18px 12px;
-        text-align: center;
-        color: white;
-        box-shadow: 0 8px 20px -5px rgba(175, 122, 197, 0.3);
-        border: 3px solid #8e44ad;
-        transition: transform 0.2s, box-shadow 0.2s;
-        height: 100%;
-        min-height: 120px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-    }
-    
-    .kpi-inicial-morado:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 12px 30px -5px rgba(175, 122, 197, 0.4);
-    }
-    
-    .kpi-inicial .label {
-        font-size: 0.8rem;
-        opacity: 0.95;
-        letter-spacing: 0.3px;
-        font-weight: 500;
-    }
-    
-    .kpi-inicial .value {
-        font-size: 1.5rem;
-        font-weight: 700;
-        margin-top: 6px;
-        letter-spacing: 0.3px;
-        font-family: 'Courier New', monospace;
-    }
-    
-    .kpi-inicial .icon {
-        font-size: 1.2rem;
-        margin-bottom: 2px;
-    }
-    
-    .dataframe {
-        border-radius: 16px;
-        overflow: hidden;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-    }
-    
-    .dataframe th {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        font-weight: 600;
-        padding: 12px;
-    }
-    
-    .stButton > button {
+    .corporate-header .brand .logo {
+        width: 48px;
+        height: 48px;
+        background: linear-gradient(135deg, #c9a84c, #e8c86a);
         border-radius: 12px;
-        font-weight: 500;
-        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        font-weight: 900;
+        color: #0a1628;
+        box-shadow: 0 4px 12px rgba(201, 168, 76, 0.4);
     }
     
-    .stButton > button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    .corporate-header .brand .title {
+        color: white;
+        font-size: 1.4rem;
+        font-weight: 700;
+        letter-spacing: -0.5px;
     }
     
+    .corporate-header .brand .subtitle {
+        color: rgba(255,255,255,0.6);
+        font-size: 0.75rem;
+        font-weight: 400;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+    }
+    
+    .corporate-header .status-bar {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        color: rgba(255,255,255,0.8);
+        font-size: 0.85rem;
+    }
+    
+    .corporate-header .status-bar .status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 6px;
+    }
+    
+    .corporate-header .status-bar .status-dot.online {
+        background: #2ecc71;
+        box-shadow: 0 0 12px rgba(46, 204, 113, 0.5);
+        animation: pulse-dot 2s infinite;
+    }
+    
+    @keyframes pulse-dot {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.6; transform: scale(0.9); }
+    }
+    
+    .corporate-header .status-bar .user-info {
+        background: rgba(255,255,255,0.08);
+        padding: 6px 16px;
+        border-radius: 20px;
+        border: 1px solid rgba(255,255,255,0.06);
+        font-size: 0.8rem;
+    }
+    
+    .corporate-header .status-bar .user-info i {
+        color: #c9a84c;
+        margin-right: 6px;
+    }
+    
+    /* ==================== SIDEBAR CORPORATIVA ==================== */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+        background: linear-gradient(180deg, #0a1628 0%, #162a44 50%, #1a3a5c 100%);
+        border-right: 1px solid rgba(201, 168, 76, 0.1);
     }
     
     [data-testid="stSidebar"] * {
-        color: #e0e0e0;
+        color: #e8edf2 !important;
     }
     
     [data-testid="stSidebar"] .stMarkdown h1,
     [data-testid="stSidebar"] .stMarkdown h2,
     [data-testid="stSidebar"] .stMarkdown h3 {
-        color: white;
+        color: white !important;
+    }
+    
+    [data-testid="stSidebar"] .stMarkdown h3 {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        opacity: 0.6;
+        margin-top: 20px;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        padding-bottom: 8px;
     }
     
     [data-testid="stSidebar"] .stButton > button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white !important;
+        background: linear-gradient(135deg, #c9a84c, #e8c86a);
+        color: #0a1628 !important;
         font-weight: 600;
         border: none;
-        border-radius: 12px;
+        border-radius: 10px;
         padding: 10px 16px;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(201, 168, 76, 0.2);
     }
     
     [data-testid="stSidebar"] .stButton > button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-        color: white !important;
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(201, 168, 76, 0.35);
+        background: linear-gradient(135deg, #d4b85a, #f0d878);
     }
     
     [data-testid="stSidebar"] .stFileUploader label {
-        color: #e0e0e0 !important;
+        color: rgba(255,255,255,0.7) !important;
+        font-weight: 500;
+        font-size: 0.8rem;
     }
     
     [data-testid="stSidebar"] .stFileUploader p {
-        color: #a0a0a0 !important;
+        color: rgba(255,255,255,0.4) !important;
     }
     
     [data-testid="stSidebar"] .stDateInput label {
-        color: #e0e0e0 !important;
+        color: rgba(255,255,255,0.7) !important;
     }
     
-    [data-testid="stSidebar"] .stSubheader {
+    /* ==================== KPIS CORPORATIVOS ==================== */
+    .kpi-card {
+        border-radius: 16px;
+        padding: 22px 18px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 8px 25px -5px rgba(0,0,0,0.15);
+        border: 1px solid rgba(255,255,255,0.08);
+        cursor: pointer;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .kpi-card::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 100%;
+        height: 100%;
+        background: rgba(255,255,255,0.03);
+        border-radius: 50%;
+        transform: rotate(25deg);
+        pointer-events: none;
+    }
+    
+    .kpi-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 35px -5px rgba(0,0,0,0.25);
+    }
+    
+    .kpi-card .label {
+        font-size: 0.75rem;
+        opacity: 0.85;
+        letter-spacing: 1px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    
+    .kpi-card .value {
+        font-size: 2rem;
+        font-weight: 800;
+        margin-top: 8px;
+        letter-spacing: -0.5px;
+        font-family: 'Inter', monospace;
+    }
+    
+    .kpi-card .sub-label {
+        font-size: 0.65rem;
+        opacity: 0.6;
+        margin-top: 6px;
+        font-weight: 400;
+    }
+    
+    .kpi-card .icon-bg {
+        position: absolute;
+        right: 12px;
+        bottom: 12px;
+        font-size: 3rem;
+        opacity: 0.08;
+        pointer-events: none;
+    }
+    
+    /* KPI - Activos (Verde) */
+    .kpi-activos {
+        background: linear-gradient(135deg, #0f3d2e 0%, #1a6b4a 100%);
+        border: 1px solid rgba(46, 204, 113, 0.2);
+    }
+    .kpi-activos .value { color: #2ecc71; }
+    
+    /* KPI - Pasivos (Rojo) */
+    .kpi-pasivos {
+        background: linear-gradient(135deg, #3d1a1a 0%, #6b2a2a 100%);
+        border: 1px solid rgba(231, 76, 60, 0.2);
+    }
+    .kpi-pasivos .value { color: #e74c3c; }
+    
+    /* KPI - Capital (Dorado) */
+    .kpi-capital {
+        background: linear-gradient(135deg, #2a1f0a 0%, #4a3a1a 100%);
+        border: 1px solid rgba(201, 168, 76, 0.2);
+    }
+    .kpi-capital .value { color: #c9a84c; }
+    
+    /* KPI - Capital Positivo */
+    .kpi-capital-positivo {
+        background: linear-gradient(135deg, #0f3d2e 0%, #1a6b4a 100%);
+        border: 1px solid rgba(46, 204, 113, 0.3);
+    }
+    .kpi-capital-positivo .value { color: #2ecc71; }
+    
+    /* KPI - Capital Negativo */
+    .kpi-capital-negativo {
+        background: linear-gradient(135deg, #3d1a1a 0%, #6b2a2a 100%);
+        border: 1px solid rgba(231, 76, 60, 0.3);
+    }
+    .kpi-capital-negativo .value { color: #e74c3c; }
+    
+    /* KPI - Iniciales (Saldos del día anterior) */
+    .kpi-inicial {
+        border-radius: 14px;
+        padding: 16px 12px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 4px 15px -3px rgba(0,0,0,0.12);
+        border: 1px solid rgba(255,255,255,0.06);
+        transition: all 0.3s ease;
+        height: 100%;
+        min-height: 100px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    
+    .kpi-inicial:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px -3px rgba(0,0,0,0.2);
+    }
+    
+    .kpi-inicial .icon {
+        font-size: 1.2rem;
+        margin-bottom: 4px;
+    }
+    
+    .kpi-inicial .label {
+        font-size: 0.7rem;
+        opacity: 0.8;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .kpi-inicial .value {
+        font-size: 1.3rem;
+        font-weight: 700;
+        margin-top: 4px;
+        font-family: 'Inter', monospace;
+    }
+    
+    .kpi-inicial-verde {
+        background: linear-gradient(135deg, #0f3d2e 0%, #1a6b4a 100%);
+        border: 1px solid rgba(46, 204, 113, 0.15);
+    }
+    .kpi-inicial-verde .value { color: #2ecc71; }
+    
+    .kpi-inicial-azul {
+        background: linear-gradient(135deg, #0a1a3a 0%, #1a3a6b 100%);
+        border: 1px solid rgba(52, 152, 219, 0.15);
+    }
+    .kpi-inicial-azul .value { color: #3498db; }
+    
+    .kpi-inicial-naranja {
+        background: linear-gradient(135deg, #3d2a0a 0%, #6b4a1a 100%);
+        border: 1px solid rgba(243, 156, 18, 0.15);
+    }
+    .kpi-inicial-naranja .value { color: #f39c12; }
+    
+    .kpi-inicial-rojo {
+        background: linear-gradient(135deg, #3d1a1a 0%, #6b2a2a 100%);
+        border: 1px solid rgba(231, 76, 60, 0.15);
+    }
+    .kpi-inicial-rojo .value { color: #e74c3c; }
+    
+    .kpi-inicial-morado {
+        background: linear-gradient(135deg, #2a0a3a 0%, #4a1a6b 100%);
+        border: 1px solid rgba(155, 89, 182, 0.15);
+    }
+    .kpi-inicial-morado .value { color: #af7ac5; }
+    
+    /* ==================== BOTONES CORPORATIVOS ==================== */
+    .stButton > button {
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+        font-size: 0.85rem !important;
+        padding: 10px 20px !important;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15) !important;
+    }
+    
+    /* ==================== TABLAS ==================== */
+    .dataframe {
+        border-radius: 12px !important;
+        overflow: hidden !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.04) !important;
+    }
+    
+    .dataframe th {
+        background: linear-gradient(135deg, #0a1628 0%, #1a3a5c 100%) !important;
         color: white !important;
+        font-weight: 600 !important;
+        padding: 14px !important;
+        font-size: 0.8rem !important;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
     
-    [data-testid="stMetric"] {
-        background: rgba(255,255,255,0.05);
-        border-radius: 16px;
-        padding: 15px;
+    /* ==================== EXPANDERS ==================== */
+    .streamlit-expanderHeader {
+        font-weight: 600 !important;
+        color: #1a3a5c !important;
+        background: rgba(26, 58, 92, 0.04) !important;
+        border-radius: 10px !important;
+        border: 1px solid rgba(26, 58, 92, 0.06) !important;
     }
     
-    hr {
-        margin: 25px 0;
-        background: linear-gradient(90deg, transparent, #667eea, transparent);
-        height: 2px;
-        border: none;
+    .streamlit-expanderHeader:hover {
+        background: rgba(26, 58, 92, 0.08) !important;
     }
     
+    /* ==================== POPOVERS ==================== */
     div[data-testid="stPopover"] {
-        background: #f8f9fa;
-        border-radius: 16px;
-        border: 2px solid #667eea;
+        background: #ffffff !important;
+        border-radius: 16px !important;
+        border: 1px solid rgba(26, 58, 92, 0.1) !important;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.1) !important;
+        padding: 20px !important;
+    }
+    
+    /* ==================== MÉTRICAS ==================== */
+    [data-testid="stMetric"] {
+        background: rgba(255,255,255,0.05) !important;
+        border-radius: 12px !important;
+        padding: 16px !important;
+        border: 1px solid rgba(255,255,255,0.04) !important;
+    }
+    
+    [data-testid="stMetric"] label {
+        color: rgba(255,255,255,0.7) !important;
+        font-weight: 500 !important;
+    }
+    
+    [data-testid="stMetric"] .stMetricValue {
+        color: white !important;
+        font-weight: 700 !important;
+    }
+    
+    /* ==================== SIDEBAR SECTION TITLES ==================== */
+    .sidebar-section-title {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: rgba(255,255,255,0.4);
+        font-weight: 600;
+        margin-top: 25px;
+        margin-bottom: 10px;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        padding-bottom: 8px;
+    }
+    
+    /* ==================== FILE UPLOADER MEJORADO ==================== */
+    .upload-section {
+        background: rgba(255,255,255,0.03);
+        border-radius: 10px;
+        padding: 12px 14px;
+        margin-bottom: 6px;
+        border: 1px solid rgba(255,255,255,0.04);
+        transition: all 0.3s ease;
+    }
+    
+    .upload-section:hover {
+        background: rgba(255,255,255,0.06);
+        border-color: rgba(201, 168, 76, 0.1);
+    }
+    
+    .upload-section .upload-label {
+        font-size: 0.75rem;
+        color: rgba(255,255,255,0.6);
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .upload-section .upload-label .badge {
+        font-size: 0.55rem;
+        padding: 2px 8px;
+        border-radius: 10px;
+        background: rgba(46, 204, 113, 0.2);
+        color: #2ecc71;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    
+    .upload-section .upload-label .badge.optional {
+        background: rgba(243, 156, 18, 0.15);
+        color: #f39c12;
+    }
+    
+    /* ==================== DIVISORES ==================== */
+    .divider-light {
+        border: none;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(201, 168, 76, 0.15), transparent);
+        margin: 20px 0;
+    }
+    
+    /* ==================== TOOLTIP ==================== */
+    .tooltip-hint {
+        font-size: 0.7rem;
+        color: rgba(255,255,255,0.3);
+        font-style: italic;
+        text-align: center;
+        margin-top: 4px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -552,42 +693,60 @@ def mostrar_tabla_activos_pasivos(inventario, cx_c, bancos, cx_p, transito, capi
             border-collapse: collapse;
             margin: 15px 0;
             font-family: 'Inter', sans-serif;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.04);
         }}
         .activos-pasivos-table th {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #0a1628 0%, #1a3a5c 100%);
             color: white;
             padding: 15px;
             text-align: center;
-            font-size: 1rem;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }}
         .activos-pasivos-table td {{
-            padding: 12px;
-            border-bottom: 1px solid #e2e8f0;
+            padding: 12px 16px;
+            border-bottom: 1px solid #e8edf2;
         }}
         .activos-pasivos-table .activos-col {{
-            background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+            background: linear-gradient(135deg, #e8f8f0 0%, #d0f0e0 100%);
             vertical-align: top;
             width: 50%;
-            border-radius: 12px 0 0 12px;
         }}
         .activos-pasivos-table .pasivos-col {{
-            background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+            background: linear-gradient(135deg, #fdf0ed 0%, #f8e0da 100%);
             vertical-align: top;
             width: 50%;
-            border-radius: 0 12px 12px 0;
         }}
         .activos-pasivos-table .capital-row {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #0a1628 0%, #1a3a5c 100%);
             font-weight: bold;
             font-size: 1.1rem;
             color: white;
         }}
+        .activos-pasivos-table .capital-row td {{
+            padding: 16px;
+            text-align: center;
+        }}
         .valor {{
-            font-weight: bold;
+            font-weight: 700;
             text-align: right;
+            font-family: 'Inter', monospace;
         }}
         .titulo-cuenta {{
             font-weight: 500;
+            color: #1a3a5c;
+        }}
+        .total-label {{
+            font-weight: 700;
+            color: #0a1628;
+        }}
+        .total-valor {{
+            font-weight: 800;
+            color: #0a1628;
+            font-size: 1.1rem;
         }}
     </style>
     
@@ -599,9 +758,9 @@ def mostrar_tabla_activos_pasivos(inventario, cx_c, bancos, cx_p, transito, capi
                     <tr><td class="titulo-cuenta">📦 Inventario</td><td class="valor">{formato_venezolano(inventario)}</td></tr>
                     <tr><td class="titulo-cuenta">💰 Cuentas por cobrar</td><td class="valor">{formato_venezolano(cx_c)}</td></tr>
                     <tr><td class="titulo-cuenta">🏦 Bancos</td><td class="valor">{formato_venezolano(bancos)}</td></tr>
-                    <tr style="border-top: 2px solid #a5d6a7;">
-                        <td class="titulo-cuenta"><strong>📌 TOTAL ACTIVOS</strong></td>
-                        <td class="valor"><strong>{formato_venezolano(total_activos)}</strong></td>
+                    <tr style="border-top: 2px solid #2ecc71;">
+                        <td class="total-label">📌 TOTAL ACTIVOS</td>
+                        <td class="total-valor">{formato_venezolano(total_activos)}</td>
                     </tr>
                 </table>
             </td>
@@ -609,15 +768,15 @@ def mostrar_tabla_activos_pasivos(inventario, cx_c, bancos, cx_p, transito, capi
                 <table style="width: 100%; border: none;">
                     <tr><td class="titulo-cuenta">📋 Cuentas por pagar</td><td class="valor">{formato_venezolano(cx_p)}</td></tr>
                     <tr><td class="titulo-cuenta">🔄 Transferencias en tránsito</td><td class="valor">{formato_venezolano(transito)}</td></tr>
-                    <tr style="border-top: 2px solid #ffe0b2;">
-                        <td class="titulo-cuenta"><strong>📌 TOTAL PASIVOS</strong></td>
-                        <td class="valor"><strong>{formato_venezolano(total_pasivos)}</strong></td>
+                    <tr style="border-top: 2px solid #e74c3c;">
+                        <td class="total-label">📌 TOTAL PASIVOS</td>
+                        <td class="total-valor">{formato_venezolano(total_pasivos)}</td>
                     </tr>
                 </table>
             </td>
         </tr>
         <tr class="capital-row">
-            <td colspan="4" style="text-align: center; padding: 15px;">
+            <td colspan="4">
                 🏁 CAPITAL DE TRABAJO NETO = {formato_venezolano(capital)}
             </td>
         </tr>
@@ -626,7 +785,7 @@ def mostrar_tabla_activos_pasivos(inventario, cx_c, bancos, cx_p, transito, capi
     return html
 
 # ============================================================
-# FUNCIÓN PARA MOSTRAR KPI INICIAL
+# FUNCIÓN PARA MOSTRAR KPI INICIAL CON DISEÑO CORPORATIVO
 # ============================================================
 def mostrar_kpi_inicial(col, titulo, valor, color, icono):
     if color == "verde":
@@ -645,7 +804,7 @@ def mostrar_kpi_inicial(col, titulo, valor, color, icono):
     valor_formateado = formato_venezolano(valor)
     
     html = f"""
-    <div class="{clase}">
+    <div class="kpi-inicial {clase}">
         <div class="icon">{icono}</div>
         <div class="label">{titulo}</div>
         <div class="value">{valor_formateado}</div>
@@ -655,7 +814,7 @@ def mostrar_kpi_inicial(col, titulo, valor, color, icono):
         st.markdown(html, unsafe_allow_html=True)
 
 # ============================================================
-# LOGIN
+# LOGIN CON DISEÑO CORPORATIVO
 # ============================================================
 def mostrar_login():
     with st.container():
@@ -663,7 +822,7 @@ def mostrar_login():
         
         try:
             img = Image.open("auditoria.jpeg")
-            img.thumbnail((200, 200))
+            img.thumbnail((120, 120))
             buffered = io.BytesIO()
             img.save(buffered, format="JPEG")
             img_str = base64.b64encode(buffered.getvalue()).decode()
@@ -671,49 +830,80 @@ def mostrar_login():
             st.markdown(
                 f"""
                 <div style="display: flex; justify-content: center; margin-bottom: 20px;">
-                    <img src="data:image/jpeg;base64,{img_str}" style="width: 160px; height: auto;">
+                    <img src="data:image/jpeg;base64,{img_str}" style="width: 100px; height: auto; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.15);">
                 </div>
                 """, 
                 unsafe_allow_html=True
             )
         except:
-            st.markdown("<h1 style='text-align: center;'>AUDITORÍA</h1>", unsafe_allow_html=True)
+            pass
         
         st.markdown("""
         <div style="text-align: center;">
-            <h1 style="font-size: 2.2rem; font-weight: 700; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            <h1 style="font-size: 2.5rem; font-weight: 800; background: linear-gradient(135deg, #c9a84c 0%, #e8c86a 100%); 
                        -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
-                SISTEMA CONTABLE DE VALIDACIÓN
+                SISTEMA CONTABLE
             </h1>
-            <h3 style="color: #666; font-weight: 400;">GRUPO BODEGUITA ORIENTE</h3>
-            <hr style="margin: 25px auto; width: 80px; height: 3px; background: linear-gradient(90deg, #667eea, #764ba2); border: none;">
+            <h2 style="color: #1a3a5c; font-weight: 400; font-size: 1.2rem; margin-top: -5px;">
+                Validador de Trazabilidad Diaria
+            </h2>
+            <p style="color: #6a8aac; font-size: 0.85rem; margin-top: 5px;">
+                Grupo Bodeguita Oriente
+            </p>
+            <hr style="margin: 20px auto; width: 60px; height: 3px; background: linear-gradient(90deg, #c9a84c, #e8c86a); border: none; border-radius: 2px;">
         </div>
         """, unsafe_allow_html=True)
         
-        col1, col2, col3 = st.columns([1, 2, 1])
+        col1, col2, col3 = st.columns([1, 1.5, 1])
         with col2:
             st.markdown("""
-            <div style="background: white; border-radius: 24px; padding: 30px; box-shadow: 0 20px 35px -10px rgba(0,0,0,0.1);">
-                <h3 style="text-align: center; color: #333; margin-bottom: 25px;">🔐 Iniciar Sesión</h3>
+            <div style="background: white; border-radius: 20px; padding: 35px; box-shadow: 0 20px 60px rgba(10,22,40,0.08); border: 1px solid rgba(26,58,92,0.06);">
+                <h3 style="text-align: center; color: #1a3a5c; margin-bottom: 25px; font-weight: 600;">🔐 Acceso al Sistema</h3>
             </div>
             """, unsafe_allow_html=True)
             
             with st.container():
-                usuario_id = st.text_input("Usuario", key="login_usuario", placeholder="Ingrese su usuario")
-                password = st.text_input("Contraseña", type="password", key="login_password", placeholder="Ingrese su contraseña")
+                usuario_id = st.text_input("👤 Usuario", key="login_usuario", placeholder="Ingrese su usuario")
+                password = st.text_input("🔑 Contraseña", type="password", key="login_password", placeholder="Ingrese su contraseña")
                 
-                if st.button("Ingresar", use_container_width=True):
+                if st.button("🚀 Ingresar", use_container_width=True):
                     if usuario_id in USUARIOS and USUARIOS[usuario_id]["password"] == password:
                         st.session_state.usuario_actual = usuario_id
                         st.rerun()
                     else:
-                        st.error("Usuario o contraseña incorrectos")
+                        st.error("❌ Usuario o contraseña incorrectos")
         
         st.markdown("<br><br>", unsafe_allow_html=True)
 
 if st.session_state.usuario_actual is None:
     mostrar_login()
     st.stop()
+
+# ============================================================
+# HEADER CORPORATIVO
+# ============================================================
+st.markdown(f"""
+<div class="corporate-header">
+    <div class="brand">
+        <div class="logo">GB</div>
+        <div>
+            <div class="title">Validador de Trazabilidad</div>
+            <div class="subtitle">Grupo Bodeguita Oriente · Sistema Contable</div>
+        </div>
+    </div>
+    <div class="status-bar">
+        <span>
+            <span class="status-dot online"></span>
+            Sistema en línea
+        </span>
+        <span class="user-info">
+            <i class="fas fa-user"></i> {USUARIOS[st.session_state.usuario_actual]['nombre']}
+            <span style="opacity:0.4;margin:0 6px;">|</span>
+            <i class="fas fa-briefcase"></i> {USUARIOS[st.session_state.usuario_actual]['rol']}
+        </span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # ============================================================
 # CARGAR AUTOMÁTICAMENTE EL ÚLTIMO SALDO GUARDADO
@@ -724,52 +914,67 @@ else:
     st.sidebar.info("📌 No hay saldos previos. Ingrese los saldos manualmente o guarde al finalizar el día.")
 
 # ============================================================
-# SIDEBAR
+# SIDEBAR CORPORATIVA - DISEÑO MEJORADO
 # ============================================================
 with st.sidebar:
     st.markdown("""
-    <div style="text-align: center; margin-bottom: 20px;">
-        <h3 style="color: white;">📊 VALIDADOR</h3>
-        <p style="font-size: 0.8rem; opacity: 0.7;">Trazabilidad Diaria</p>
+    <div style="text-align: center; margin: 10px 0 20px 0; padding-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.05);">
+        <div style="font-size: 1.6rem; font-weight: 700; background: linear-gradient(135deg, #c9a84c, #e8c86a); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+            VALIDADOR
+        </div>
+        <div style="font-size: 0.6rem; opacity: 0.4; letter-spacing: 2px; text-transform: uppercase; margin-top: 2px;">
+            Trazabilidad Diaria
+        </div>
     </div>
     """, unsafe_allow_html=True)
     
-    st.markdown("---")
-    
-    st.markdown(f"**👤 Usuario:** {USUARIOS[st.session_state.usuario_actual]['nombre']}")
-    st.markdown(f"**📋 Rol:** {USUARIOS[st.session_state.usuario_actual]['rol']}")
-    
-    st.markdown("---")
+    # ============================================================
+    # SECCIÓN: USUARIO
+    # ============================================================
+    st.markdown('<div class="sidebar-section-title">👤 Usuario</div>', unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style="background: rgba(255,255,255,0.04); border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.04);">
+        <div style="font-size: 0.85rem; font-weight: 600; color: white;">{USUARIOS[st.session_state.usuario_actual]['nombre']}</div>
+        <div style="font-size: 0.7rem; opacity: 0.5; display: flex; justify-content: space-between;">
+            <span>{USUARIOS[st.session_state.usuario_actual]['rol']}</span>
+            <span>● Activo</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     if st.button("🚪 Cerrar Sesión", use_container_width=True):
         st.session_state.usuario_actual = None
         st.rerun()
     
-    st.markdown("---")
+    st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
     
-    st.markdown("### 📁 Carga de Archivos")
+    # ============================================================
+    # SECCIÓN: FECHA Y TASA
+    # ============================================================
+    st.markdown('<div class="sidebar-section-title">📅 Configuración</div>', unsafe_allow_html=True)
     
     fecha_procesar = st.date_input("📅 Fecha a procesar", datetime.now())
     
     fecha_str = fecha_procesar.strftime("%Y-%m-%d")
-    
     tasa_guardada = db.obtener_tasa_bcv(fecha_str)
     
-    tasa_bcv = st.sidebar.number_input(
+    tasa_bcv = st.number_input(
         "💵 Tasa BCV",
         value=float(tasa_guardada or 1),
         step=0.0001,
         format="%.4f"
     )
-    
     db.guardar_tasa_bcv(fecha_str, tasa_bcv)
     
     if tasa_guardada is None:
-        st.sidebar.warning("No hay tasa BCV registrada para esta fecha")
+        st.caption("⚠️ No hay tasa BCV registrada para esta fecha")
     
-    st.markdown("---")
+    st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
     
-    st.markdown("#### 📌 Saldos Iniciales Manuales")
+    # ============================================================
+    # SECCIÓN: SALDOS INICIALES
+    # ============================================================
+    st.markdown('<div class="sidebar-section-title">📌 Saldos Iniciales</div>', unsafe_allow_html=True)
     st.caption("Ingrese los saldos del día anterior")
     
     col_s1, col_s2 = st.columns(2)
@@ -812,18 +1017,21 @@ with st.sidebar:
         key="tran_manual"
     )
     
-    if st.button("📊 Actualizar Saldos Manuales", use_container_width=True):
+    if st.button("💾 Actualizar Saldos", use_container_width=True):
         st.session_state.saldos['inventario'] = inventario_manual
         st.session_state.saldos['cx_c'] = cx_c_manual
         st.session_state.saldos['bancos'] = bancos_manual
         st.session_state.saldos['cx_p'] = cx_p_manual
         st.session_state.saldos['transito'] = transito_manual
-        st.success("✅ Saldos actualizados manualmente")
+        st.success("✅ Saldos actualizados")
         st.rerun()
     
-    st.markdown("---")
+    st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
     
-    st.markdown("#### 📅 Filtro por Rango de Fechas")
+    # ============================================================
+    # SECCIÓN: FILTRO DE FECHAS
+    # ============================================================
+    st.markdown('<div class="sidebar-section-title">📅 Historial</div>', unsafe_allow_html=True)
     
     col_fecha1, col_fecha2 = st.columns(2)
     with col_fecha1:
@@ -841,14 +1049,14 @@ with st.sidebar:
     
     col_btn_f1, col_btn_f2 = st.columns(2)
     with col_btn_f1:
-        if st.button("🔍 Aplicar Filtro", use_container_width=True):
+        if st.button("🔍 Aplicar", use_container_width=True):
             st.session_state.fecha_desde = fecha_desde
             st.session_state.fecha_hasta = fecha_hasta
             st.session_state.mostrar_historial = True
             st.rerun()
     
     with col_btn_f2:
-        if st.button("🔄 Resetear", use_container_width=True):
+        if st.button("🔄 Reset", use_container_width=True):
             st.session_state.fecha_desde = datetime.now() - pd.Timedelta(days=7)
             st.session_state.fecha_hasta = datetime.now()
             st.session_state.mostrar_historial = False
@@ -874,46 +1082,77 @@ with st.sidebar:
                     df_mostrar[col] = df_mostrar[col].apply(formato_venezolano)
             
             st.dataframe(df_mostrar, use_container_width=True)
-            st.caption(f"📊 Mostrando registros desde {desde.strftime('%d/%m/%Y')} hasta {hasta.strftime('%d/%m/%Y')}")
+            st.caption(f"📊 {len(historial)} registros")
             
-            col_res1, col_res2, col_res3 = st.columns(3)
+            col_res1, col_res2 = st.columns(2)
             with col_res1:
-                st.metric("📊 Total de días", len(historial))
-            with col_res2:
                 if 'capital' in historial.columns and len(historial) > 0:
                     capital_inicial_val = safe_number(historial.iloc[0]['capital'])
                     capital_final_val = safe_number(historial.iloc[-1]['capital'])
-                    st.metric("📈 Variación capital", formato_venezolano(capital_final_val - capital_inicial_val))
-            with col_res3:
+                    st.metric("📈 Variación", formato_venezolano(capital_final_val - capital_inicial_val))
+            with col_res2:
                 if 'capital' in historial.columns and len(historial) > 0:
                     st.metric("🏁 Capital final", formato_venezolano(safe_number(historial.iloc[-1]['capital'])))
         else:
-            st.info("No hay registros en el rango de fechas seleccionado")
-            st.session_state.historial_data = None
+            st.info("No hay registros")
     
-    st.markdown("---")
+    st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
     
-    st.markdown("#### 📂 Archivos del día")
+    # ============================================================
+    # SECCIÓN: ARCHIVOS - DISTRIBUCIÓN MEJORADA
+    # ============================================================
+    st.markdown('<div class="sidebar-section-title">📂 Archivos del Día</div>', unsafe_allow_html=True)
     
-    archivo_facturacion = st.file_uploader("Facturación diaria", type=["xlsx", "xls"], key="fact")
-    archivo_cobranzas = st.file_uploader("Cobranzas procesadas", type=["xlsx", "xls"], key="cob")
-    archivo_recepciones = st.file_uploader("Recepciones del día (OPCIONAL)", type=["xlsx", "xls"], key="rec")
-    archivo_egresos = st.file_uploader("Egresos iPago", type=["xlsx", "xls"], key="egr")
-    archivo_estado_cuenta = st.file_uploader("Estado de cuenta bancario", type=["xlsx", "xls"], key="estado")
-    archivo_notas_credito_cliente = st.file_uploader("Notas de crédito (clientes)", type=["xlsx", "xls"], key="notas_cliente")
-    archivo_notas_credito_proveedor = st.file_uploader("Notas de crédito (proveedores)", type=["xlsx", "xls"], key="notas_proveedor")
+    # Archivos Obligatorios
+    st.markdown("""
+    <div style="font-size:0.7rem; color:rgba(255,255,255,0.4); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px;">
+        📌 Obligatorios
+    </div>
+    """, unsafe_allow_html=True)
     
-    st.markdown("#### 📂 Archivos de costos")
-    archivo_costo_facturacion = st.file_uploader("Costo de facturación (Reporte Utilidad)", type=["xlsx", "xls"], key="costo_fact")
+    archivo_facturacion = st.file_uploader("📊 Facturación", type=["xlsx", "xls"], key="fact")
+    archivo_cobranzas = st.file_uploader("💰 Cobranzas", type=["xlsx", "xls"], key="cob")
+    archivo_egresos = st.file_uploader("💳 Egresos iPago", type=["xlsx", "xls"], key="egr")
+    archivo_estado_cuenta = st.file_uploader("🏦 Estado de Cuenta", type=["xlsx", "xls"], key="estado")
     
-    st.markdown("#### 📂 Archivos de verificación")
+    # Archivos Opcionales
+    st.markdown("""
+    <div style="font-size:0.7rem; color:rgba(255,255,255,0.3); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:6px;">
+        📎 Opcionales
+    </div>
+    """, unsafe_allow_html=True)
     
-    archivo_cxc_reportado = st.file_uploader("CxC final reportado", type=["xlsx", "xls"], key="cxc_rep")
-    archivo_cxp_reportado = st.file_uploader("CxP final reportado", type=["xlsx", "xls"], key="cxp_rep")
-    archivo_inventario_reportado = st.file_uploader("Inventario final reportado", type=["xlsx", "xls"], key="inv_rep")
-    archivo_tb = st.file_uploader("TB.xlsx (Transferencias)", type=["xlsx", "xls"], key="tb")
+    archivo_recepciones = st.file_uploader("📦 Recepciones", type=["xlsx", "xls"], key="rec")
+    archivo_notas_credito_cliente = st.file_uploader("📝 NC Clientes", type=["xlsx", "xls"], key="notas_cliente")
+    archivo_notas_credito_proveedor = st.file_uploader("📝 NC Proveedores", type=["xlsx", "xls"], key="notas_proveedor")
     
-    st.markdown("---")
+    # Archivos de Costos
+    st.markdown("""
+    <div style="font-size:0.7rem; color:rgba(255,255,255,0.3); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:6px;">
+        📊 Costos
+    </div>
+    """, unsafe_allow_html=True)
+    
+    archivo_costo_facturacion = st.file_uploader("📈 Costo Facturación", type=["xlsx", "xls"], key="costo_fact")
+    
+    # Archivos de Verificación
+    st.markdown("""
+    <div style="font-size:0.7rem; color:rgba(255,255,255,0.3); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:6px;">
+        🔍 Verificación
+    </div>
+    """, unsafe_allow_html=True)
+    
+    archivo_cxc_reportado = st.file_uploader("📄 CxC Reportado", type=["xlsx", "xls"], key="cxc_rep")
+    archivo_cxp_reportado = st.file_uploader("📄 CxP Reportado", type=["xlsx", "xls"], key="cxp_rep")
+    archivo_inventario_reportado = st.file_uploader("📄 Inventario Reportado", type=["xlsx", "xls"], key="inv_rep")
+    archivo_tb = st.file_uploader("🔄 TB.xlsx", type=["xlsx", "xls"], key="tb")
+    
+    st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
+    
+    # ============================================================
+    # SECCIÓN: ACCIONES
+    # ============================================================
+    st.markdown('<div class="sidebar-section-title">⚡ Acciones Rápidas</div>', unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
     with col1:
@@ -925,10 +1164,10 @@ with st.sidebar:
                 st.session_state.saldos['bancos'] = safe_number(ultimo['bancos'])
                 st.session_state.saldos['cx_p'] = safe_number(ultimo['cx_p'])
                 st.session_state.saldos['transito'] = safe_number(ultimo['transito'])
-                st.success("✅ Saldos cargados del día anterior")
+                st.success("✅ Saldos cargados")
                 st.rerun()
             else:
-                st.warning("No hay historial de días anteriores")
+                st.warning("No hay historial")
     
     with col2:
         if st.button("🧹 Resetear", use_container_width=True):
@@ -937,16 +1176,16 @@ with st.sidebar:
             st.session_state.saldos['bancos'] = 0
             st.session_state.saldos['cx_p'] = 0
             st.session_state.saldos['transito'] = 0
-            st.success("✅ Saldos reseteados a 0")
+            st.success("✅ Saldos reseteados")
             st.rerun()
 
 # ============================================================
 # INTERFAZ PRINCIPAL
 # ============================================================
 st.markdown("""
-<div style="text-align: center; margin-bottom: 30px;">
-    <h1 style="font-size: 2rem; font-weight: 700;">📊 Validador de Trazabilidad Diaria</h1>
-    <p style="color: #666; font-size: 1rem;">Capital de Trabajo Neto Operativo</p>
+<div style="text-align: center; margin-bottom: 25px;">
+    <h1 style="font-size: 1.6rem; font-weight: 700; color: #0a1628;">📊 Validador de Trazabilidad Diaria</h1>
+    <p style="color: #6a8aac; font-size: 0.9rem;">Capital de Trabajo Neto Operativo</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -968,12 +1207,13 @@ if st.session_state.get('mostrar_historial', False) and st.session_state.get('hi
             try:
                 fig, ax = plt.subplots(figsize=(10, 4))
                 historial_ordenado = historial.sort_values('fecha')
-                ax.plot(historial_ordenado['fecha'], historial_ordenado['capital'], marker='o', linewidth=2, color='#667eea')
-                ax.set_title('Evolución del Capital de Trabajo Neto', fontsize=14, fontweight='bold')
-                ax.set_xlabel('Fecha')
-                ax.set_ylabel('Capital (Bs.)')
+                ax.plot(historial_ordenado['fecha'], historial_ordenado['capital'], marker='o', linewidth=2, color='#c9a84c')
+                ax.set_title('Evolución del Capital de Trabajo Neto', fontsize=14, fontweight='bold', color='#0a1628')
+                ax.set_xlabel('Fecha', color='#6a8aac')
+                ax.set_ylabel('Capital (Bs.)', color='#6a8aac')
                 ax.grid(True, alpha=0.3)
-                plt.xticks(rotation=45)
+                ax.set_facecolor('#f8fafc')
+                plt.xticks(rotation=45, color='#6a8aac')
                 plt.tight_layout()
                 st.pyplot(fig)
             except:
@@ -1027,7 +1267,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             """)
     
     # ============================================================
-    # SALDOS INICIALES - KPIs
+    # SALDOS INICIALES - KPIs CORPORATIVOS
     # ============================================================
     st.markdown("#### 📌 Saldos Iniciales (Día Anterior)")
     st.caption("💡 Estos son los saldos que vienen del día anterior")
@@ -1172,10 +1412,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         facturacion, _, _, _ = ProcesadorArchivos.procesar_facturacion(df_facturacion)
         cobranzas, _, _ = ProcesadorArchivos.procesar_cobranzas(df_cobranzas)
         
-        # 🔥 PROCESAR EGRESOS CON FILTRO DE PROVEEDORES DE MERCANCIA
         pagos_proveedores, pagos_gastos, total_egresos, df_proveedores = ProcesadorArchivos.procesar_egresos(df_egresos)
         
-        # Mostrar detalle de proveedores filtrados
         if not df_proveedores.empty:
             with st.expander("📋 Detalle de PROVEEDORES DE MERCANCIA (filtrados)", expanded=False):
                 st.success(f"✅ Se encontraron {len(df_proveedores)} registros de PROVEEDORES DE MERCANCIA")
@@ -1190,16 +1428,12 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             st.warning("⚠️ No se encontraron registros de PROVEEDORES DE MERCANCIA en el archivo de egresos")
             st.info("ℹ️ Asegúrate de que la columna 'Tipo de Pago' tenga 'PROVEEDORES DE MERCANCIA'")
             
-            # Mostrar los tipos de pago disponibles para ayudar al usuario
             if len(df_egresos.columns) >= 4:
                 col_tipo_pago = df_egresos.columns[3]
                 tipos_unicos = df_egresos[col_tipo_pago].unique()
                 st.write("📌 Tipos de Pago encontrados en el archivo:")
                 st.write(tipos_unicos)
         
-        # 🔥 PROCESAR ESTADO DE CUENTA
-        # Retorna: saldo_inicial_bancos, ingresos_id, ingresos_no_id, egresos_bancarios, 
-        #          saldo_final, total_ingresos, total_egresos_banco
         saldo_inicial_bancos, ingresos_id, ingresos_no_id, egresos_bancarios, saldo_final, total_ingresos, total_egresos_banco = ProcesadorArchivos.procesar_estado_cuenta(
             df_estado_cuenta, st.session_state.saldos['bancos']
         )
@@ -1277,25 +1511,15 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
-    # CÁLCULOS Y VALIDACIONES - CORREGIDO
+    # CÁLCULOS Y VALIDACIONES
     # ============================================================
     
     inventario_calculado = safe_number(st.session_state.saldos['inventario']) + recepcion_total - costo_facturacion
     cx_c_calculado = safe_number(st.session_state.saldos['cx_c']) + facturacion - cobranzas - notas_credito_cliente
     
-    # 🔥 CORREGIDO: 
-    # - total_ingresos = del estado de cuenta (columna Crédito/Ingresos)
-    # - total_egresos_banco = del estado de cuenta (columna Débito/Egresos)
-    # - Bancos = Bancos inicial + Ingresos (estado de cuenta) - Egresos (estado de cuenta)
     bancos_calculado = safe_number(st.session_state.saldos['bancos']) + total_ingresos - total_egresos_banco
-    
-    # 🔥 CxP = CxP inicial + Recepciones - Pagos proveedores
     cx_p_calculado = safe_number(st.session_state.saldos['cx_p']) + recepcion_total - pagos_proveedores
-    
-    # 🔥 Tránsito = Tránsito inicial + Ingresos del día - Cobranzas
     transito_calculado = safe_number(st.session_state.saldos['transito']) + ingresos_totales - cobranzas
-    
-    # 🔥 Capital = (Inventario + CxC + Bancos) - (CxP + Tránsito)
     capital_calculado = (inventario_calculado + cx_c_calculado + bancos_calculado) - (cx_p_calculado + transito_calculado)
     
     # Mostrar información detallada del cálculo de Bancos
@@ -1341,7 +1565,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
-    # COMPARACIÓN VS VALORES REPORTADOS - CORREGIDO
+    # COMPARACIÓN VS VALORES REPORTADOS
     # ============================================================
     st.markdown("#### 📋 Comparación vs Valores Reportados")
 
@@ -1403,7 +1627,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             return f"Transferencias pendientes por {formato_venezolano(abs(diferencia))}"
         return ""
 
-    # --- Inventario ---
     resultados_data.append(crear_fila_comparacion(
         "Inventario",
         "Inv. inicial + Recepción - Costo facturación",
@@ -1413,7 +1636,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'inventario'
     ))
 
-    # --- Cuentas por cobrar ---
     resultados_data.append(crear_fila_comparacion(
         "Cuentas por cobrar",
         "CxC inicial + Facturación - Cobranzas - Notas crédito clientes",
@@ -1423,8 +1645,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'cx_c'
     ))
 
-    # --- 🔥 BANCOS - CORREGIDO ---
-    # El valor reportado es el saldo final del estado de cuenta
     resultados_data.append({
         "Cuenta": "Bancos",
         "Fórmula": "Bancos inicial + Ingresos (estado de cuenta) - Egresos (estado de cuenta)",
@@ -1438,7 +1658,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         "Origen": "Saldo final del estado de cuenta"
     })
 
-    # --- Cuentas por pagar ---
     resultados_data.append(crear_fila_comparacion(
         "Cuentas por pagar",
         "CxP inicial + Recepciones - Pagos proveedores",
@@ -1448,7 +1667,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'cx_p'
     ))
 
-    # --- Transferencias en tránsito ---
     resultados_data.append(crear_fila_comparacion(
         "Transferencias en tránsito",
         "Tránsito inicial + Ingresos del día - Cobranzas",
@@ -1458,7 +1676,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'transito'
     ))
 
-    # --- Capital de Trabajo Neto ---
     resultados_data.append({
         "Cuenta": "Capital de Trabajo Neto",
         "Fórmula": "(Inv + CxC + Bancos) - (CxP + Tránsito)",
@@ -1472,7 +1689,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         "Origen": "Calculado automáticamente"
     })
 
-    # Mostrar tabla de comparación
     df_comparacion = pd.DataFrame(resultados_data)
     st.dataframe(df_comparacion, use_container_width=True, hide_index=True)
 
@@ -1722,9 +1938,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             return ['background-color: #fff3e0; font-weight: bold;'] * len(row)
         elif row['Tipo'] == 'CAPITAL':
             if capital_neto >= 0:
-                return ['background-color: #27ae60; color: white; font-weight: bold; font-size: 1.1rem;'] * len(row)
+                return ['background-color: #0f3d2e; color: white; font-weight: bold; font-size: 1.1rem;'] * len(row)
             else:
-                return ['background-color: #e74c3c; color: white; font-weight: bold; font-size: 1.1rem;'] * len(row)
+                return ['background-color: #3d1a1a; color: white; font-weight: bold; font-size: 1.1rem;'] * len(row)
         elif row['Tipo'] == 'ACTIVO':
             return ['background-color: #f1f8f4;'] * len(row)
         elif row['Tipo'] == 'PASIVO':
@@ -1783,7 +1999,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         """)
 
     # ============================================================
-    # RESUMEN DEL CIERRE DIARIO - KPIS
+    # RESUMEN DEL CIERRE DIARIO - KPIS CORPORATIVOS
     # ============================================================
     st.markdown("---")
     st.markdown("#### 📊 Resumen del Cierre Diario")
@@ -1811,15 +2027,17 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 fig, ax = plt.subplots(figsize=(6, 3))
                 componentes = ['CxC', 'Inventario', 'Bancos']
                 valores = [cx_c_cierre, inventario_cierre, bancos_cierre]
-                colores = ['#17a2b8', '#28a745', '#ffc107']
+                colores = ['#3498db', '#2ecc71', '#f39c12']
                 ax.bar(componentes, valores, color=colores)
-                ax.set_title('Composición de Activos', fontsize=10)
-                ax.set_ylabel('Monto (Bs.)')
+                ax.set_title('Composición de Activos', fontsize=10, color='#0a1628')
+                ax.set_ylabel('Monto (Bs.)', color='#6a8aac')
+                ax.set_facecolor('#f8fafc')
                 plt.tight_layout()
                 st.pyplot(fig)
         
         st.markdown(f"""
-        <div class="kpi-card-activos">
+        <div class="kpi-card kpi-activos">
+            <div class="icon-bg">📈</div>
             <div class="label">📈 ACTIVOS OPERATIVOS</div>
             <div class="value">{formato_venezolano(activos_operativos)}</div>
             <div class="sub-label">💡 Haz clic para ver detalle</div>
@@ -1843,7 +2061,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             st.markdown(popover_pasivos)
         
         st.markdown(f"""
-        <div class="kpi-card-pasivos">
+        <div class="kpi-card kpi-pasivos">
+            <div class="icon-bg">📉</div>
             <div class="label">📉 PASIVOS OPERATIVOS</div>
             <div class="value">{formato_venezolano(pasivos_operativos)}</div>
             <div class="sub-label">💡 Haz clic para ver detalle</div>
@@ -1852,10 +2071,10 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
 
     with col_c3:
         if capital_neto >= 0:
-            clase_capital = "kpi-card-capital-positivo"
+            clase = "kpi-capital-positivo"
             emoji = "✅"
         else:
-            clase_capital = "kpi-card-capital-negativo"
+            clase = "kpi-capital-negativo"
             emoji = "❌"
         
         popover_capital = f"""
@@ -1876,7 +2095,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             st.markdown(popover_capital)
         
         st.markdown(f"""
-        <div class="{clase_capital}">
+        <div class="kpi-card {clase}">
+            <div class="icon-bg">🏁</div>
             <div class="label">{emoji} CAPITAL DE TRABAJO NETO</div>
             <div class="value">{formato_venezolano(capital_neto)}</div>
             <div class="sub-label">💡 Haz clic para ver detalle</div>
@@ -1959,7 +2179,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     
     with col_kpi1:
         st.markdown(f"""
-        <div class="kpi-card-capital">
+        <div class="kpi-card kpi-capital">
+            <div class="icon-bg">🏁</div>
             <div class="label">🏁 CAPITAL DE TRABAJO NETO</div>
             <div class="value">{formato_venezolano(capital_calculado)}</div>
         </div>
@@ -1967,9 +2188,13 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     
     with col_kpi2:
         arrow = "📉" if var_capital < 0 else "📈"
-        color_class = "kpi-card-capital-negativo" if var_capital < 0 else "kpi-card-capital-positivo"
+        if var_capital >= 0:
+            color_class = "kpi-capital-positivo"
+        else:
+            color_class = "kpi-capital-negativo"
         st.markdown(f"""
-        <div class="{color_class}">
+        <div class="kpi-card {color_class}">
+            <div class="icon-bg">{arrow}</div>
             <div class="label">{arrow} VARIACIÓN DEL CAPITAL</div>
             <div class="value">{formato_venezolano(var_capital)}</div>
         </div>
@@ -1977,7 +2202,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     
     with col_kpi3:
         st.markdown(f"""
-        <div class="kpi-card-capital">
+        <div class="kpi-card kpi-capital">
+            <div class="icon-bg">🔄</div>
             <div class="label">🔄 TRANSFERENCIAS EN TRÁNSITO</div>
             <div class="value">{formato_venezolano(transito_calculado)}</div>
         </div>
@@ -2032,25 +2258,27 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     fig, axes = plt.subplots(2, 1, figsize=(12, 8))
                     
                     axes[0].plot(historial_ordenado['fecha'], historial_ordenado['capital'], 
-                                marker='o', linewidth=2, color='#667eea')
-                    axes[0].set_title('Evolución del Capital de Trabajo Neto', fontsize=14, fontweight='bold')
-                    axes[0].set_xlabel('Fecha')
-                    axes[0].set_ylabel('Capital (Bs.)')
+                                marker='o', linewidth=2, color='#c9a84c')
+                    axes[0].set_title('Evolución del Capital de Trabajo Neto', fontsize=14, fontweight='bold', color='#0a1628')
+                    axes[0].set_xlabel('Fecha', color='#6a8aac')
+                    axes[0].set_ylabel('Capital (Bs.)', color='#6a8aac')
                     axes[0].grid(True, alpha=0.3)
-                    axes[0].tick_params(axis='x', rotation=45)
+                    axes[0].set_facecolor('#f8fafc')
+                    axes[0].tick_params(axis='x', rotation=45, colors='#6a8aac')
                     
                     axes[1].plot(historial_ordenado['fecha'], historial_ordenado['inventario'], 
-                                marker='s', linewidth=2, label='Inventario', color='#28a745')
+                                marker='s', linewidth=2, label='Inventario', color='#2ecc71')
                     axes[1].plot(historial_ordenado['fecha'], historial_ordenado['cx_c'], 
-                                marker='^', linewidth=2, label='CxC', color='#17a2b8')
+                                marker='^', linewidth=2, label='CxC', color='#3498db')
                     axes[1].plot(historial_ordenado['fecha'], historial_ordenado['bancos'], 
-                                marker='d', linewidth=2, label='Bancos', color='#ffc107')
-                    axes[1].set_title('Evolución de Componentes del Capital', fontsize=14, fontweight='bold')
-                    axes[1].set_xlabel('Fecha')
-                    axes[1].set_ylabel('Monto (Bs.)')
-                    axes[1].legend()
+                                marker='d', linewidth=2, label='Bancos', color='#f39c12')
+                    axes[1].set_title('Evolución de Componentes del Capital', fontsize=14, fontweight='bold', color='#0a1628')
+                    axes[1].set_xlabel('Fecha', color='#6a8aac')
+                    axes[1].set_ylabel('Monto (Bs.)', color='#6a8aac')
+                    axes[1].legend(loc='upper left')
                     axes[1].grid(True, alpha=0.3)
-                    axes[1].tick_params(axis='x', rotation=45)
+                    axes[1].set_facecolor('#f8fafc')
+                    axes[1].tick_params(axis='x', rotation=45, colors='#6a8aac')
                     
                     plt.tight_layout()
                     st.pyplot(fig)
