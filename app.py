@@ -651,12 +651,118 @@ st.markdown("""
         text-align: center;
         margin-top: 4px;
     }
+
+    /* ==================== KPIs DASHBOARD GENERAL ==================== */
+    .dashboard-kpi-card {
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        border: 1px solid rgba(0,0,0,0.05);
+        margin-bottom: 20px;
+        transition: all 0.3s ease;
+    }
+    .dashboard-kpi-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.08);
+    }
+    .dashboard-kpi-title {
+        font-size: 0.8rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 6px;
+    }
+    .dashboard-kpi-value {
+        font-size: 1.8rem;
+        font-weight: 800;
+    }
+    .dashboard-kpi-desc {
+        font-size: 0.75rem;
+        opacity: 0.7;
+        margin-top: 4px;
+    }
+    
+    /* Variantes de colores suaves pero fuertes */
+    .kpi-variant-blue {
+        background-color: #f0f7ff;
+        border-left: 5px solid #0056b3;
+    }
+    .kpi-variant-blue .dashboard-kpi-title,
+    .kpi-variant-blue .dashboard-kpi-value {
+        color: #0056b3;
+    }
+    
+    .kpi-variant-green {
+        background-color: #f0fff4;
+        border-left: 5px solid #1e7e34;
+    }
+    .kpi-variant-green .dashboard-kpi-title,
+    .kpi-variant-green .dashboard-kpi-value {
+        color: #1e7e34;
+    }
+    
+    .kpi-variant-red {
+        background-color: #fff5f5;
+        border-left: 5px solid #c82333;
+    }
+    .kpi-variant-red .dashboard-kpi-title,
+    .kpi-variant-red .dashboard-kpi-value {
+        color: #c82333;
+    }
+    
+    .kpi-variant-orange {
+        background-color: #fff9db;
+        border-left: 5px solid #d97706;
+    }
+    .kpi-variant-orange .dashboard-kpi-title,
+    .kpi-variant-orange .dashboard-kpi-value {
+        color: #d97706;
+    }
+    
+    .kpi-variant-purple {
+        background-color: #fcf0ff;
+        border-left: 5px solid #85144b;
+    }
+    .kpi-variant-purple .dashboard-kpi-title,
+    .kpi-variant-purple .dashboard-kpi-value {
+        color: #85144b;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================
 # SESION STATE
 # ============================================================
+if 'empresa_activa' not in st.session_state:
+    st.session_state.empresa_activa = "Bodeguita Guayana"
+
+# Función para inicializar saldos y ajustes de una empresa y fecha
+def inicializar_saldos_empresa(empresa, fecha_str):
+    ultimo = db.obtener_ultimo_saldo(empresa)
+    if ultimo:
+        st.session_state.saldos = {
+            'fecha_actual': ultimo['fecha'],
+            'inventario': safe_number(ultimo['inventario']),
+            'cx_c': safe_number(ultimo['cx_c']),
+            'bancos': safe_number(ultimo['bancos']),
+            'cx_p': safe_number(ultimo['cx_p']),
+            'transito': safe_number(ultimo['transito']),
+            'capital_anterior': safe_number(ultimo['capital']),
+            'historico': []
+        }
+    else:
+        st.session_state.saldos = {
+            'fecha_actual': None,
+            'inventario': 0.0,
+            'cx_c': 0.0,
+            'bancos': 0.0,
+            'cx_p': 0.0,
+            'transito': 0.0,
+            'capital_anterior': 0.0,
+            'historico': []
+        }
+    st.session_state.ajustes = db.obtener_ajustes(fecha_str, empresa)
+
 if 'saldos' not in st.session_state:
     st.session_state.saldos = {
         'fecha_actual': None,
@@ -698,8 +804,8 @@ if 'archivos_cargados' not in st.session_state:
 # ============================================================
 # FUNCIONES AUXILIARES
 # ============================================================
-def cargar_ultimo_saldo_automatico():
-    ultimo = db.obtener_ultimo_saldo()
+def cargar_ultimo_saldo_automatico(empresa='General'):
+    ultimo = db.obtener_ultimo_saldo(empresa)
     if ultimo:
         st.session_state.saldos['inventario'] = safe_number(ultimo['inventario'])
         st.session_state.saldos['cx_c'] = safe_number(ultimo['cx_c'])
@@ -880,6 +986,251 @@ def mostrar_kpi_inicial(col, titulo, valor, color, icono):
         st.markdown(html, unsafe_allow_html=True)
 
 # ============================================================
+# FUNCIONES PARA EL DASHBOARD DEL GERENTE (AUDITOR1)
+# ============================================================
+def obtener_saldos_consolidados():
+    empresas = [
+        "Bodeguita Guayana",
+        "Bodeguita Monagas",
+        "Bodeguita Corporación",
+        "Bodeguita Anzoátegui",
+        "Bodeguita Nororiental",
+        "Bodeguita Carúpano",
+        "Nexo Comercial"
+    ]
+    datos = []
+    for emp in empresas:
+        ultimo = db.obtener_ultimo_saldo(emp)
+        if ultimo:
+            datos.append({
+                'Empresa': emp,
+                'Inventario': safe_number(ultimo['inventario']),
+                'CxC': safe_number(ultimo['cx_c']),
+                'Bancos': safe_number(ultimo['bancos']),
+                'CxP': safe_number(ultimo['cx_p']),
+                'Tránsito': safe_number(ultimo['transito']),
+                'Capital Neto': safe_number(ultimo['capital']),
+                'Fecha': ultimo['fecha']
+            })
+        else:
+            datos.append({
+                'Empresa': emp,
+                'Inventario': 0.0,
+                'CxC': 0.0,
+                'Bancos': 0.0,
+                'CxP': 0.0,
+                'Tránsito': 0.0,
+                'Capital Neto': 0.0,
+                'Fecha': '-'
+            })
+    return pd.DataFrame(datos)
+
+def mostrar_dashboard_general_consolidado():
+    st.markdown("""
+    <div style="margin-bottom: 25px;">
+        <h2 style="text-align: left; font-size: 1.8rem; font-weight: 800; color: #0a1628; margin-bottom: 5px;">📊 Panel de Control Consolidado</h2>
+        <p style="color: #6a8aac; font-size: 0.95rem;">Grupo Bodeguita Oriente · Resumen de Capital de Trabajo Neto Operativo</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    df_consolidado = obtener_saldos_consolidados()
+    
+    # Calcular KPIs
+    total_capital = df_consolidado['Capital Neto'].sum()
+    emp_max = df_consolidado.loc[df_consolidado['Capital Neto'].idxmax()] if not df_consolidado.empty else {'Capital Neto': 0.0, 'Empresa': '-'}
+    emp_min = df_consolidado.loc[df_consolidado['Capital Neto'].idxmin()] if not df_consolidado.empty else {'Capital Neto': 0.0, 'Empresa': '-'}
+    
+    col_g1, col_g2, col_g3 = st.columns(3)
+    
+    with col_g1:
+        st.markdown(f"""
+        <div class="dashboard-kpi-card kpi-variant-blue">
+            <div class="dashboard-kpi-title">🏁 Capital Consolidado</div>
+            <div class="dashboard-kpi-value">{formato_venezolano(total_capital)} Bs.</div>
+            <div class="dashboard-kpi-desc">Suma neta de todas las empresas</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    with col_g2:
+        st.markdown(f"""
+        <div class="dashboard-kpi-card kpi-variant-green">
+            <div class="dashboard-kpi-title">📈 Mayor Capital de Trabajo</div>
+            <div class="dashboard-kpi-value">{formato_venezolano(emp_max['Capital Neto'])} Bs.</div>
+            <div class="dashboard-kpi-desc">{emp_max['Empresa']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    with col_g3:
+        st.markdown(f"""
+        <div class="dashboard-kpi-card kpi-variant-red">
+            <div class="dashboard-kpi-title">📉 Menor Capital de Trabajo</div>
+            <div class="dashboard-kpi-value">{formato_venezolano(emp_min['Capital Neto'])} Bs.</div>
+            <div class="dashboard-kpi-desc">{emp_min['Empresa']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    # Gráficos
+    st.markdown("### 📊 Comparación de Capital Neto por Empresa")
+    
+    chart_df = df_consolidado[['Empresa', 'Capital Neto']].copy()
+    chart_df = chart_df.set_index('Empresa')
+    st.bar_chart(chart_df, color="#1a73e8", height=300)
+    
+    # Tabla detallada
+    st.markdown("### 📋 Detalle de Saldos por Empresa")
+    
+    df_formatted = df_consolidado.copy()
+    for col in ['Inventario', 'CxC', 'Bancos', 'CxP', 'Tránsito', 'Capital Neto']:
+        df_formatted[col] = df_formatted[col].apply(formato_venezolano)
+        
+    st.dataframe(df_formatted, use_container_width=True, hide_index=True)
+    
+    # Evolución Consolidada Histórica
+    st.markdown("### 📈 Evolución Histórica Comparativa")
+    
+    conn = sqlite3.connect(db.db_path)
+    df_hist_all = pd.read_sql_query(
+        "SELECT fecha, empresa, capital FROM saldos_diarios ORDER BY fecha ASC",
+        conn
+    )
+    conn.close()
+    
+    if not df_hist_all.empty:
+        try:
+            df_pivot = df_hist_all.pivot(index='fecha', columns='empresa', values='capital')
+            df_pivot = df_pivot.ffill().fillna(0)
+            st.line_chart(df_pivot, height=350)
+        except Exception as e:
+            st.info("ℹ️ Cargando gráfico histórico comparativo...")
+            try:
+                fig, ax = plt.subplots(figsize=(10, 4))
+                for emp in df_hist_all['empresa'].unique():
+                    df_emp = df_hist_all[df_hist_all['empresa'] == emp]
+                    ax.plot(df_emp['fecha'], df_emp['capital'], label=emp, marker='o', alpha=0.7)
+                ax.set_title('Evolución por Empresa', fontsize=12, fontweight='bold')
+                ax.grid(True, alpha=0.3)
+                ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+                plt.xticks(rotation=45)
+                st.pyplot(fig)
+            except:
+                pass
+    else:
+        st.info("ℹ️ No hay suficiente historial de cierres diarios para mostrar el gráfico de evolución.")
+
+def mostrar_dashboard_historico_empresa(empresa):
+    st.markdown(f"""
+    <div style="margin-bottom: 25px;">
+        <h2 style="text-align: left; font-size: 1.8rem; font-weight: 800; color: #0a1628; margin-bottom: 5px;">🏢 {empresa}</h2>
+        <p style="color: #6a8aac; font-size: 0.95rem;">Panel de Historial y Trazabilidad Operativa</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    ultimo = db.obtener_ultimo_saldo(empresa)
+    
+    if not ultimo:
+        st.warning(f"⚠️ No hay cierres diarios registrados aún para {empresa}.")
+        st.info("Para comenzar, puede cargar los archivos obligatorios del día en el menú de la izquierda para realizar una validación y registrar el primer cierre.")
+        return
+        
+    # KPIs
+    capital_trabajo = safe_number(ultimo['capital'])
+    inventario = safe_number(ultimo['inventario'])
+    cxc = safe_number(ultimo['cx_c'])
+    bancos = safe_number(ultimo['bancos'])
+    cxp = safe_number(ultimo['cx_p'])
+    transito = safe_number(ultimo['transito'])
+    
+    activos = inventario + cxc
+    pasivos = cxp + transito
+    
+    col_e1, col_e2, col_e3, col_e4 = st.columns(4)
+    
+    with col_e1:
+        color_kpi = "kpi-variant-green" if capital_trabajo >= 0 else "kpi-variant-red"
+        st.markdown(f"""
+        <div class="dashboard-kpi-card {color_kpi}">
+            <div class="dashboard-kpi-title">🏁 Capital de Trabajo</div>
+            <div class="dashboard-kpi-value">{formato_venezolano(capital_trabajo)} Bs.</div>
+            <div class="dashboard-kpi-desc">Cierre al {ultimo['fecha']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    with col_e2:
+        st.markdown(f"""
+        <div class="dashboard-kpi-card kpi-variant-blue">
+            <div class="dashboard-kpi-title">🏦 Saldo Bancos</div>
+            <div class="dashboard-kpi-value">{formato_venezolano(bancos)} Bs.</div>
+            <div class="dashboard-kpi-desc">Cierre al {ultimo['fecha']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    with col_e3:
+        st.markdown(f"""
+        <div class="dashboard-kpi-card kpi-variant-purple">
+            <div class="dashboard-kpi-title">📦 Activos Operativos</div>
+            <div class="dashboard-kpi-value">{formato_venezolano(activos)} Bs.</div>
+            <div class="dashboard-kpi-desc">Inventario + CxC</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    with col_e4:
+        st.markdown(f"""
+        <div class="dashboard-kpi-card kpi-variant-orange">
+            <div class="dashboard-kpi-title">📋 Pasivos Operativos</div>
+            <div class="dashboard-kpi-value">{formato_venezolano(pasivos)} Bs.</div>
+            <div class="dashboard-kpi-desc">CxP + En Tránsito</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    # Obtener historial filtrado por fechas
+    desde = st.session_state.fecha_desde
+    hasta = st.session_state.fecha_hasta
+    
+    historial = db.obtener_historial_por_fechas(
+        desde.strftime('%Y-%m-%d'),
+        hasta.strftime('%Y-%m-%d'),
+        empresa=empresa
+    )
+    
+    st.markdown("### 📈 Evolución del Capital de Trabajo Neto")
+    if not historial.empty and len(historial) > 1:
+        chart_data = historial[['fecha', 'capital']].copy()
+        chart_data = chart_data.set_index('fecha')
+        st.line_chart(chart_data, color="#c9a84c", height=250)
+        
+        st.markdown("### 📊 Evolución de Componentes")
+        comp_data = historial[['fecha', 'inventario', 'cx_c', 'bancos', 'cx_p', 'transito']].copy()
+        comp_data = comp_data.set_index('fecha')
+        st.line_chart(comp_data, height=300)
+    else:
+        st.info("ℹ️ No hay suficientes registros en el rango de fechas seleccionado para mostrar los gráficos de evolución.")
+        
+    # Tabla histórica
+    st.markdown("### 📋 Historial de Cierres Diarios")
+    if not historial.empty:
+        df_mostrar = historial.copy()
+        df_mostrar = df_mostrar.drop(columns=['id', 'created_at', 'empresa'], errors='ignore')
+        for col in ['inventario', 'cx_c', 'bancos', 'cx_p', 'transito', 'capital']:
+            if col in df_mostrar.columns:
+                df_mostrar[col] = df_mostrar[col].apply(formato_venezolano)
+        st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
+    else:
+        st.info("No hay registros en el rango de fechas seleccionado.")
+
+    # Tabla de inconsistencias
+    st.markdown("### ⚠️ Inconsistencias Detectadas")
+    incons = db.obtener_inconsistencias(empresa=empresa)
+    if not incons.empty:
+        df_incons = incons.copy()
+        df_incons = df_incons.drop(columns=['id', 'created_at', 'empresa'], errors='ignore')
+        for col in ['valor_calculado', 'valor_reportado', 'diferencia']:
+            if col in df_incons.columns:
+                df_incons[col] = df_incons[col].apply(formato_venezolano)
+        st.dataframe(df_incons, use_container_width=True, hide_index=True)
+    else:
+        st.success("✅ No se han detectado inconsistencias para esta empresa.")
+
+# ============================================================
 # LOGIN CON DISEÑO CORPORATIVO
 # ============================================================
 def mostrar_login():
@@ -972,15 +1323,32 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# CARGAR AUTOMÁTICAMENTE EL ÚLTIMO SALDO GUARDADO
+# DETERMINAR ROL DE USUARIO
 # ============================================================
-if cargar_ultimo_saldo_automatico():
-    st.sidebar.success("✅ Saldos del día anterior cargados automáticamente")
-else:
-    st.sidebar.info("📌 No hay saldos previos. Ingrese los saldos manualmente o guarde al finalizar el día.")
+usuario_info = USUARIOS.get(st.session_state.usuario_actual, {})
+es_gerente = usuario_info.get('rol') == 'auditor'
+
+# Inicializar empresa activa según el rol
+if es_gerente and st.session_state.empresa_activa not in ["📊 Dashboard General", "Bodeguita Guayana", "Bodeguita Monagas", "Bodeguita Corporación", "Bodeguita Anzoátegui", "Bodeguita Nororiental", "Bodeguita Carúpano", "Nexo Comercial"]:
+    st.session_state.empresa_activa = "📊 Dashboard General"
+elif not es_gerente and st.session_state.empresa_activa == "📊 Dashboard General":
+    st.session_state.empresa_activa = "Bodeguita Guayana"
 
 # ============================================================
-# SIDEBAR CORPORATIVA
+# CARGAR AUTOMÁTICAMENTE EL ÚLTIMO SALDO GUARDADO (Solo Analistas o si Gerente selecciona Empresa específica)
+# ============================================================
+if st.session_state.empresa_activa != "📊 Dashboard General":
+    # Si cambió la empresa cargada, recargar saldos para esa empresa
+    if st.session_state.get('saldos_empresa_cargada') != st.session_state.empresa_activa:
+        # Cargar los saldos correspondientes a esta empresa
+        inicializar_saldos_empresa(st.session_state.empresa_activa, datetime.now().strftime("%Y-%m-%d"))
+        st.session_state.saldos_empresa_cargada = st.session_state.empresa_activa
+else:
+    # Para el Dashboard General Consolidado, no cargamos saldos de una sola empresa
+    pass
+
+# ============================================================
+# SIDEBAR CORPORATIVA (SEGÚN ROL)
 # ============================================================
 with st.sidebar:
     st.markdown("""
@@ -994,15 +1362,13 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
     
-    # ============================================================
     # SECCIÓN: USUARIO
-    # ============================================================
     st.markdown('<div class="sidebar-section-title">👤 Usuario</div>', unsafe_allow_html=True)
     st.markdown(f"""
     <div style="background: rgba(255,255,255,0.04); border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.04);">
-        <div style="font-size: 0.85rem; font-weight: 600; color: white;">{USUARIOS[st.session_state.usuario_actual]['nombre']}</div>
+        <div style="font-size: 0.85rem; font-weight: 600; color: white;">{usuario_info.get('nombre', 'Usuario')}</div>
         <div style="font-size: 0.7rem; opacity: 0.5; display: flex; justify-content: space-between;">
-            <span>{USUARIOS[st.session_state.usuario_actual]['rol']}</span>
+            <span>{usuario_info.get('rol', 'analista')}</span>
             <span>● Activo</span>
         </div>
     </div>
@@ -1014,243 +1380,244 @@ with st.sidebar:
     
     st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
     
-    # ============================================================
-    # SECCIÓN: FECHA Y TASA
-    # ============================================================
-    st.markdown('<div class="sidebar-section-title">📅 Configuración</div>', unsafe_allow_html=True)
-    
-    fecha_procesar = st.date_input("📅 Fecha a procesar", datetime.now())
-    
-    fecha_str = fecha_procesar.strftime("%Y-%m-%d")
-    tasa_guardada = db.obtener_tasa_bcv(fecha_str)
-    
-    tasa_bcv = st.number_input(
-        "💵 Tasa BCV",
-        value=float(tasa_guardada or 1),
-        step=0.0001,
-        format="%.4f"
-    )
-    db.guardar_tasa_bcv(fecha_str, tasa_bcv)
-    
-    if tasa_guardada is None:
-        st.caption("⚠️ No hay tasa BCV registrada para esta fecha")
-    
-    st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
-    
-    # ============================================================
-    # SECCIÓN: SALDOS INICIALES
-    # ============================================================
-    st.markdown('<div class="sidebar-section-title">📌 Saldos Iniciales</div>', unsafe_allow_html=True)
-    st.caption("Ingrese los saldos del día anterior")
-    
-    col_s1, col_s2 = st.columns(2)
-    with col_s1:
-        inventario_manual = st.number_input(
-            "📦 Inventario",
-            value=float(st.session_state.saldos['inventario']),
-            step=100.0,
-            format="%.2f",
-            key="inv_manual"
-        )
-        cx_c_manual = st.number_input(
-            "💰 CxC",
-            value=float(st.session_state.saldos['cx_c']),
-            step=100.0,
-            format="%.2f",
-            key="cxc_manual"
-        )
-    with col_s2:
-        bancos_manual = st.number_input(
-            "🏦 Bancos",
-            value=float(st.session_state.saldos['bancos']),
-            step=100.0,
-            format="%.2f",
-            key="ban_manual"
-        )
-        cx_p_manual = st.number_input(
-            "📋 CxP",
-            value=float(st.session_state.saldos['cx_p']),
-            step=100.0,
-            format="%.2f",
-            key="cxp_manual"
-        )
-    
-    transito_manual = st.number_input(
-        "🔄 Tránsito",
-        value=float(st.session_state.saldos['transito']),
-        step=100.0,
-        format="%.2f",
-        key="tran_manual"
-    )
-    
-    if st.button("💾 Actualizar Saldos", use_container_width=True):
-        st.session_state.saldos['inventario'] = inventario_manual
-        st.session_state.saldos['cx_c'] = cx_c_manual
-        st.session_state.saldos['bancos'] = bancos_manual
-        st.session_state.saldos['cx_p'] = cx_p_manual
-        st.session_state.saldos['transito'] = transito_manual
-        st.success("✅ Saldos actualizados")
-        st.rerun()
-    
-    st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
-    
-    # ============================================================
-    # SECCIÓN: FILTRO DE FECHAS
-    # ============================================================
-    st.markdown('<div class="sidebar-section-title">📅 Historial</div>', unsafe_allow_html=True)
-    
-    col_fecha1, col_fecha2 = st.columns(2)
-    with col_fecha1:
-        fecha_desde = st.date_input(
-            "📅 Desde", 
-            st.session_state.fecha_desde,
-            key="filtro_desde"
-        )
-    with col_fecha2:
-        fecha_hasta = st.date_input(
-            "📅 Hasta", 
-            st.session_state.fecha_hasta,
-            key="filtro_hasta"
-        )
-    
-    col_btn_f1, col_btn_f2 = st.columns(2)
-    with col_btn_f1:
-        if st.button("🔍 Aplicar", use_container_width=True):
-            st.session_state.fecha_desde = fecha_desde
-            st.session_state.fecha_hasta = fecha_hasta
-            st.session_state.mostrar_historial = True
-            st.rerun()
-    
-    with col_btn_f2:
-        if st.button("🔄 Reset", use_container_width=True):
-            st.session_state.fecha_desde = datetime.now() - pd.Timedelta(days=7)
-            st.session_state.fecha_hasta = datetime.now()
-            st.session_state.mostrar_historial = False
-            st.session_state.historial_data = None
-            st.rerun()
-    
-    if st.session_state.get('mostrar_historial', False):
-        desde = st.session_state.fecha_desde
-        hasta = st.session_state.fecha_hasta
+    # LÓGICA DE BARRA LATERAL PARA EL GERENTE (Navegación entre empresas)
+    if es_gerente:
+        st.markdown('<div class="sidebar-section-title">🏢 Empresas</div>', unsafe_allow_html=True)
         
-        historial = db.obtener_historial_por_fechas(
-            desde.strftime('%Y-%m-%d'), 
-            hasta.strftime('%Y-%m-%d')
-        )
+        opciones_menu = [
+            "📊 Dashboard General",
+            "Bodeguita Guayana",
+            "Bodeguita Monagas",
+            "Bodeguita Corporación",
+            "Bodeguita Anzoátegui",
+            "Bodeguita Nororiental",
+            "Bodeguita Carúpano",
+            "Nexo Comercial"
+        ]
         
-        if not historial.empty:
-            st.session_state.historial_data = historial.copy()
+        for opcion in opciones_menu:
+            is_selected = st.session_state.empresa_activa == opcion
+            label = opcion
             
-            df_mostrar = historial.copy()
-            columnas_numericas = ['inventario', 'cx_c', 'bancos', 'cx_p', 'transito', 'capital']
-            for col in columnas_numericas:
-                if col in df_mostrar.columns:
-                    df_mostrar[col] = df_mostrar[col].apply(formato_venezolano)
-            
-            st.dataframe(df_mostrar, use_container_width=True)
-            st.caption(f"📊 {len(historial)} registros")
-            
-            col_res1, col_res2 = st.columns(2)
-            with col_res1:
-                if 'capital' in historial.columns and len(historial) > 0:
-                    capital_inicial_val = safe_number(historial.iloc[0]['capital'])
-                    capital_final_val = safe_number(historial.iloc[-1]['capital'])
-                    st.metric("📈 Variación", formato_venezolano(capital_final_val - capital_inicial_val))
-            with col_res2:
-                if 'capital' in historial.columns and len(historial) > 0:
-                    st.metric("🏁 Capital final", formato_venezolano(safe_number(historial.iloc[-1]['capital'])))
-        else:
-            st.info("No hay registros")
-    
-    st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
-    
-    # ============================================================
-    # SECCIÓN: ARCHIVOS - DISTRIBUCIÓN MEJORADA
-    # ============================================================
-    st.markdown('<div class="sidebar-section-title">📂 Archivos del Día</div>', unsafe_allow_html=True)
-    
-    # Archivos Obligatorios
-    st.markdown("""
-    <div style="font-size:0.65rem; color:rgba(255,255,255,0.3); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.03); padding-bottom:4px;">
-        📌 Obligatorios
-    </div>
-    """, unsafe_allow_html=True)
-    
-    archivo_facturacion = st.file_uploader("📊 Facturación", type=["xlsx", "xls"], key="fact")
-    archivo_cobranzas = st.file_uploader("💰 Cobranzas", type=["xlsx", "xls"], key="cob")
-    archivo_egresos = st.file_uploader("💳 Egresos iPago", type=["xlsx", "xls"], key="egr")
-    archivo_estado_cuenta = st.file_uploader("🏦 Estado de Cuenta", type=["xlsx", "xls"], key="estado")
-    
-    # Archivos Opcionales
-    st.markdown("""
-    <div style="font-size:0.65rem; color:rgba(255,255,255,0.25); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.03); padding-bottom:4px;">
-        📎 Opcionales
-    </div>
-    """, unsafe_allow_html=True)
-    
-    archivo_recepciones = st.file_uploader("📦 Recepciones", type=["xlsx", "xls"], key="rec")
-    archivo_notas_credito_cliente = st.file_uploader("📝 NC Clientes", type=["xlsx", "xls"], key="notas_cliente")
-    archivo_notas_credito_proveedor = st.file_uploader("📝 NC Proveedores", type=["xlsx", "xls"], key="notas_proveedor")
-    
-    # Archivos de Costos
-    st.markdown("""
-    <div style="font-size:0.65rem; color:rgba(255,255,255,0.25); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.03); padding-bottom:4px;">
-        📊 Costos
-    </div>
-    """, unsafe_allow_html=True)
-    
-    archivo_costo_facturacion = st.file_uploader("📈 Costo Facturación", type=["xlsx", "xls"], key="costo_fact")
-    
-    # Archivos de Verificación
-    st.markdown("""
-    <div style="font-size:0.65rem; color:rgba(255,255,255,0.25); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.03); padding-bottom:4px;">
-        🔍 Verificación
-    </div>
-    """, unsafe_allow_html=True)
-    
-    archivo_cxc_reportado = st.file_uploader("📄 CxC Reportado", type=["xlsx", "xls"], key="cxc_rep")
-    archivo_cxp_reportado = st.file_uploader("📄 CxP Reportado", type=["xlsx", "xls"], key="cxp_rep")
-    archivo_inventario_reportado = st.file_uploader("📄 Inventario Reportado", type=["xlsx", "xls"], key="inv_rep")
-    archivo_tb = st.file_uploader("🔄 TB.xlsx", type=["xlsx", "xls"], key="tb")
-    
-    st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
-    
-    # ============================================================
-    # SECCIÓN: ACCIONES
-    # ============================================================
-    st.markdown('<div class="sidebar-section-title">⚡ Acciones Rápidas</div>', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🔄 Cargar Día Anterior", use_container_width=True):
-            ultimo = db.obtener_ultimo_saldo()
-            if ultimo:
-                st.session_state.saldos['inventario'] = safe_number(ultimo['inventario'])
-                st.session_state.saldos['cx_c'] = safe_number(ultimo['cx_c'])
-                st.session_state.saldos['bancos'] = safe_number(ultimo['bancos'])
-                st.session_state.saldos['cx_p'] = safe_number(ultimo['cx_p'])
-                st.session_state.saldos['transito'] = safe_number(ultimo['transito'])
-                st.success("✅ Saldos cargados")
-                st.rerun()
+            if is_selected:
+                st.button(label, key=f"menu_{opcion}", type="primary", use_container_width=True)
             else:
-                st.warning("No hay historial")
-    
-    with col2:
-        if st.button("🧹 Resetear", use_container_width=True):
-            st.session_state.saldos['inventario'] = 0
-            st.session_state.saldos['cx_c'] = 0
-            st.session_state.saldos['bancos'] = 0
-            st.session_state.saldos['cx_p'] = 0
-            st.session_state.saldos['transito'] = 0
-            st.success("✅ Saldos reseteados")
+                if st.button(label, key=f"menu_{opcion}", type="secondary", use_container_width=True):
+                    st.session_state.empresa_activa = opcion
+                    st.rerun()
+                    
+        st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
+        
+        # Filtro de fecha para el gerente si no está en el consolidado
+        if st.session_state.empresa_activa != "📊 Dashboard General":
+            st.markdown('<div class="sidebar-section-title">📅 Historial</div>', unsafe_allow_html=True)
+            col_fecha1, col_fecha2 = st.columns(2)
+            with col_fecha1:
+                fecha_desde = st.date_input("📅 Desde", st.session_state.fecha_desde, key="gerente_desde")
+            with col_fecha2:
+                fecha_hasta = st.date_input("📅 Hasta", st.session_state.fecha_hasta, key="gerente_hasta")
+                
+            if st.button("🔍 Filtrar", key="btn_filtrar_gerente", use_container_width=True):
+                st.session_state.fecha_desde = fecha_desde
+                st.session_state.fecha_hasta = fecha_hasta
+                st.rerun()
+                
+            st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
+            
+            # Expander de subida opcional de archivos para el gerente
+            with st.expander("📥 Carga Dinámica de Archivos"):
+                archivo_facturacion = st.file_uploader("📊 Facturación", type=["xlsx", "xls"], key="fact")
+                archivo_cobranzas = st.file_uploader("💰 Cobranzas", type=["xlsx", "xls"], key="cob")
+                archivo_egresos = st.file_uploader("💳 Egresos iPago", type=["xlsx", "xls"], key="egr")
+                archivo_estado_cuenta = st.file_uploader("🏦 Estado de Cuenta", type=["xlsx", "xls"], key="estado")
+                
+                st.markdown('<div style="font-size:0.65rem;opacity:0.25;text-transform:uppercase;letter-spacing:1px;margin-top:12px;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.03);padding-bottom:4px;">Opcionales</div>', unsafe_allow_html=True)
+                archivo_recepciones = st.file_uploader("📦 Recepciones", type=["xlsx", "xls"], key="rec")
+                archivo_notas_credito_cliente = st.file_uploader("📝 NC Clientes", type=["xlsx", "xls"], key="notas_cliente")
+                archivo_notas_credito_proveedor = st.file_uploader("📝 NC Proveedores", type=["xlsx", "xls"], key="notas_proveedor")
+                
+                st.markdown('<div style="font-size:0.65rem;opacity:0.25;text-transform:uppercase;letter-spacing:1px;margin-top:12px;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.03);padding-bottom:4px;">Costos</div>', unsafe_allow_html=True)
+                archivo_costo_facturacion = st.file_uploader("📈 Costo Facturación", type=["xlsx", "xls"], key="costo_fact")
+                
+                st.markdown('<div style="font-size:0.65rem;opacity:0.25;text-transform:uppercase;letter-spacing:1px;margin-top:12px;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.03);padding-bottom:4px;">Verificación</div>', unsafe_allow_html=True)
+                archivo_cxc_reportado = st.file_uploader("📄 CxC Reportado", type=["xlsx", "xls"], key="cxc_rep")
+                archivo_cxp_reportado = st.file_uploader("📄 CxP Reportado", type=["xlsx", "xls"], key="cxp_rep")
+                archivo_inventario_reportado = st.file_uploader("📄 Inventario Reportado", type=["xlsx", "xls"], key="inv_rep")
+                archivo_tb = st.file_uploader("🔄 TB.xlsx", type=["xlsx", "xls"], key="tb")
+            
+            fecha_procesar = st.date_input("📅 Fecha a procesar", datetime.now(), key="gerente_fecha_proc")
+            fecha_str = fecha_procesar.strftime("%Y-%m-%d")
+            tasa_guardada = db.obtener_tasa_bcv(fecha_str)
+            tasa_bcv = st.number_input("💵 Tasa BCV", value=float(tasa_guardada or 1), step=0.0001, format="%.4f", key="gerente_tasa_bcv")
+            db.guardar_tasa_bcv(fecha_str, tasa_bcv)
+        else:
+            archivo_facturacion = None
+            archivo_cobranzas = None
+            archivo_egresos = None
+            archivo_estado_cuenta = None
+            
+    # LÓGICA DE BARRA LATERAL PARA EL ANALISTA (EXISTENTE MÁS SELECTOR DE EMPRESA)
+    else:
+        st.markdown('<div class="sidebar-section-title">🏢 Empresa</div>', unsafe_allow_html=True)
+        st.session_state.empresa_activa = st.selectbox(
+            "Empresa a procesar",
+            ["Bodeguita Guayana", "Bodeguita Monagas", "Bodeguita Corporación", "Bodeguita Anzoátegui", "Bodeguita Nororiental", "Bodeguita Carúpano", "Nexo Comercial"],
+            key="analista_empresa"
+        )
+        
+        st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-section-title">📅 Configuración</div>', unsafe_allow_html=True)
+        
+        fecha_procesar = st.date_input("📅 Fecha a procesar", datetime.now())
+        fecha_str = fecha_procesar.strftime("%Y-%m-%d")
+        tasa_guardada = db.obtener_tasa_bcv(fecha_str)
+        tasa_bcv = st.number_input("💵 Tasa BCV", value=float(tasa_guardada or 1), step=0.0001, format="%.4f")
+        db.guardar_tasa_bcv(fecha_str, tasa_bcv)
+        
+        if tasa_guardada is None:
+            st.caption("⚠️ No hay tasa BCV registrada para esta fecha")
+            
+        st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-section-title">📌 Saldos Iniciales</div>', unsafe_allow_html=True)
+        st.caption("Ingrese los saldos del día anterior")
+        
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            inventario_manual = st.number_input("📦 Inventario", value=float(st.session_state.saldos['inventario']), step=100.0, format="%.2f", key="inv_manual")
+            cx_c_manual = st.number_input("💰 CxC", value=float(st.session_state.saldos['cx_c']), step=100.0, format="%.2f", key="cxc_manual")
+        with col_s2:
+            bancos_manual = st.number_input("🏦 Bancos", value=float(st.session_state.saldos['bancos']), step=100.0, format="%.2f", key="ban_manual")
+            cx_p_manual = st.number_input("📋 CxP", value=float(st.session_state.saldos['cx_p']), step=100.0, format="%.2f", key="cxp_manual")
+            
+        transito_manual = st.number_input("🔄 Tránsito", value=float(st.session_state.saldos['transito']), step=100.0, format="%.2f", key="tran_manual")
+        
+        if st.button("💾 Actualizar Saldos", use_container_width=True):
+            st.session_state.saldos['inventario'] = inventario_manual
+            st.session_state.saldos['cx_c'] = cx_c_manual
+            st.session_state.saldos['bancos'] = bancos_manual
+            st.session_state.saldos['cx_p'] = cx_p_manual
+            st.session_state.saldos['transito'] = transito_manual
+            st.success("✅ Saldos actualizados")
             st.rerun()
+            
+        st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-section-title">📅 Historial</div>', unsafe_allow_html=True)
+        
+        col_fecha1, col_fecha2 = st.columns(2)
+        with col_fecha1:
+            fecha_desde = st.date_input("📅 Desde", st.session_state.fecha_desde, key="filtro_desde")
+        with col_fecha2:
+            fecha_hasta = st.date_input("📅 Hasta", st.session_state.fecha_hasta, key="filtro_hasta")
+            
+        col_btn_f1, col_btn_f2 = st.columns(2)
+        with col_btn_f1:
+            if st.button("🔍 Aplicar", use_container_width=True):
+                st.session_state.fecha_desde = fecha_desde
+                st.session_state.fecha_hasta = fecha_hasta
+                st.session_state.mostrar_historial = True
+                st.rerun()
+        with col_btn_f2:
+            if st.button("🔄 Reset", use_container_width=True):
+                st.session_state.fecha_desde = datetime.now() - pd.Timedelta(days=7)
+                st.session_state.fecha_hasta = datetime.now()
+                st.session_state.mostrar_historial = False
+                st.session_state.historial_data = None
+                st.rerun()
+                
+        if st.session_state.get('mostrar_historial', False):
+            desde = st.session_state.fecha_desde
+            hasta = st.session_state.fecha_hasta
+            historial = db.obtener_historial_por_fechas(desde.strftime('%Y-%m-%d'), hasta.strftime('%Y-%m-%d'), empresa=st.session_state.empresa_activa)
+            
+            if not historial.empty:
+                st.session_state.historial_data = historial.copy()
+                df_mostrar = historial.copy()
+                columnas_numericas = ['inventario', 'cx_c', 'bancos', 'cx_p', 'transito', 'capital']
+                for col in columnas_numericas:
+                    if col in df_mostrar.columns:
+                        df_mostrar[col] = df_mostrar[col].apply(formato_venezolano)
+                st.dataframe(df_mostrar, use_container_width=True)
+                st.caption(f"📊 {len(historial)} registros")
+                
+                col_res1, col_res2 = st.columns(2)
+                with col_res1:
+                    if 'capital' in historial.columns and len(historial) > 0:
+                        cap_ini = safe_number(historial.iloc[0]['capital'])
+                        cap_fin = safe_number(historial.iloc[-1]['capital'])
+                        st.metric("📈 Variación", formato_venezolano(cap_fin - cap_ini))
+                with col_res2:
+                    if 'capital' in historial.columns and len(historial) > 0:
+                        st.metric("🏁 Capital final", formato_venezolano(safe_number(historial.iloc[-1]['capital'])))
+            else:
+                st.info("No hay registros")
+                
+        st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-section-title">📂 Archivos del Día</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:0.65rem; color:rgba(255,255,255,0.3); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.03); padding-bottom:4px;">📌 Obligatorios</div>', unsafe_allow_html=True)
+        
+        archivo_facturacion = st.file_uploader("📊 Facturación", type=["xlsx", "xls"], key="fact")
+        archivo_cobranzas = st.file_uploader("💰 Cobranzas", type=["xlsx", "xls"], key="cob")
+        archivo_egresos = st.file_uploader("💳 Egresos iPago", type=["xlsx", "xls"], key="egr")
+        archivo_estado_cuenta = st.file_uploader("🏦 Estado de Cuenta", type=["xlsx", "xls"], key="estado")
+        
+        st.markdown('<div style="font-size:0.65rem; color:rgba(255,255,255,0.25); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.03); padding-bottom:4px;">📎 Opcionales</div>', unsafe_allow_html=True)
+        archivo_recepciones = st.file_uploader("📦 Recepciones", type=["xlsx", "xls"], key="rec")
+        archivo_notas_credito_cliente = st.file_uploader("📝 NC Clientes", type=["xlsx", "xls"], key="notas_cliente")
+        archivo_notas_credito_proveedor = st.file_uploader("📝 NC Proveedores", type=["xlsx", "xls"], key="notas_proveedor")
+        
+        st.markdown('<div style="font-size:0.65rem; color:rgba(255,255,255,0.25); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.03); padding-bottom:4px;">📊 Costos</div>', unsafe_allow_html=True)
+        archivo_costo_facturacion = st.file_uploader("📈 Costo Facturación", type=["xlsx", "xls"], key="costo_fact")
+        
+        st.markdown('<div style="font-size:0.65rem; color:rgba(255,255,255,0.25); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.03); padding-bottom:4px;">🔍 Verificación</div>', unsafe_allow_html=True)
+        archivo_cxc_reportado = st.file_uploader("📄 CxC Reportado", type=["xlsx", "xls"], key="cxc_rep")
+        archivo_cxp_reportado = st.file_uploader("📄 CxP Reportado", type=["xlsx", "xls"], key="cxp_rep")
+        archivo_inventario_reportado = st.file_uploader("📄 Inventario Reportado", type=["xlsx", "xls"], key="inv_rep")
+        archivo_tb = st.file_uploader("🔄 TB.xlsx", type=["xlsx", "xls"], key="tb")
+        
+        st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-section-title">⚡ Acciones Rápidas</div>', unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔄 Cargar Día Anterior", use_container_width=True):
+                ultimo = db.obtener_ultimo_saldo(st.session_state.empresa_activa)
+                if ultimo:
+                    st.session_state.saldos['inventario'] = safe_number(ultimo['inventario'])
+                    st.session_state.saldos['cx_c'] = safe_number(ultimo['cx_c'])
+                    st.session_state.saldos['bancos'] = safe_number(ultimo['bancos'])
+                    st.session_state.saldos['cx_p'] = safe_number(ultimo['cx_p'])
+                    st.session_state.saldos['transito'] = safe_number(ultimo['transito'])
+                    st.success("✅ Saldos cargados")
+                    st.rerun()
+                else:
+                    st.warning("No hay historial")
+        with col2:
+            if st.button("🧹 Resetear", use_container_width=True):
+                st.session_state.saldos['inventario'] = 0
+                st.session_state.saldos['cx_c'] = 0
+                st.session_state.saldos['bancos'] = 0
+                st.session_state.saldos['cx_p'] = 0
+                st.session_state.saldos['transito'] = 0
+                st.success("✅ Saldos reseteados")
+                st.rerun()
 
 # ============================================================
 # INTERFAZ PRINCIPAL
 # ============================================================
-st.markdown("""
+# Lógica de renderizado para el Gerente (Auditor1) en la pantalla principal
+if es_gerente:
+    if st.session_state.empresa_activa == "📊 Dashboard General":
+        mostrar_dashboard_general_consolidado()
+        st.stop()
+    elif not (archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_estado_cuenta):
+        mostrar_dashboard_historico_empresa(st.session_state.empresa_activa)
+        st.stop()
+
+# Título de la interfaz principal (dinámico según validación en vivo o estándar)
+title_text = f"📊 Validación En Vivo: {st.session_state.empresa_activa}" if (archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_estado_cuenta) else "📊 Validador de Trazabilidad Diaria"
+st.markdown(f"""
 <div style="text-align: center; margin-bottom: 25px;">
-    <h1 style="font-size: 1.6rem; font-weight: 700; color: #0a1628;">📊 Validador de Trazabilidad Diaria</h1>
+    <h1 style="font-size: 1.6rem; font-weight: 700; color: #0a1628;">{title_text}</h1>
     <p style="color: #6a8aac; font-size: 0.9rem;">Capital de Trabajo Neto Operativo</p>
 </div>
 """, unsafe_allow_html=True)
@@ -1893,7 +2260,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             
             db.guardar_ajustes(
                 fecha_procesar.strftime('%Y-%m-%d'),
-                st.session_state.ajustes
+                st.session_state.ajustes,
+                empresa=st.session_state.empresa_activa
             )
             
             st.success("✅ Ajustes guardados correctamente")
@@ -2333,7 +2701,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             
             db.guardar_saldos(
                 fecha_procesar.strftime('%Y-%m-%d'),
-                saldos_guardar
+                saldos_guardar,
+                empresa=st.session_state.empresa_activa
             )
             
             st.session_state.saldos['inventario'] = inventario_final
@@ -2348,7 +2717,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     
     with col_btn2:
         if st.button("📊 Ver gráfico evolución", use_container_width=True):
-            historial = db.obtener_historial_saldos_completo(30)
+            historial = db.obtener_historial_saldos_completo(30, empresa=st.session_state.empresa_activa)
             if not historial.empty and len(historial) > 1:
                 try:
                     historial_ordenado = historial.sort_values('fecha')
