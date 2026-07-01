@@ -21,11 +21,21 @@ class Database:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
+        # Verificar si la columna 'empresa' existe en saldos_diarios para migrar si es necesario
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='saldos_diarios'")
+        if cursor.fetchone():
+            cursor.execute("PRAGMA table_info(saldos_diarios)")
+            cols = [row[1] for row in cursor.fetchall()]
+            if 'empresa' not in cols:
+                # Tabla antigua detectada, la eliminamos para recrearla con soporte multi-empresa
+                cursor.execute("DROP TABLE saldos_diarios")
+        
         # Tabla de saldos diarios
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS saldos_diarios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 fecha DATE NOT NULL,
+                empresa TEXT NOT NULL DEFAULT 'General',
                 inventario REAL DEFAULT 0,
                 cx_c REAL DEFAULT 0,
                 bancos REAL DEFAULT 0,
@@ -33,7 +43,7 @@ class Database:
                 transito REAL DEFAULT 0,
                 capital REAL DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(fecha)
+                UNIQUE(fecha, empresa)
             )
         ''')
         
@@ -42,6 +52,7 @@ class Database:
             CREATE TABLE IF NOT EXISTS movimientos_diarios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 fecha DATE NOT NULL,
+                empresa TEXT NOT NULL DEFAULT 'General',
                 tipo_movimiento TEXT NOT NULL,
                 concepto TEXT,
                 monto REAL DEFAULT 0,
@@ -55,6 +66,7 @@ class Database:
             CREATE TABLE IF NOT EXISTS inconsistencias (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 fecha DATE NOT NULL,
+                empresa TEXT NOT NULL DEFAULT 'General',
                 cuenta TEXT NOT NULL,
                 valor_calculado REAL,
                 valor_reportado REAL,
@@ -69,6 +81,7 @@ class Database:
             CREATE TABLE IF NOT EXISTS auditoria_archivos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 fecha_proceso DATE NOT NULL,
+                empresa TEXT NOT NULL DEFAULT 'General',
                 nombre_archivo TEXT NOT NULL,
                 tipo_archivo TEXT NOT NULL,
                 registros INTEGER,
@@ -101,32 +114,37 @@ class Database:
             )
         ''')
         
-        # 🔥 NUEVA TABLA: Ajustes diarios
+        # Tabla de ajustes diarios por empresa
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS ajustes_diarios (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 fecha DATE NOT NULL,
-                cuenta TEXT NOT NULL,
-                monto_ajuste REAL DEFAULT 0,
-                justificacion TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(fecha, cuenta)
+                empresa TEXT NOT NULL,
+                inv_monto REAL DEFAULT 0,
+                inv_just TEXT,
+                cxc_monto REAL DEFAULT 0,
+                cxc_just TEXT,
+                cxp_monto REAL DEFAULT 0,
+                cxp_just TEXT,
+                transito_monto REAL DEFAULT 0,
+                transito_just TEXT,
+                PRIMARY KEY (fecha, empresa)
             )
         ''')
         
         conn.commit()
         conn.close()
     
-    def guardar_saldos(self, fecha, saldos):
-        """Guarda los saldos de un día específico"""
+    def guardar_saldos(self, fecha, saldos, empresa='General'):
+        """Guarda los saldos de un día específico para una empresa dada"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute('''
             INSERT OR REPLACE INTO saldos_diarios 
-            (fecha, inventario, cx_c, bancos, cx_p, transito, capital)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (fecha, empresa, inventario, cx_c, bancos, cx_p, transito, capital)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             fecha,
+            empresa,
             saldos.get('inventario', 0),
             saldos.get('cx_c', 0),
             saldos.get('bancos', 0),
@@ -137,155 +155,77 @@ class Database:
         conn.commit()
         conn.close()
     
-    def obtener_saldos(self, fecha):
-        """Obtiene los saldos de una fecha específica"""
+    def obtener_saldos(self, fecha, empresa='General'):
+        """Obtiene los saldos de una fecha específica para una empresa dada"""
         conn = sqlite3.connect(self.db_path)
         df = pd.read_sql_query(
-            "SELECT * FROM saldos_diarios WHERE fecha = ?",
-            conn, params=[fecha]
+            "SELECT * FROM saldos_diarios WHERE fecha = ? AND empresa = ?",
+            conn, params=[fecha, empresa]
         )
         conn.close()
         if df.empty:
             return None
         return df.iloc[0].to_dict()
     
-    def obtener_ultimo_saldo(self):
-        """Obtiene el último saldo registrado"""
+    def obtener_ultimo_saldo(self, empresa='General'):
+        """Obtiene el último saldo registrado para una empresa dada"""
         conn = sqlite3.connect(self.db_path)
         df = pd.read_sql_query(
-            "SELECT * FROM saldos_diarios ORDER BY fecha DESC LIMIT 1",
-            conn
+            "SELECT * FROM saldos_diarios WHERE empresa = ? ORDER BY fecha DESC LIMIT 1",
+            conn, params=[empresa]
         )
         conn.close()
         if df.empty:
             return None
         return df.iloc[0].to_dict()
     
-    def guardar_inconsistencia(self, fecha, cuenta, calc, reportado, diferencia, descripcion):
-        """Guarda una inconsistencia detectada"""
+    def guardar_inconsistencia(self, fecha, cuenta, calc, reportado, diferencia, descripcion, empresa='General'):
+        """Guarda una inconsistencia detectada para una empresa dada"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute('''
             INSERT INTO inconsistencias 
-            (fecha, cuenta, valor_calculado, valor_reportado, diferencia, descripcion)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (fecha, cuenta, calc, reportado, diferencia, descripcion))
+            (fecha, empresa, cuenta, valor_calculado, valor_reportado, diferencia, descripcion)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (fecha, empresa, cuenta, calc, reportado, diferencia, descripcion))
         conn.commit()
         conn.close()
     
     def guardar_auditoria_archivo(self, fecha_proceso, nombre_archivo, tipo_archivo, 
-                                   registros, estado, error=None, usuario=None):
-        """Registra la auditoría de un archivo cargado"""
+                                   registros, estado, error=None, usuario=None, empresa='General'):
+        """Registra la auditoría de un archivo cargado para una empresa dada"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute('''
             INSERT INTO auditoria_archivos 
-            (fecha_proceso, nombre_archivo, tipo_archivo, registros, estado, error, usuario)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (fecha_proceso, nombre_archivo, tipo_archivo, registros, estado, error, usuario))
+            (fecha_proceso, empresa, nombre_archivo, tipo_archivo, registros, estado, error, usuario)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (fecha_proceso, empresa, nombre_archivo, tipo_archivo, registros, estado, error, usuario))
         conn.commit()
         conn.close()
     
-    def obtener_historial_saldos(self, limite=30):
-        """Obtiene el historial de saldos de los últimos N días"""
+    def obtener_historial_saldos(self, limite=30, empresa='General'):
+        """Obtiene el historial de saldos de los últimos N días para una empresa dada"""
         conn = sqlite3.connect(self.db_path)
         df = pd.read_sql_query(
-            "SELECT * FROM saldos_diarios ORDER BY fecha DESC LIMIT ?",
-            conn, params=[limite]
+            "SELECT * FROM saldos_diarios WHERE empresa = ? ORDER BY fecha DESC LIMIT ?",
+            conn, params=[empresa, limite]
         )
         conn.close()
         return df
     
-    def obtener_historial_saldos_completo(self, limite=30):
-        """Obtiene el historial de saldos con capital de los últimos N días
-        
-        Args:
-            limite (int): Número de días a consultar (default 30)
-        
-        Returns:
-            DataFrame: Historial de saldos incluyendo capital
-        """
-        conn = sqlite3.connect(self.db_path)
-        df = pd.read_sql_query(
-            """SELECT 
-                fecha, 
-                inventario, 
-                cx_c, 
-                bancos, 
-                cx_p, 
-                transito, 
-                capital,
-                created_at
-            FROM saldos_diarios 
-            ORDER BY fecha DESC 
-            LIMIT ?""",
-            conn, params=[limite]
-        )
-        conn.close()
-        return df
-    
-    def obtener_historial_capital(self, limite=30):
-        """Obtiene solo el historial de capital de los últimos N días
-        
-        Args:
-            limite (int): Número de días a consultar (default 30)
-        
-        Returns:
-            DataFrame: Historial de capital
-        """
-        conn = sqlite3.connect(self.db_path)
-        df = pd.read_sql_query(
-            "SELECT fecha, capital FROM saldos_diarios ORDER BY fecha DESC LIMIT ?",
-            conn, params=[limite]
-        )
-        conn.close()
-        return df
-    
-    # ============================================================
-    # OBTENER HISTORIAL POR RANGO DE FECHAS
-    # ============================================================
-    def obtener_historial_por_fechas(self, fecha_desde, fecha_hasta):
-        """
-        Obtiene el historial de saldos en un rango de fechas
-        
-        Args:
-            fecha_desde (str): Fecha de inicio en formato YYYY-MM-DD
-            fecha_hasta (str): Fecha de fin en formato YYYY-MM-DD
-        
-        Returns:
-            DataFrame: Historial de saldos en el rango de fechas
-        """
-        conn = sqlite3.connect(self.db_path)
-        df = pd.read_sql_query(
-            """SELECT 
-                fecha, 
-                inventario, 
-                cx_c, 
-                bancos, 
-                cx_p, 
-                transito, 
-                capital,
-                created_at
-            FROM saldos_diarios 
-            WHERE fecha BETWEEN ? AND ?
-            ORDER BY fecha DESC""",
-            conn, params=[fecha_desde, fecha_hasta]
-        )
-        conn.close()
-        return df
-    
-    def obtener_inconsistencias(self, fecha=None):
-        """Obtiene las inconsistencias registradas"""
+    def obtener_inconsistencias(self, fecha=None, empresa='General'):
+        """Obtiene las inconsistencias registradas para una empresa dada"""
         conn = sqlite3.connect(self.db_path)
         if fecha:
             df = pd.read_sql_query(
-                "SELECT * FROM inconsistencias WHERE fecha = ? ORDER BY created_at DESC",
-                conn, params=[fecha]
+                "SELECT * FROM inconsistencias WHERE fecha = ? AND empresa = ? ORDER BY created_at DESC",
+                conn, params=[fecha, empresa]
             )
         else:
             df = pd.read_sql_query(
-                "SELECT * FROM inconsistencias ORDER BY created_at DESC LIMIT 100",
-                conn
+                "SELECT * FROM inconsistencias WHERE empresa = ? ORDER BY created_at DESC LIMIT 100",
+                conn, params=[empresa]
             )
         conn.close()
         return df
@@ -322,101 +262,96 @@ class Database:
             return float(resultado[0])
         
         return None
-    
-    def eliminar_saldo(self, fecha):
-        """Elimina los saldos de una fecha específica"""
+
+    def limpiar_saldos(self, empresa=None):
+        """Limpia los saldos de la base de datos, opcionalmente filtrados por empresa"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
-        cursor.execute(
-            "DELETE FROM saldos_diarios WHERE fecha = ?",
-            (fecha,)
+        if empresa:
+            cursor.execute("DELETE FROM saldos_diarios WHERE empresa = ?", (empresa,))
+            cursor.execute("DELETE FROM ajustes_diarios WHERE empresa = ?", (empresa,))
+            cursor.execute("DELETE FROM inconsistencias WHERE empresa = ?", (empresa,))
+            cursor.execute("DELETE FROM auditoria_archivos WHERE empresa = ?", (empresa,))
+        else:
+            cursor.execute("DELETE FROM saldos_diarios")
+            cursor.execute("DELETE FROM ajustes_diarios")
+            cursor.execute("DELETE FROM inconsistencias")
+            cursor.execute("DELETE FROM auditoria_archivos")
+        conn.commit()
+        conn.close()
+
+    def obtener_historial_por_fechas(self, desde, hasta, empresa='General'):
+        """Obtiene el historial de saldos entre dos fechas para una empresa dada"""
+        conn = sqlite3.connect(self.db_path)
+        df = pd.read_sql_query(
+            "SELECT * FROM saldos_diarios WHERE empresa = ? AND fecha >= ? AND fecha <= ? ORDER BY fecha ASC",
+            conn, params=[empresa, desde, hasta]
         )
-        
-        conn.commit()
         conn.close()
-    
-    def limpiar_saldos(self):
-        """Elimina TODOS los saldos de la tabla saldos_diarios"""
+        return df
+
+    def obtener_historial_saldos_completo(self, limite=30, empresa='General'):
+        """Obtiene el historial completo de saldos de una empresa dada"""
+        conn = sqlite3.connect(self.db_path)
+        df = pd.read_sql_query(
+            "SELECT * FROM saldos_diarios WHERE empresa = ? ORDER BY fecha DESC LIMIT ?",
+            conn, params=[empresa, limite]
+        )
+        conn.close()
+        return df
+
+    def guardar_ajustes(self, fecha, ajustes, empresa='General'):
+        """Guarda los ajustes diarios aplicados a las cuentas para una empresa dada"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        cursor.execute("DELETE FROM saldos_diarios")
+        inv = ajustes.get('inventario', {'monto': 0.0, 'justificacion': ''})
+        cxc = ajustes.get('cx_c', {'monto': 0.0, 'justificacion': ''})
+        cxp = ajustes.get('cx_p', {'monto': 0.0, 'justificacion': ''})
+        transito = ajustes.get('transito', {'monto': 0.0, 'justificacion': ''})
         
+        cursor.execute('''
+            INSERT OR REPLACE INTO ajustes_diarios 
+            (fecha, empresa, inv_monto, inv_just, cxc_monto, cxc_just, cxp_monto, cxp_just, transito_monto, transito_just)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            fecha,
+            empresa,
+            inv.get('monto', 0.0),
+            inv.get('justificacion', ''),
+            cxc.get('monto', 0.0),
+            cxc.get('justificacion', ''),
+            cxp.get('monto', 0.0),
+            cxp.get('justificacion', ''),
+            transito.get('monto', 0.0),
+            transito.get('justificacion', '')
+        ))
         conn.commit()
         conn.close()
-    
-    # ============================================================
-    # 🔥 NUEVO MÉTODO: GUARDAR AJUSTES
-    # ============================================================
-    def guardar_ajustes(self, fecha, ajustes):
-        """
-        Guarda los ajustes realizados en la comparación de valores.
+
+    def obtener_ajustes(self, fecha, empresa='General'):
+        """Obtiene los ajustes diarios aplicados para una fecha y empresa dada"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT inv_monto, inv_just, cxc_monto, cxc_just, cxp_monto, cxp_just, transito_monto, transito_just
+            FROM ajustes_diarios
+            WHERE fecha = ? AND empresa = ?
+        ''', (fecha, empresa))
+        row = cursor.fetchone()
+        conn.close()
         
-        Args:
-            fecha (str): Fecha en formato YYYY-MM-DD
-            ajustes (dict): Diccionario con los ajustes y justificaciones
-                           Ejemplo: {
-                               'inventario': {'monto': 100.50, 'justificacion': 'Ajuste por merma'},
-                               'cx_c': {'monto': 0, 'justificacion': ''},
-                               ...
-                           }
-        
-        Returns:
-            bool: True si se guardó correctamente, False en caso contrario
-        """
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            for cuenta, datos in ajustes.items():
-                monto = datos.get('monto', 0)
-                justificacion = datos.get('justificacion', '')
-                
-                cursor.execute('''
-                    INSERT OR REPLACE INTO ajustes_diarios 
-                    (fecha, cuenta, monto_ajuste, justificacion)
-                    VALUES (?, ?, ?, ?)
-                ''', (fecha, cuenta, monto, justificacion))
-            
-            conn.commit()
-            conn.close()
-            return True
-        except Exception as e:
-            print(f"Error al guardar ajustes: {str(e)}")
-            return False
-    
-    def obtener_ajustes(self, fecha):
-        """
-        Obtiene los ajustes guardados para una fecha específica.
-        
-        Args:
-            fecha (str): Fecha en formato YYYY-MM-DD
-        
-        Returns:
-            dict: Diccionario con los ajustes y justificaciones
-        """
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                SELECT cuenta, monto_ajuste, justificacion
-                FROM ajustes_diarios
-                WHERE fecha = ?
-            ''', (fecha,))
-            
-            resultados = cursor.fetchall()
-            conn.close()
-            
-            ajustes = {}
-            for cuenta, monto, justificacion in resultados:
-                ajustes[cuenta] = {
-                    'monto': monto,
-                    'justificacion': justificacion
-                }
-            
-            return ajustes
-        except Exception as e:
-            print(f"Error al obtener ajustes: {str(e)}")
-            return {}
+        if row:
+            return {
+                'inventario': {'monto': row[0], 'justificacion': row[1]},
+                'cx_c': {'monto': row[2], 'justificacion': row[3]},
+                'cx_p': {'monto': row[4], 'justificacion': row[5]},
+                'transito': {'monto': row[6], 'justificacion': row[7]}
+            }
+        else:
+            return {
+                'inventario': {'monto': 0.0, 'justificacion': ''},
+                'cx_c': {'monto': 0.0, 'justificacion': ''},
+                'cx_p': {'monto': 0.0, 'justificacion': ''},
+                'transito': {'monto': 0.0, 'justificacion': ''}
+            }
