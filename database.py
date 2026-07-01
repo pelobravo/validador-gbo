@@ -30,6 +30,15 @@ class Database:
                 # Tabla antigua detectada, la eliminamos para recrearla con soporte multi-empresa
                 cursor.execute("DROP TABLE saldos_diarios")
         
+        # Verificar si la columna 'inv_monto' existe en ajustes_diarios para migrar si es necesario
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ajustes_diarios'")
+        if cursor.fetchone():
+            cursor.execute("PRAGMA table_info(ajustes_diarios)")
+            cols_aj = [row[1] for row in cursor.fetchall()]
+            if 'inv_monto' not in cols_aj:
+                # Tabla antigua detectada, la eliminamos para recrearla con la nueva estructura
+                cursor.execute("DROP TABLE ajustes_diarios")
+        
         # Tabla de saldos diarios
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS saldos_diarios (
