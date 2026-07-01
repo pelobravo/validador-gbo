@@ -10,6 +10,7 @@ import io
 import numpy as np
 import re
 import matplotlib.pyplot as plt
+import sqlite3  # <-- AÑADIDA ESTA LÍNEA
 
 # Importar módulos del sistema
 from config import USUARIOS, validar_carpetas
