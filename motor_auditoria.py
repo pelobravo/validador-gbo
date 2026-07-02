@@ -337,14 +337,30 @@ def calcular_kpis(df_consolidado, tasa_bcv=36.50):
 def normalize_cols(df, label):
     """
     Normaliza y limpia un DataFrame detectando columnas de Referencia, Fecha y Monto.
-    Limpia referencias removiendo espacios y ceros a la izquierda mediante expresiones regulares.
+    Soporta descubrimiento dinámico de cabeceras desplazadas y previene KeyErrors.
     """
     if df is None or df.empty:
         return None
-    
+        
     df = df.copy()
-    orig_cols = list(df.columns)
-    clean_cols = [str(c).strip().lower() for c in orig_cols]
+    
+    # --- ESCANEO DINÁMICO DE CABECERA DESPLAZADA ---
+    # Comprobar si las columnas actuales parecen genéricas (como 'unnamed: ...') o no tienen palabras clave
+    cols_actuales = [str(c).lower().strip() for c in df.columns]
+    tiene_cabecera_valida = any('fecha' in c or 'ref' in c or 'trans' in c or 'monto' in c or 'total' in c for c in cols_actuales)
+    
+    if not tiene_cabecera_valida:
+        # Buscar en las primeras 12 filas una fila que contenga palabras clave indicativas de cabecera
+        for idx in range(min(12, len(df))):
+            row_vals = [str(val).strip().lower() for val in df.iloc[idx]]
+            if any('fecha' in v or 'ref' in v or 'trans' in v or 'monto' in v or 'total' in v for v in row_vals):
+                # Encontró la fila del header! Promoverla a columnas
+                df.columns = row_vals
+                df = df.iloc[idx+1:].reset_index(drop=True)
+                break
+                
+    # Volver a calcular clean_cols después de la potencial promoción de cabecera
+    clean_cols = [str(c).strip().lower() for c in df.columns]
     df.columns = clean_cols
     
     # 1. Identificación de columna de Referencia
@@ -361,9 +377,9 @@ def normalize_cols(df, label):
                 ref_col = c
                 break
     if not ref_col:
-        ref_col = clean_cols[0]
+        ref_col = clean_cols[0] if clean_cols else 'col_0'
         
-    # 2. Identificación de columna de Fecha (excluyendo la columna de Referencia)
+    # 2. Identificación de columna de Fecha (excluyendo la de Referencia)
     date_col = None
     date_candidates = ['fecha', 'fec', 'fecha_valor', 'fecha valor', 'date', 'f. valor', 'f_valor', 'fecha_registro']
     for name in date_candidates:
@@ -376,7 +392,6 @@ def normalize_cols(df, label):
                 date_col = c
                 break
     if not date_col:
-        # Buscar la primera columna disponible diferente de ref_col
         for c in clean_cols:
             if c != ref_col:
                 date_col = c
@@ -398,7 +413,6 @@ def normalize_cols(df, label):
                 amount_col = c
                 break
     if not amount_col:
-        # Buscar la primera columna disponible diferente de ref_col y date_col
         for c in clean_cols:
             if c != ref_col and c != date_col:
                 amount_col = c
@@ -408,6 +422,31 @@ def normalize_cols(df, label):
         
     df = df.rename(columns={ref_col: 'referencia', date_col: 'fecha', amount_col: 'monto'})
     
+    # --- GARANTIZAR QUE EXISTAN LAS COLUMNAS REQUERIDAS (CRASH RESISTANT) ---
+    if 'referencia' not in df.columns:
+        for c in df.columns:
+            if c != 'fecha' and c != 'monto':
+                df = df.rename(columns={c: 'referencia'})
+                break
+    if 'referencia' not in df.columns:
+        df['referencia'] = 'SIN_REF'
+        
+    if 'fecha' not in df.columns:
+        for c in df.columns:
+            if c != 'referencia' and c != 'monto':
+                df = df.rename(columns={c: 'fecha'})
+                break
+    if 'fecha' not in df.columns:
+        df['fecha'] = pd.Timestamp.now()
+        
+    if 'monto' not in df.columns:
+        for c in df.columns:
+            if c != 'referencia' and c != 'fecha':
+                df = df.rename(columns={c: 'monto'})
+                break
+    if 'monto' not in df.columns:
+        df['monto'] = 0.0
+        
     # --- Limpieza de Referencia ---
     df['referencia'] = df['referencia'].astype(str).str.strip()
     df['referencia'] = df['referencia'].str.replace(r'\s+', '', regex=True)
