@@ -363,36 +363,48 @@ def normalize_cols(df, label):
     if not ref_col:
         ref_col = clean_cols[0]
         
-    # 2. Identificación de columna de Fecha
+    # 2. Identificación de columna de Fecha (excluyendo la columna de Referencia)
     date_col = None
     date_candidates = ['fecha', 'fec', 'fecha_valor', 'fecha valor', 'date', 'f. valor', 'f_valor', 'fecha_registro']
     for name in date_candidates:
-        if name in clean_cols:
+        if name in clean_cols and name != ref_col:
             date_col = name
             break
     if not date_col:
         for c in clean_cols:
-            if 'fecha' in c or 'fec' in c or 'date' in c:
+            if c != ref_col and ('fecha' in c or 'fec' in c or 'date' in c):
                 date_col = c
                 break
     if not date_col:
-        date_col = clean_cols[1] if len(clean_cols) > 1 else clean_cols[0]
+        # Buscar la primera columna disponible diferente de ref_col
+        for c in clean_cols:
+            if c != ref_col:
+                date_col = c
+                break
+    if not date_col:
+        date_col = ref_col
         
-    # 3. Identificación de columna de Monto
+    # 3. Identificación de columna de Monto (excluyendo Referencia y Fecha)
     amount_col = None
     amount_candidates = ['monto', 'importe', 'amount', 'monto_bs', 'monto_usd', 'total', 'mto', 'debe', 'haber', 
-                         'monto neto', 'neto']
+                         'monto neto', 'neto', 'crédito', 'credito', 'débito', 'debito']
     for name in amount_candidates:
-        if name in clean_cols:
+        if name in clean_cols and name != ref_col and name != date_col:
             amount_col = name
             break
     if not amount_col:
         for c in clean_cols:
-            if 'monto' in c or 'imp' in c or 'total' in c or 'amount' in c:
+            if c != ref_col and c != date_col and ('monto' in c or 'imp' in c or 'total' in c or 'amount' in c or 'cred' in c or 'deb' in c):
                 amount_col = c
                 break
     if not amount_col:
-        amount_col = clean_cols[2] if len(clean_cols) > 2 else clean_cols[0]
+        # Buscar la primera columna disponible diferente de ref_col y date_col
+        for c in clean_cols:
+            if c != ref_col and c != date_col:
+                amount_col = c
+                break
+    if not amount_col:
+        amount_col = ref_col
         
     df = df.rename(columns={ref_col: 'referencia', date_col: 'fecha', amount_col: 'monto'})
     
