@@ -10,7 +10,7 @@ import io
 import numpy as np
 import re
 import matplotlib.pyplot as plt
-import sqlite3  # <-- AÑADIDA ESTA LÍNEA
+import sqlite3
 
 # Importar módulos del sistema
 from config import USUARIOS, validar_carpetas
@@ -18,7 +18,7 @@ from database import Database
 from logger import Logger
 from procesadores import ProcesadorArchivos
 from api_bcv import obtener_tasa_bcv
-from motor_auditoria import ejecutar_auditoria_inteligente, registrar_excepcion  # <-- NUEVO IMPORT
+from motor_auditoria import ejecutar_auditoria_inteligente, registrar_excepcion, calcular_kpis, cargar_ultimo_cierre, DB_PATH
 
 # Inicializar componentes
 validar_carpetas()
@@ -1379,6 +1379,144 @@ with st.sidebar:
     if st.button("🚪 Cerrar Sesión", use_container_width=True):
         st.session_state.usuario_actual = None
         st.rerun()
+    
+    st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
+    
+    # ==============================================================================
+    # 🤖 ASISTENTE VIRTUAL DE AUDITORÍA (Barra Lateral)
+    # ==============================================================================
+    # Inicializar historial de chat si es la primera ejecución
+    if "messages" not in st.session_state:
+        st.session_state.messages = [
+            {
+                "role": "assistant", 
+                "content": "👋 ¡Hola! Soy su Asistente de Auditoría. Puede darme órdenes escribiendo:\n"
+                           "- `ejecutar auditoría`\n"
+                           "- `ver alertas auto-corregidas`\n"
+                           "- `ver excepciones`\n"
+                           "- `ultimo cierre`\n"
+                           "- `limpiar cache`"
+            }
+        ]
+    
+    # Contenedor del bot en la Sidebar
+    with st.sidebar.expander("🤖 ASISTENTE VIRTUAL DE AUDITORÍA", expanded=True):
+        # Renderizar historial de mensajes
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.write(msg["content"])
+                
+        # Entrada de texto del analista
+        if user_prompt := st.chat_input("Escribe un comando...", key="chat_input"):
+            # Registrar y mostrar entrada del analista
+            st.session_state.messages.append({"role": "user", "content": user_prompt})
+            
+            # Procesamiento de comandos
+            cmd = user_prompt.strip().lower()
+            response = ""
+            
+            if "ejecutar" in cmd or "auditor" in cmd:
+                # Comprobación de si existen archivos cargados en el panel central
+                archivos_cargados = ('file_banco' in globals() and file_banco is not None)
+                
+                if archivos_cargados:
+                    hay_err, fallas, df_c = ejecutar_auditoria_inteligente(
+                        file_facturacion, file_cobranzas, file_ipago, file_banco
+                    )
+                    st.session_state['fallas_detectadas'] = fallas
+                    st.session_state['df_consolidado'] = df_c
+                    st.session_state['hay_errores'] = hay_err
+                    st.session_state['cierre_kpis'] = calcular_kpis(df_c)
+                    st.session_state['fecha_ultimo_cierre'] = "Manual (En tiempo real)"
+                    
+                    fallas_activas = [f for f in fallas if f['tipo'] in ['ROJA', 'AMARILLA', 'NARANJA']]
+                    response = f"⏳ Auditoría manual ejecutada con éxito. Se detectaron {len(fallas_activas)} discrepancias activas. La pantalla principal ha sido actualizada."
+                else:
+                    # Búsqueda automática en datos_servidor si no hay archivos manuales
+                    from ejecutar_bot import buscar_archivo_por_patron
+                    fb = buscar_archivo_por_patron(["*Banesco*.xlsx", "*BNC*.xlsx", "*Banco*.xlsx", "*banco*.xlsx", "*estado_cuenta*.xlsx"])
+                    fi = buscar_archivo_por_patron(["*iPago*.xlsx", "*ipago*.xlsx", "*egresos*.xlsx", "*Egresos*.xlsx"])
+                    fc = buscar_archivo_por_patron(["*Cobranzas*.xlsx", "*cobranzas*.xlsx", "*ingresos*.xlsx"])
+                    ff = buscar_archivo_por_patron(["*Facturacion*.xlsx", "*facturacion*.xlsx", "*facturas*.xlsx"])
+                    
+                    if not fb and not fi:
+                        response = "❌ No encontré archivos cargados ni archivos válidos en 'datos_servidor/'. Suba archivos en el panel central."
+                    else:
+                        hay_err, fallas, df_c = ejecutar_auditoria_inteligente(ff, fc, fi, fb)
+                        st.session_state['fallas_detectadas'] = fallas
+                        st.session_state['df_consolidado'] = df_c
+                        st.session_state['hay_errores'] = hay_err
+                        st.session_state['cierre_kpis'] = calcular_kpis(df_c)
+                        st.session_state['fecha_ultimo_cierre'] = "Ejecutado por el Asistente (Servidor)"
+                        
+                        fallas_activas = [f for f in fallas if f['tipo'] in ['ROJA', 'AMARILLA', 'NARANJA']]
+                        response = f"✅ Auditoría del servidor completada. Se detectaron {len(fallas_activas)} discrepancias activas. Visualización actualizada en pantalla principal."
+                        
+            elif "auto-corregid" in cmd or "corregid" in cmd:
+                fallas = st.session_state.get('fallas_detectadas', [])
+                corregidas = [f for f in fallas if f['tipo'] == 'VERDE_CORREGIDO']
+                if not corregidas:
+                    response = "No hay transacciones auto-corregidas en la corrida actual."
+                else:
+                    response = f"🟢 **Movimientos Auto-Corregidos en la corrida actual ({len(corregidas)}):**\n"
+                    for idx, f in enumerate(corregidas[:10], 1):
+                        analista_nombre = "Historial"
+                        if "Causa: Excepción histórica aprobada previamente por el analista" in f['causa']:
+                            parts = f['causa'].split("el analista ")
+                            if len(parts) > 1:
+                                analista_nombre = parts[1].replace(".", "")
+                        response += f"{idx}. Ref: {f['referencia']} | Monto: {f['monto_banco'] if f['monto_banco'] > 0 else f['monto_sistema']} | Aprobado por: {analista_nombre}\n"
+                    if len(corregidas) > 10:
+                        response += f"... y {len(corregidas) - 10} más."
+                        
+            elif "excepcion" in cmd:
+                conn = sqlite3.connect(DB_PATH)
+                cursor = conn.cursor()
+                try:
+                    cursor.execute("SELECT referencia, monto, banco, usuario_analista FROM excepciones_conciliacion")
+                    rows = cursor.fetchall()
+                    conn.close()
+                    if not rows:
+                        response = "📭 No hay excepciones registradas en la base de datos de aprendizaje."
+                    else:
+                        response = f"💾 **Memoria de Aprendizaje ({len(rows)} excepciones guardadas):**\n"
+                        for idx, r in enumerate(rows[:10], 1):
+                            response += f"{idx}. Ref: {r[0]} | Monto: {r[1]:.2f} | Módulo: {r[2]} | Analista: {r[3]}\n"
+                        if len(rows) > 10:
+                            response += f"... y {len(rows) - 10} más."
+                except Exception as e:
+                    conn.close()
+                    response = f"❌ Error al consultar excepciones: {e}"
+                    
+            elif "ultimo cierre" in cmd or "cierre" in cmd:
+                existe, fecha, hay_err, fallas, df_c, kpis = cargar_ultimo_cierre()
+                if not existe:
+                    response = "📭 No se ha registrado ningún cierre automático del bot en la base de datos."
+                else:
+                    response = (
+                        f"📅 **Último Cierre de Bot:** {fecha}\n"
+                        f"💵 Tasa Oficial BCV: {kpis.get('tasa_bcv', 36.50):.2f} VES/USD\n"
+                        f"📊 Total VES: {kpis.get('total_ves', 0.0):,.2f} Bs.\n"
+                        f"📊 Total USD: ${kpis.get('total_usd', 0.0):,.2f}\n"
+                        f"🚨 Alertas Activas: {kpis.get('total_alertas', 0)} (Rojas: {kpis.get('alertas_rojas', 0)}, Naranjas: {kpis.get('alertas_naranjas', 0)}, Amarillas: {kpis.get('alertas_amarillas', 0)})"
+                    )
+                    
+            elif "limpiar" in cmd:
+                st.cache_data.clear()
+                response = "🧹 Caché de datos purgada. La próxima auditoría leerá directamente los archivos de origen y base de datos fresca."
+                
+            else:
+                response = (
+                    "🤖 **Comandos Disponibles:**\n"
+                    "- `ejecutar auditoría`: Corre la conciliación perimetral sobre los archivos actuales.\n"
+                    "- `ver alertas auto-corregidas`: Muestra los movimientos omitidos por historial en la corrida actual.\n"
+                    "- `ver excepciones`: Muestra todas las excepciones guardadas en SQLite.\n"
+                    "- `ultimo cierre`: Muestra los KPIs de la última corrida nocturna automática.\n"
+                    "- `limpiar cache`: Borra la memoria intermedia de Streamlit."
+                )
+                
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            st.rerun()
     
     st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
     
