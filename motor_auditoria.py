@@ -514,10 +514,8 @@ def ejecutar_auditoria_inteligente(file_facturacion, file_cobranzas, file_ipago,
     df_ipag_n = normalize_cols(df_ipag, 'iPago')
     df_bnco_n = normalize_cols(df_bnco, 'Banco')
     
-    # 3. Consolidar el lado del sistema (iPago y Cobranzas)
+    # 3. Consolidar el lado del sistema (Solo Cobranzas para cruzar ingresos; iPago se excluye del cruce bancario)
     system_dfs = []
-    if df_ipag_n is not None and not df_ipag_n.empty:
-        system_dfs.append(df_ipag_n)
     if df_cobr_n is not None and not df_cobr_n.empty:
         system_dfs.append(df_cobr_n)
         
