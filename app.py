@@ -1804,11 +1804,23 @@ with st.sidebar:
                     fallas_activas = [f for f in fallas if f['tipo'] in ['ROJA', 'AMARILLA', 'NARANJA']]
                     response = f"⏳ Auditoría manual ejecutada con éxito. Se detectaron {len(fallas_activas)} discrepancias activas. La pantalla principal ha sido actualizada."
                 else:
-                    from ejecutar_bot import buscar_archivo_por_patron
-                    fb = buscar_archivo_por_patron(["*Banesco*.xlsx", "*BNC*.xlsx", "*Banco*.xlsx", "*banco*.xlsx", "*estado_cuenta*.xlsx"])
-                    fi = buscar_archivo_por_patron(["*iPago*.xlsx", "*ipago*.xlsx", "*egresos*.xlsx", "*Egresos*.xlsx"])
-                    fc = buscar_archivo_por_patron(["*Cobranzas*.xlsx", "*cobranzas*.xlsx", "*ingresos*.xlsx"])
-                    ff = buscar_archivo_por_patron(["*Facturacion*.xlsx", "*facturacion*.xlsx", "*facturas*.xlsx"])
+                    def local_buscar_archivo(patrones):
+                        base_dir = os.path.dirname(os.path.abspath(__file__))
+                        input_dir = os.path.join(base_dir, "datos_servidor")
+                        if not os.path.exists(input_dir):
+                            os.makedirs(input_dir)
+                            return None
+                        import glob
+                        for patron in patrones:
+                            archivos = glob.glob(os.path.join(input_dir, patron))
+                            if archivos:
+                                return sorted(archivos, key=os.path.getmtime, reverse=True)[0]
+                        return None
+                        
+                    fb = local_buscar_archivo(["*Banesco*.xlsx", "*BNC*.xlsx", "*Banco*.xlsx", "*banco*.xlsx", "*estado_cuenta*.xlsx"])
+                    fi = local_buscar_archivo(["*iPago*.xlsx", "*ipago*.xlsx", "*egresos*.xlsx", "*Egresos*.xlsx"])
+                    fc = local_buscar_archivo(["*Cobranzas*.xlsx", "*cobranzas*.xlsx", "*ingresos*.xlsx"])
+                    ff = local_buscar_archivo(["*Facturacion*.xlsx", "*facturacion*.xlsx", "*facturas*.xlsx"])
                     
                     if not fb and not fi:
                         response = "❌ No encontré archivos cargados ni archivos válidos en 'datos_servidor/'. Suba archivos en el panel central."
