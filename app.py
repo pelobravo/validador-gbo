@@ -2835,5 +2835,92 @@ else:
         | **Total General:** | | | | **1.417,00** | |
         """)
 
+# ============================================================
+# 🔍 MÓDULO DE CONCILIACIÓN Y AUDITORÍA PERIMETRAL
+# ============================================================
+st.markdown("---")
+st.subheader("🔍 Módulo de Conciliación y Auditoría perimetral")
+
+# Mapeo de variables de archivos según el contexto
+# Si el usuario es gerente, los archivos vienen del expander de carga dinámica
+# Si es analista, vienen de la barra lateral
+if es_gerente:
+    file_facturacion = archivo_facturacion if 'archivo_facturacion' in locals() else None
+    file_cobranzas = archivo_cobranzas if 'archivo_cobranzas' in locals() else None
+    file_ipago = archivo_egresos if 'archivo_egresos' in locals() else None
+    file_banco = archivo_estado_cuenta if 'archivo_estado_cuenta' in locals() else None
+else:
+    file_facturacion = archivo_facturacion
+    file_cobranzas = archivo_cobranzas
+    file_ipago = archivo_egresos
+    file_banco = archivo_estado_cuenta
+
+if st.button("🔍 Ejecutar Auditoría de Trazabilidad", use_container_width=True):
+    if not file_banco and not file_ipago and not file_cobranzas:
+        st.warning("⚠️ Por favor cargue al menos el Estado de Cuenta Bancario y un archivo de control interno (iPago o Cobranzas) para ejecutar el análisis.")
+    else:
+        # Llamado optimizado al motor cachado
+        # Nota: Esta función debe ser implementada en el módulo procesadores
+        hay_errores, fallas_detectadas, df_consolidado = ProcesadorArchivos.ejecutar_auditoria_inteligente(
+            file_facturacion, file_cobranzas, file_ipago, file_banco
+        )
+        
+        if not hay_errores:
+            st.success("✅ ¡Auditoría finalizada con éxito! No se detectaron discrepancias ni transacciones fuera de balance.")
+        else:
+            st.error(f"⚠️ Se han detectado {len(fallas_detectadas)} inconsistencias o transacciones en tránsito que requieren atención.")
+            
+            # Ordenar para mostrar primero alertas Rojas (Críticas)
+            alertas_ordenadas = sorted(
+                fallas_detectadas, 
+                key=lambda x: {'ROJA': 0, 'NARANJA': 1, 'AMARILLA': 2}.get(x['tipo'], 3)
+            )
+            
+            for falla in alertas_ordenadas:
+                tipo = falla['tipo']
+                ref = falla['referencia']
+                
+                # Renderizado de alerta nativa
+                if tipo == 'ROJA':
+                    st.error(f"🔴 **ALERTA ROJA (Falta en Sistema)** | Ref: {ref}")
+                elif tipo == 'NARANJA':
+                    st.warning(f"🟠 **ALERTA NARANJA (Diferencia de Monto)** | Ref: {ref} (Dif: {falla['diferencia']:.2f})")
+                elif tipo == 'AMARILLA':
+                    st.warning(f"🟡 **ALERTA AMARILLA (Transacción en Tránsito)** | Ref: {ref}")
+                
+                # Desplegable informativo sin popups molestas
+                with st.expander(f"Detalle de Auditoría - Ref {ref}", expanded=False):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown(f"**Módulo Origen:** {falla['origen']}")
+                        st.markdown(f"**Módulo Destino:** {falla['destino']}")
+                        if tipo != 'AMARILLA':
+                            st.markdown(f"**Monto Banco:** {falla['monto_banco']:.2f}")
+                        if tipo != 'ROJA':
+                            st.markdown(f"**Monto Sistema:** {falla['monto_sistema']:.2f}")
+                    with col2:
+                        if tipo == 'NARANJA':
+                            st.markdown(f"**Discrepancia Exacta:** {falla['diferencia']:.2f}")
+                        st.markdown(f"**Fecha Banco:** {falla['fecha_banco']}")
+                        st.markdown(f"**Fecha Sistema:** {falla['fecha_sistema']}")
+                    
+                    st.markdown(f"💡 **Causa Probable:** {falla['causa']}")
+                    st.markdown(f"🛠️ **Acción Recomendada:** *{falla['accion']}*")
+            
+        # Reporte consolidado tabular elegante con resaltados de colores
+        st.markdown("### 📊 Reporte Consolidado de Discrepancias")
+        columnas_visibles = ['referencia', 'fecha_banco', 'monto_banco', 'fecha_sistema', 'monto_sistema', 'origen_sistema', 'estatus', 'alerta', 'diferencia']
+        columnas_render = [c for c in columnas_visibles if c in df_consolidado.columns]
+        
+        st.dataframe(
+            df_consolidado[columnas_render].style.map(
+                lambda val: 'background-color: #ffcccc' if val == 'ROJA' else 
+                            ('background-color: #ffe6cc' if val == 'NARANJA' else 
+                             ('background-color: #fffae6' if val == 'AMARILLA' else '')),
+                subset=['alerta']
+            ),
+            use_container_width=True
+        )
+
 st.markdown("---")
 st.caption("✨ Validador de Trazabilidad Diaria - Capital de Trabajo Neto Operativo | Grupo Bodeguita Oriente")
