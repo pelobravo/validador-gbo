@@ -13,12 +13,14 @@ def conectar_bd():
     """
     Crea una conexión SQLite y maneja entornos con permisos de solo lectura o archivos
     corruptos redirigiendo y recreando la BD en directorios temporales si es necesario.
+    Garantiza el cierre de descriptores de archivos para evitar bloqueos y reduce el timeout.
     """
     global DB_PATH
     
+    conn = None
     # Intentar con la ruta por defecto
     try:
-        conn = sqlite3.connect(DB_PATH, timeout=30.0)
+        conn = sqlite3.connect(DB_PATH, timeout=5.0)
         cursor = conn.cursor()
         # Verificar integridad
         cursor.execute("PRAGMA integrity_check;")
@@ -30,7 +32,14 @@ def conectar_bd():
         conn.commit()
         return conn
     except (sqlite3.OperationalError, sqlite3.DatabaseError):
-        # Falló en la ruta por defecto (por permisos o corrupción)
+        # Cerrar conexión si se abrió pero falló la escritura o integridad
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            conn = None
+            
         # Intentar borrar el archivo si está corrupto y el medio es escribible
         try:
             if os.path.exists(DB_PATH):
@@ -47,7 +56,7 @@ def conectar_bd():
             
         # Intentar abrir y reparar en el directorio temporal
         try:
-            conn = sqlite3.connect(DB_PATH, timeout=30.0)
+            conn = sqlite3.connect(DB_PATH, timeout=5.0)
             cursor = conn.cursor()
             cursor.execute("PRAGMA integrity_check;")
             res = cursor.fetchone()
@@ -57,15 +66,22 @@ def conectar_bd():
             conn.commit()
             return conn
         except (sqlite3.OperationalError, sqlite3.DatabaseError):
-            # Si también falla en temporal (ej. por archivo huérfano bloqueado/corrupto), intentar borrarlo
+            # Cerrar la conexión temporal fallida
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                conn = None
+                
+            # Si también falla en temporal, intentar borrarlo
             try:
                 if os.path.exists(DB_PATH):
                     os.remove(DB_PATH)
             except Exception:
                 pass
             # Conexión limpia final
-            conn = sqlite3.connect(DB_PATH, timeout=30.0)
-            return conn
+            return sqlite3.connect(DB_PATH, timeout=5.0)
 
 def inicializar_bd():
     """
@@ -73,52 +89,54 @@ def inicializar_bd():
     alertas diarias y el reporte consolidado si no existen.
     """
     conn = conectar_bd()
-    cursor = conn.cursor()
-    
-    # 1. Tabla de excepciones
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS excepciones_conciliacion (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            referencia TEXT NOT NULL,
-            monto REAL NOT NULL,
-            banco TEXT NOT NULL,
-            tipo_excepcion TEXT NOT NULL,
-            usuario_analista TEXT NOT NULL,
-            fecha_aprobacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(referencia, monto, banco)
-        )
-    """)
-    
-    # 2. Tabla de histórico de cierres diarios
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS cierre_diario (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            fecha_cierre TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            hay_errores INTEGER NOT NULL, -- 0 o 1
-            total_alertas INTEGER NOT NULL,
-            kpis_resumen TEXT NOT NULL -- JSON con KPIs
-        )
-    """)
-    
-    # 3. Tabla de alertas de la última corrida (para lectura pasiva)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS alertas_diarias (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tipo TEXT NOT NULL,
-            referencia TEXT NOT NULL,
-            fecha_banco TEXT,
-            monto_banco REAL,
-            fecha_sistema TEXT,
-            monto_sistema REAL,
-            origen TEXT NOT NULL,
-            destino TEXT NOT NULL,
-            diferencia REAL,
-            causa TEXT NOT NULL,
-            accion TEXT NOT NULL
-        )
-    """)
-    conn.commit()
-    conn.close()
+    try:
+        cursor = conn.cursor()
+        
+        # 1. Tabla de excepciones
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS excepciones_conciliacion (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                referencia TEXT NOT NULL,
+                monto REAL NOT NULL,
+                banco TEXT NOT NULL,
+                tipo_excepcion TEXT NOT NULL,
+                usuario_analista TEXT NOT NULL,
+                fecha_aprobacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(referencia, monto, banco)
+            )
+        """)
+        
+        # 2. Tabla de histórico de cierres diarios
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS cierre_diario (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fecha_cierre TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                hay_errores INTEGER NOT NULL, -- 0 o 1
+                total_alertas INTEGER NOT NULL,
+                kpis_resumen TEXT NOT NULL -- JSON con KPIs
+            )
+        """)
+        
+        # 3. Tabla de alertas de la última corrida (para lectura pasiva)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS alertas_diarias (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tipo TEXT NOT NULL,
+                referencia TEXT NOT NULL,
+                fecha_banco TEXT,
+                monto_banco REAL,
+                fecha_sistema TEXT,
+                monto_sistema REAL,
+                origen TEXT NOT NULL,
+                destino TEXT NOT NULL,
+                diferencia REAL,
+                causa TEXT NOT NULL,
+                accion TEXT NOT NULL
+            )
+        """)
+        conn.commit()
+    finally:
+        conn.close()
 
 def registrar_excepcion(referencia, monto, banco, tipo_excepcion, usuario_analista):
     """
