@@ -1768,10 +1768,12 @@ with st.sidebar:
 
     st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
     with st.sidebar.expander("👩‍💼 ASISTENTE VIRTUAL DE AUDITORÍA", expanded=True):
-        for msg in st.session_state.messages:
-            avatar = "👩‍💼" if msg["role"] == "assistant" else None
-            with st.chat_message(msg["role"], avatar=avatar):
-                st.write(msg["content"])
+        chat_container = st.container(height=380)
+        with chat_container:
+            for msg in st.session_state.messages:
+                avatar = "👩‍💼" if msg["role"] == "assistant" else None
+                with st.chat_message(msg["role"], avatar=avatar):
+                    st.write(msg["content"])
                 
         if user_prompt := st.chat_input("Escribe un comando...", key="chat_input"):
             st.session_state.messages.append({"role": "user", "content": user_prompt})
