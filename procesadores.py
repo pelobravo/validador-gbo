@@ -1105,3 +1105,202 @@ class ProcesadorArchivos:
                     return max(numeros)
         
         return None
+
+    @staticmethod
+    def cargar_detalle_inventario(df):
+        """
+        Carga el inventario a nivel de producto, extrayendo columnas normalizadas:
+        Producto (código), Descrip_Clean (descripción), Cantidad, Precio/Unidad, Total(*)
+        
+        Args:
+            df: DataFrame de pandas cargado del archivo de inventario
+            
+        Returns:
+            DataFrame: DataFrame normalizado o None si ocurre un error
+        """
+        if df is None or df.empty:
+            return None
+            
+        try:
+            df = df.copy()
+            
+            # Buscar la fila de cabecera que contenga 'producto' y 'cantidad'
+            header_idx = None
+            for idx, row in df.iterrows():
+                row_str = [str(x).lower().strip() for x in row.values]
+                if 'producto' in row_str and 'cantidad' in row_str:
+                    header_idx = idx
+                    break
+                    
+            if header_idx is None:
+                # Intento secundario: buscar 'producto' en cualquier columna de las primeras 20 filas
+                for idx in range(min(20, len(df))):
+                    row_str = [str(x).lower().strip() for x in df.iloc[idx].values]
+                    if any('producto' in x for x in row_str):
+                        header_idx = idx
+                        break
+                        
+            if header_idx is None:
+                return None
+                
+            # Hacer únicas las columnas para evitar errores de pandas
+            raw_cols = df.iloc[header_idx].values
+            cols = []
+            seen = {}
+            for i, x in enumerate(raw_cols):
+                name = str(x).strip() if pd.notna(x) else f'col_{i}'
+                if name in seen:
+                    seen[name] += 1
+                    cols.append(f"{name}_{seen[name]}")
+                else:
+                    seen[name] = 0
+                    cols.append(name)
+                    
+            df_clean = df.iloc[header_idx+1:].reset_index(drop=True)
+            df_clean.columns = cols
+            
+            # Limpiar filas donde 'Producto' es nulo o contiene palabras totales
+            df_clean = df_clean.dropna(subset=['Producto'])
+            df_clean = df_clean[~df_clean['Producto'].astype(str).str.lower().str.contains('total')]
+            
+            # Normalizar código de producto (quitar ceros a la izquierda y espacios)
+            df_clean['Producto'] = df_clean['Producto'].astype(str).str.strip().str.replace(r'^0+', '', regex=True)
+            
+            # Buscar columnas correspondientes
+            price_col = None
+            total_col = None
+            desc_col = None
+            qty_col = None
+            
+            for col in df_clean.columns:
+                col_lower = col.lower()
+                if 'precio' in col_lower or 'precio/unidad' in col_lower:
+                    price_col = col
+                elif 'total' in col_lower:
+                    total_col = col
+                elif 'descrip' in col_lower:
+                    desc_col = col
+                elif 'cantidad' in col_lower:
+                    qty_col = col
+                    
+            if not qty_col:
+                qty_col = 'Cantidad'
+            if not price_col:
+                price_col = 'Precio/Unidad'
+            if not total_col:
+                total_col = 'Total(*)'
+            if not desc_col:
+                desc_col = 'Descripci\xf3n'
+                
+            # Procesar datos numéricos
+            df_clean['Cantidad'] = df_clean[qty_col].apply(ProcesadorArchivos._convertir_numero_europeo).fillna(0.0)
+            df_clean['Precio/Unidad'] = df_clean[price_col].apply(ProcesadorArchivos._convertir_numero_europeo).fillna(0.0)
+            df_clean['Total(*)'] = df_clean[total_col].apply(ProcesadorArchivos._convertir_numero_europeo).fillna(0.0)
+            
+            # Encontrar el nombre real de la descripción en el df
+            real_desc_col = None
+            for c in df_clean.columns:
+                if 'desc' in c.lower():
+                    real_desc_col = c
+                    break
+            if real_desc_col:
+                df_clean['Descrip_Clean'] = df_clean[real_desc_col].astype(str).str.strip()
+            else:
+                df_clean['Descrip_Clean'] = 'Producto ' + df_clean['Producto']
+                
+            return df_clean[['Producto', 'Cantidad', 'Precio/Unidad', 'Total(*)', 'Descrip_Clean']]
+        except Exception as e:
+            print(f"Error al cargar detalle de inventario: {e}")
+            return None
+
+    @staticmethod
+    def cargar_detalle_utilidad(df):
+        """
+        Carga el reporte de utilidad (rentabilidad por producto) a nivel de producto,
+        agrupando por código de producto.
+        
+        Args:
+            df: DataFrame de pandas del reporte de utilidad
+            
+        Returns:
+            DataFrame: DataFrame consolidado por producto con columnas Cod_Producto, Cantidad (vendida), Costo_Total (vendido)
+        """
+        if df is None or df.empty:
+            return None
+            
+        try:
+            df = df.copy()
+            
+            # Buscar fila de cabecera
+            header_idx = None
+            for idx, row in df.iterrows():
+                row_str = [str(x).lower().strip() for x in row.values]
+                if 'producto' in row_str and ('ganancia' in ''.join(row_str) or 'costo' in row_str):
+                    header_idx = idx
+                    break
+                    
+            if header_idx is None:
+                # Intento secundario: buscar 'producto' en las primeras 20 filas
+                for idx in range(min(20, len(df))):
+                    row_str = [str(x).lower().strip() for x in df.iloc[idx].values]
+                    if any('producto' in x for x in row_str):
+                        header_idx = idx
+                        break
+                        
+            if header_idx is None:
+                return None
+                
+            # Hacer únicas las columnas
+            raw_cols = df.iloc[header_idx].values
+            cols = []
+            seen = {}
+            for i, x in enumerate(raw_cols):
+                name = str(x).strip() if pd.notna(x) else f'col_{i}'
+                if name in seen:
+                    seen[name] += 1
+                    cols.append(f"{name}_{seen[name]}")
+                else:
+                    seen[name] = 0
+                    cols.append(name)
+                    
+            df_clean = df.iloc[header_idx+1:].reset_index(drop=True)
+            df_clean.columns = cols
+            
+            df_clean = df_clean.dropna(subset=['Producto'])
+            df_clean = df_clean[~df_clean['Producto'].astype(str).str.lower().str.contains('total')]
+            
+            # Función para parsear código de producto
+            def parse_prod_code(val):
+                val_str = str(val).strip()
+                if '-' in val_str:
+                    return val_str.split('-')[0].strip().lstrip('0')
+                return val_str.lstrip('0')
+                
+            df_clean['Cod_Producto'] = df_clean['Producto'].apply(parse_prod_code)
+            
+            qty_col = None
+            for c in df_clean.columns:
+                if c.lower().strip() == 'cantidad':
+                    qty_col = c
+                    break
+            if not qty_col:
+                qty_col = 'Cantidad'
+                
+            df_clean['Cantidad_Clean'] = df_clean[qty_col].apply(ProcesadorArchivos._convertir_numero_europeo).fillna(0.0)
+            
+            # Buscar el Costo Total (segunda columna de Costo o columna Costo_1)
+            cost_col = 'Costo_1' if 'Costo_1' in df_clean.columns else 'Costo'
+            df_clean['Costo_Total'] = df_clean[cost_col].apply(ProcesadorArchivos._convertir_numero_europeo).fillna(0.0)
+            
+            # Agrupar
+            df_grouped = df_clean.groupby('Cod_Producto').agg({
+                'Cantidad_Clean': 'sum',
+                'Costo_Total': 'sum',
+                'Producto': 'first'
+            }).reset_index()
+            
+            df_grouped.columns = ['Cod_Producto', 'Cantidad', 'Costo_Total', 'Producto_Original']
+            return df_grouped
+        except Exception as e:
+            print(f"Error al cargar detalle de utilidad: {e}")
+            return None
