@@ -1,6 +1,7 @@
 import re
 import os
 import sqlite3
+import json
 import pandas as pd
 import numpy as np
 import streamlit as st
@@ -10,10 +11,13 @@ DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "auditoria_me
 
 def inicializar_bd():
     """
-    Inicializa la base de datos SQLite3 y crea la tabla de excepciones históricas si no existe.
+    Inicializa la base de datos SQLite3 y crea las tablas de excepciones, cierres históricos,
+    alertas diarias y el reporte consolidado si no existen.
     """
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    
+    # 1. Tabla de excepciones
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS excepciones_conciliacion (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,6 +28,35 @@ def inicializar_bd():
             usuario_analista TEXT NOT NULL,
             fecha_aprobacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(referencia, monto, banco)
+        )
+    """)
+    
+    # 2. Tabla de histórico de cierres diarios
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS cierre_diario (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha_cierre TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            hay_errores INTEGER NOT NULL, -- 0 o 1
+            total_alertas INTEGER NOT NULL,
+            kpis_resumen TEXT NOT NULL -- JSON con KPIs
+        )
+    """)
+    
+    # 3. Tabla de alertas de la última corrida (para lectura pasiva)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS alertas_diarias (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo TEXT NOT NULL,
+            referencia TEXT NOT NULL,
+            fecha_banco TEXT,
+            monto_banco REAL,
+            fecha_sistema TEXT,
+            monto_sistema REAL,
+            origen TEXT NOT NULL,
+            destino TEXT NOT NULL,
+            diferencia REAL,
+            causa TEXT NOT NULL,
+            accion TEXT NOT NULL
         )
     """)
     conn.commit()
@@ -37,7 +70,6 @@ def registrar_excepcion(referencia, monto, banco, tipo_excepcion, usuario_analis
     """
     inicializar_bd()
     
-    # Normalizar referencia de la misma forma que en Pandas
     ref_limpia = str(referencia).strip()
     ref_limpia = re.sub(r'\s+', '', ref_limpia)
     ref_limpia = re.sub(r'^0+', '', ref_limpia)
@@ -54,7 +86,7 @@ def registrar_excepcion(referencia, monto, banco, tipo_excepcion, usuario_analis
         conn.commit()
         success = True
         
-        # Limpiar el caché de la función de Streamlit
+        # Limpiar el caché de Streamlit
         st.cache_data.clear()
     except Exception as e:
         print(f"Error al registrar excepción en la BD: {e}")
@@ -69,7 +101,6 @@ def buscar_excepcion(referencia, monto, banco_nombre):
     """
     inicializar_bd()
     
-    # Normalizar referencia
     ref_limpia = str(referencia).strip()
     ref_limpia = re.sub(r'\s+', '', ref_limpia)
     ref_limpia = re.sub(r'^0+', '', ref_limpia)
@@ -78,7 +109,6 @@ def buscar_excepcion(referencia, monto, banco_nombre):
     cursor = conn.cursor()
     analista = None
     try:
-        # Se busca con tolerancia por redondeo de flotantes en monto
         cursor.execute("""
             SELECT usuario_analista FROM excepciones_conciliacion 
             WHERE referencia = ? AND ABS(monto - ?) < 0.01 AND (banco = ? OR ? LIKE '%' || banco || '%')
@@ -92,6 +122,142 @@ def buscar_excepcion(referencia, monto, banco_nombre):
         conn.close()
     return analista
 
+def guardar_resultado_cierre(hay_errores, fallas, df_consolidado, kpis):
+    """
+    Guarda los resultados del cierre (alertas, consolidado y KPIs) del bot en la BD local.
+    Limpia los resultados anteriores de la última corrida diaria.
+    """
+    inicializar_bd()
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        # 1. Limpiar alertas de la corrida anterior
+        cursor.execute("DELETE FROM alertas_diarias")
+        
+        # 2. Insertar las alertas actuales
+        for f in fallas:
+            cursor.execute("""
+                INSERT INTO alertas_diarias 
+                (tipo, referencia, fecha_banco, monto_banco, fecha_sistema, monto_sistema, origen, destino, diferencia, causa, accion)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                f['tipo'], f['referencia'], f['fecha_banco'], f['monto_banco'],
+                f['fecha_sistema'], f['monto_sistema'], f['origen'], f['destino'],
+                f.get('diferencia', 0.0), f['causa'], f['accion']
+            ))
+            
+        # 3. Guardar el reporte consolidado diario en SQLite mediante Pandas
+        df_sql = df_consolidado.copy()
+        # Convertir fechas a string para evitar problemas de tipos de SQLite
+        if 'fecha_banco' in df_sql.columns:
+            df_sql['fecha_banco'] = df_sql['fecha_banco'].dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
+        if 'fecha_sistema' in df_sql.columns:
+            df_sql['fecha_sistema'] = df_sql['fecha_sistema'].dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
+            
+        df_sql.to_sql('reporte_consolidado', conn, if_exists='replace', index=False)
+        
+        # 4. Registrar cierre diario en el histórico
+        total_alertas_activas = sum(1 for f in fallas if f['tipo'] in ['ROJA', 'AMARILLA', 'NARANJA'])
+        cursor.execute("""
+            INSERT INTO cierre_diario (hay_errores, total_alertas, kpis_resumen)
+            VALUES (?, ?, ?)
+        """, (1 if hay_errores else 0, total_alertas_activas, json.dumps(kpis)))
+        
+        conn.commit()
+        st.cache_data.clear() # Limpiar caché para forzar que st.cache lea la BD actualizada
+        return True
+    except Exception as e:
+        print(f"Error al guardar resultado del cierre en la BD: {e}")
+        return False
+    finally:
+        conn.close()
+
+def cargar_ultimo_cierre():
+    """
+    Carga de forma pasiva el último reporte consolidado y las alertas registradas en la BD.
+    Retorna: (existe_cierre, fecha_cierre, hay_errores, fallas_detectadas, df_consolidado, kpis)
+    """
+    inicializar_bd()
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        # Obtener el último cierre
+        cursor.execute("SELECT fecha_cierre, hay_errores, total_alertas, kpis_resumen FROM cierre_diario ORDER BY id DESC LIMIT 1")
+        row_cierre = cursor.fetchone()
+        
+        if not row_cierre:
+            conn.close()
+            return False, None, False, [], pd.DataFrame(), {}
+            
+        fecha_cierre, hay_errores_int, total_alertas, kpis_json = row_cierre
+        hay_errores = True if hay_errores_int == 1 else False
+        kpis = json.loads(kpis_json)
+        
+        # Cargar alertas diarias de la última corrida
+        df_alertas = pd.read_sql_query("SELECT * FROM alertas_diarias", conn)
+        fallas_detectadas = df_alertas.to_dict('records')
+        
+        # Cargar el DataFrame consolidado
+        df_consolidado = pd.read_sql_query("SELECT * FROM reporte_consolidado", conn)
+        
+        # Re-convertir las fechas a Datetime en Pandas
+        if 'fecha_banco' in df_consolidado.columns:
+            df_consolidado['fecha_banco'] = pd.to_datetime(df_consolidado['fecha_banco'], errors='coerce')
+        if 'fecha_sistema' in df_consolidado.columns:
+            df_consolidado['fecha_sistema'] = pd.to_datetime(df_consolidado['fecha_sistema'], errors='coerce')
+            
+        conn.close()
+        return True, fecha_cierre, hay_errores, fallas_detectadas, df_consolidado, kpis
+    except Exception as e:
+        print(f"Error al cargar el último cierre de la BD: {e}")
+        conn.close()
+        return False, None, False, [], pd.DataFrame(), {}
+
+def calcular_kpis(df_consolidado, tasa_bcv=36.50):
+    """
+    Calcula los KPIs financieros de la conciliación:
+    - Total VES (Banco)
+    - Tasa BCV de conversión
+    - Total USD (Egresos iPago + Banco convertido)
+    - Total alertas detectadas por categorías
+    """
+    if df_consolidado.empty:
+        return {
+            'total_ves': 0.0,
+            'tasa_bcv': tasa_bcv,
+            'total_usd': 0.0,
+            'alertas_rojas': 0,
+            'alertas_amarillas': 0,
+            'alertas_naranjas': 0,
+            'total_alertas': 0
+        }
+        
+    # Asumimos que los montos bancarios están en VES (Bolívares)
+    total_ves = float(df_consolidado['monto_banco'].sum())
+    
+    # Asumimos que los egresos en iPago están en USD
+    total_usd_ipago = float(df_consolidado[df_consolidado['origen_sistema'] == 'iPago']['monto_sistema'].sum())
+    
+    # Conversión consolidada a USD: iPago (USD) + Banco (VES convertido a USD)
+    total_usd = total_usd_ipago + (total_ves / tasa_bcv)
+    
+    # Conteo de alertas en el reporte consolidado
+    alertas_rojas = int((df_consolidado['alerta'] == 'ROJA').sum())
+    alertas_amarillas = int((df_consolidado['alerta'] == 'AMARILLA').sum())
+    alertas_naranjas = int((df_consolidado['alerta'] == 'NARANJA').sum())
+    
+    return {
+        'total_ves': round(total_ves, 2),
+        'tasa_bcv': round(tasa_bcv, 2),
+        'total_usd': round(total_usd, 2),
+        'alertas_rojas': alertas_rojas,
+        'alertas_amarillas': alertas_amarillas,
+        'alertas_naranjas': alertas_naranjas,
+        'total_alertas': alertas_rojas + alertas_amarillas + alertas_naranjas
+    }
+
 def normalize_cols(df, label):
     """
     Normaliza y limpia un DataFrame detectando columnas de Referencia, Fecha y Monto.
@@ -101,8 +267,6 @@ def normalize_cols(df, label):
         return None
     
     df = df.copy()
-    
-    # Limpieza básica de nombres de columnas
     orig_cols = list(df.columns)
     clean_cols = [str(c).strip().lower() for c in orig_cols]
     df.columns = clean_cols
@@ -121,7 +285,7 @@ def normalize_cols(df, label):
                 ref_col = c
                 break
     if not ref_col:
-        ref_col = clean_cols[0]  # Fallback a la primera columna
+        ref_col = clean_cols[0]
         
     # 2. Identificación de columna de Fecha
     date_col = None
@@ -154,7 +318,6 @@ def normalize_cols(df, label):
     if not amount_col:
         amount_col = clean_cols[2] if len(clean_cols) > 2 else clean_cols[0]
         
-    # Mapeo a nombres estándar
     df = df.rename(columns={ref_col: 'referencia', date_col: 'fecha', amount_col: 'monto'})
     
     # --- Limpieza de Referencia ---
@@ -170,7 +333,6 @@ def normalize_cols(df, label):
         df['monto'] = df['monto'].astype(str).str.replace(r'[^\d\.\-]', '', regex=True)
     df['monto'] = pd.to_numeric(df['monto'], errors='coerce').fillna(0.0)
     
-    # Eliminar registros con fechas inválidas o referencias vacías
     df = df.dropna(subset=['referencia', 'fecha'])
     df = df[df['referencia'] != '']
     
@@ -180,13 +342,17 @@ def normalize_cols(df, label):
 
 def load_excel_safe(file_obj):
     """
-    Carga de forma segura un archivo Excel desde un objeto Streamlit UploadedFile o DataFrame.
+    Carga de forma segura un archivo Excel desde un objeto Streamlit UploadedFile, DataFrame o Ruta de archivo.
     """
     if file_obj is None:
         return None
     if isinstance(file_obj, pd.DataFrame):
         return file_obj.copy()
-    
+    if isinstance(file_obj, str):
+        if not os.path.exists(file_obj):
+            return None
+        return pd.read_excel(file_obj)
+        
     try:
         if hasattr(file_obj, 'seek'):
             file_obj.seek(0)
@@ -204,7 +370,6 @@ def ejecutar_auditoria_inteligente(file_facturacion, file_cobranzas, file_ipago,
         - fallas_detectadas: lista de diccionarios (incluye fallas activas y auto-correcciones verdes)
         - df_consolidado: DataFrame con el reporte de discrepancias y conciliación
     """
-    # Inicializar la base de datos por seguridad
     inicializar_bd()
     
     # 1. Carga segura de archivos
@@ -234,7 +399,6 @@ def ejecutar_auditoria_inteligente(file_facturacion, file_cobranzas, file_ipago,
     if df_bnco_n is None or df_bnco_n.empty:
         df_bnco_n = pd.DataFrame(columns=['referencia', 'fecha', 'monto', '_origen'])
         
-    # Estructuras para almacenar hallazgos
     fallas_detectadas = []
     consolidated_records = []
     
@@ -301,12 +465,10 @@ def ejecutar_auditoria_inteligente(file_facturacion, file_cobranzas, file_ipago,
                 
                 diff_exacta = abs(b_row['monto'] - s_row['monto'])
                 
-                # --- AUTO-CORRECCIÓN EVOLUTIVA (Consulta a Base de Datos) ---
-                # Validamos si existe excepción para monto de banco o de sistema en sus respectivos módulos
+                # Búsqueda de excepciones
                 analista_nombre = buscar_excepcion(ref, b_row['monto'], 'Banco') or buscar_excepcion(ref, s_row['monto'], s_row['_origen'])
                 
                 if analista_nombre is not None:
-                    # Registramos la auto-corrección verde
                     falla = {
                         'tipo': 'VERDE_CORREGIDO',
                         'referencia': ref,
@@ -334,7 +496,6 @@ def ejecutar_auditoria_inteligente(file_facturacion, file_cobranzas, file_ipago,
                         'diferencia': diff_exacta
                     })
                 else:
-                    # Es una Alerta Naranja Activa
                     falla = {
                         'tipo': 'NARANJA',
                         'referencia': ref,
@@ -365,7 +526,6 @@ def ejecutar_auditoria_inteligente(file_facturacion, file_cobranzas, file_ipago,
         # FASE C: Registrar movimientos de Banco no encontrados en el Sistema
         for b_idx, b_row in b_rows.iterrows():
             if not b_rows.loc[b_idx, '_matched']:
-                # --- AUTO-CORRECCIÓN EVOLUTIVA (Consulta a Base de Datos) ---
                 analista_nombre = buscar_excepcion(ref, b_row['monto'], 'Banco')
                 
                 if analista_nombre is not None:
@@ -396,7 +556,6 @@ def ejecutar_auditoria_inteligente(file_facturacion, file_cobranzas, file_ipago,
                         'diferencia': b_row['monto']
                     })
                 else:
-                    # Es una Alerta Roja Activa (Falta en Sistema)
                     falla = {
                         'tipo': 'ROJA',
                         'referencia': ref,
@@ -430,7 +589,6 @@ def ejecutar_auditoria_inteligente(file_facturacion, file_cobranzas, file_ipago,
                 is_ipago = s_row['_origen'] == 'iPago'
                 
                 if is_ipago:
-                    # --- AUTO-CORRECCIÓN EVOLUTIVA (Consulta a Base de Datos) ---
                     analista_nombre = buscar_excepcion(ref, s_row['monto'], 'iPago')
                     
                     if analista_nombre is not None:
@@ -461,7 +619,6 @@ def ejecutar_auditoria_inteligente(file_facturacion, file_cobranzas, file_ipago,
                             'diferencia': s_row['monto']
                         })
                     else:
-                        # Es una Alerta Amarilla Activa (Transacción en Tránsito)
                         falla = {
                             'tipo': 'AMARILLA',
                             'referencia': ref,
@@ -473,7 +630,7 @@ def ejecutar_auditoria_inteligente(file_facturacion, file_cobranzas, file_ipago,
                             'destino': 'Banco',
                             'diferencia': float(s_row['monto']),
                             'causa': f"El egreso con referencia {ref} está en el sistema iPago pero no se visualiza en ningún estado de cuenta bancario cargado.",
-                            'accion': "Monitorear el estado de cuenta en los próximos cierres bancarios. Confirmar si quedó diferida."
+                            'accion': "Monitorear el estado de cuenta en los próximos cierres bancarios."
                         }
                         fallas_detectadas.append(falla)
                         
@@ -489,7 +646,6 @@ def ejecutar_auditoria_inteligente(file_facturacion, file_cobranzas, file_ipago,
                             'diferencia': s_row['monto']
                         })
                 else:
-                    # Cobranzas no conciliadas (no genera alerta según especificación, pero va en reporte)
                     consolidated_records.append({
                         'referencia': ref,
                         'fecha_banco': None,
@@ -502,7 +658,6 @@ def ejecutar_auditoria_inteligente(file_facturacion, file_cobranzas, file_ipago,
                         'diferencia': s_row['monto']
                     })
 
-    # Generar el DataFrame consolidado final
     df_consolidado = pd.DataFrame(consolidated_records)
     if df_consolidado.empty:
         df_consolidado = pd.DataFrame(columns=[
@@ -510,10 +665,8 @@ def ejecutar_auditoria_inteligente(file_facturacion, file_cobranzas, file_ipago,
             'origen_sistema', 'estatus', 'alerta', 'diferencia'
         ])
     else:
-        # Ordenar cronológicamente priorizando la fecha de banco
         df_consolidado = df_consolidado.sort_values(by=['fecha_banco', 'fecha_sistema'], na_position='last')
         
-    # Verificar si hay errores activos (rojo, amarillo, naranja) excluyendo las auto-correcciones verdes
     hay_errores = any(f['tipo'] in ['ROJA', 'AMARILLA', 'NARANJA'] for f in fallas_detectadas)
     
     return hay_errores, fallas_detectadas, df_consolidado
