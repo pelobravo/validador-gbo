@@ -828,6 +828,39 @@ st.markdown("""
     .kpi-variant-purple .dashboard-kpi-value {
         color: #85144b;
     }
+    
+    /* ============================================================
+       CORRECCIÓN DE CONTRASTE EN SIDEBAR (CHAT INPUT Y EXPANDERS)
+       ============================================================ */
+    /* Corregir texto escrito dentro del chat input e inputs del sidebar */
+    [data-testid="stSidebar"] input,
+    [data-testid="stSidebar"] textarea,
+    [data-testid="stSidebar"] select,
+    [data-testid="stSidebar"] [data-testid="stChatInput"] textarea,
+    [data-testid="stSidebar"] [data-testid="stChatInput"] p {
+        color: #0f172a !important;
+        background-color: #ffffff !important;
+        -webkit-text-fill-color: #0f172a !important;
+    }
+    
+    /* Asegurar visibilidad del placeholder en el chat input */
+    [data-testid="stSidebar"] textarea::placeholder,
+    [data-testid="stSidebar"] input::placeholder {
+        color: #64748b !important;
+        opacity: 0.8 !important;
+    }
+
+    /* Estilo para los expanders dentro del sidebar (Asistente Virtual) */
+    [data-testid="stSidebar"] .streamlit-expanderHeader {
+        background-color: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 10px !important;
+        color: #ffffff !important;
+    }
+    
+    [data-testid="stSidebar"] .streamlit-expanderHeader * {
+        color: #ffffff !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
