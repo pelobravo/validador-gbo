@@ -18,6 +18,7 @@ from database import Database
 from logger import Logger
 from procesadores import ProcesadorArchivos
 from api_bcv import obtener_tasa_bcv
+from motor_auditoria import ejecutar_auditoria_inteligente, registrar_excepcion  # <-- NUEVO IMPORT
 
 # Inicializar componentes
 validar_carpetas()
@@ -2836,14 +2837,20 @@ else:
         """)
 
 # ============================================================
-# 🔍 MÓDULO DE CONCILIACIÓN Y AUDITORÍA PERIMETRAL
+# 🔍 MÓDULO DE CONCILIACIÓN CON APRENDIZAJE HISTÓRICO
 # ============================================================
 st.markdown("---")
-st.subheader("🔍 Módulo de Conciliación y Auditoría perimetral")
+st.subheader("🔍 Módulo de Conciliación con Aprendizaje Histórico")
+
+# Entrada para el nombre del analista activo
+analista_actual = st.text_input(
+    "👤 Analista Operador actual:", 
+    value=st.session_state.get("analista_operador", "Analista"),
+    key="analista_operador_input"
+)
+st.session_state["analista_operador"] = analista_actual
 
 # Mapeo de variables de archivos según el contexto
-# Si el usuario es gerente, los archivos vienen del expander de carga dinámica
-# Si es analista, vienen de la barra lateral
 if es_gerente:
     file_facturacion = archivo_facturacion if 'archivo_facturacion' in locals() else None
     file_cobranzas = archivo_cobranzas if 'archivo_cobranzas' in locals() else None
@@ -2859,64 +2866,98 @@ if st.button("🔍 Ejecutar Auditoría de Trazabilidad", use_container_width=Tru
     if not file_banco and not file_ipago and not file_cobranzas:
         st.warning("⚠️ Por favor cargue al menos el Estado de Cuenta Bancario y un archivo de control interno (iPago o Cobranzas) para ejecutar el análisis.")
     else:
-        # Llamado optimizado al motor cachado
-        # Nota: Esta función debe ser implementada en el módulo procesadores
-        hay_errores, fallas_detectadas, df_consolidado = ProcesadorArchivos.ejecutar_auditoria_inteligente(
+        # Ejecuta el motor cachado desde motor_auditoria
+        hay_errores, fallas_detectadas, df_consolidado = ejecutar_auditoria_inteligente(
             file_facturacion, file_cobranzas, file_ipago, file_banco
         )
+        st.session_state['fallas_detectadas'] = fallas_detectadas
+        st.session_state['df_consolidado'] = df_consolidado
+        st.session_state['hay_errores'] = hay_errores
+
+# Renderizado dinámico y reactivo del feedback
+if 'fallas_detectadas' in st.session_state:
+    fallas_detectadas = st.session_state['fallas_detectadas']
+    df_consolidado = st.session_state['df_consolidado']
+    hay_errores = st.session_state['hay_errores']
+    
+    fallas_activas = [f for f in fallas_detectadas if f['tipo'] in ['ROJA', 'AMARILLA', 'NARANJA']]
+    fallas_corregidas = [f for f in fallas_detectadas if f['tipo'] == 'VERDE_CORREGIDO']
+    
+    if not hay_errores:
+        st.success("✅ ¡Auditoría finalizada! No se detectaron discrepancias activas.")
+        if fallas_corregidas:
+            st.info(f"💡 Se auto-corrigieron {len(fallas_corregidas)} transacciones por historial.")
+    else:
+        st.error(f"⚠️ Se han detectado {len(fallas_activas)} inconsistencias activas.")
+    
+    alertas_ordenadas = sorted(
+        fallas_detectadas, 
+        key=lambda x: {'ROJA': 0, 'NARANJA': 1, 'AMARILLA': 2, 'VERDE_CORREGIDO': 3}.get(x['tipo'], 4)
+    )
+    
+    for falla in alertas_ordenadas:
+        tipo = falla['tipo']
+        ref = falla['referencia']
         
-        if not hay_errores:
-            st.success("✅ ¡Auditoría finalizada con éxito! No se detectaron discrepancias ni transacciones fuera de balance.")
-        else:
-            st.error(f"⚠️ Se han detectado {len(fallas_detectadas)} inconsistencias o transacciones en tránsito que requieren atención.")
+        if tipo == 'ROJA':
+            st.error(f"🔴 **ALERTA ROJA (Falta en Sistema)** | Ref: {ref}")
+        elif tipo == 'NARANJA':
+            st.warning(f"🟠 **ALERTA NARANJA (Diferencia de Monto)** | Ref: {ref} (Dif: {falla['diferencia']:.2f})")
+        elif tipo == 'AMARILLA':
+            st.warning(f"🟡 **ALERTA AMARILLA (Transacción en Tránsito)** | Ref: {ref}")
+        elif tipo == 'VERDE_CORREGIDO':
+            st.success(f"🟢 **Movimiento AUTO-CORREGIDO** | Ref: {ref}")
             
-            # Ordenar para mostrar primero alertas Rojas (Críticas)
-            alertas_ordenadas = sorted(
-                fallas_detectadas, 
-                key=lambda x: {'ROJA': 0, 'NARANJA': 1, 'AMARILLA': 2}.get(x['tipo'], 3)
-            )
+        with st.expander(f"Detalle de Auditoría - Ref {ref}", expanded=False):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"**Módulo Origen:** {falla['origen']}")
+                st.markdown(f"**Monto Banco:** {falla['monto_banco']:.2f}")
+            with col2:
+                st.markdown(f"**Monto Sistema:** {falla['monto_sistema']:.2f}")
+                st.markdown(f"**Fecha Banco:** {falla['fecha_banco']}")
             
-            for falla in alertas_ordenadas:
-                tipo = falla['tipo']
-                ref = falla['referencia']
+            st.markdown(f"💡 **Diagnóstico:** {falla['causa']}")
+            
+            # Botón de retroalimentación activa del analista
+            if tipo in ['ROJA', 'AMARILLA', 'NARANJA']:
+                st.markdown("---")
+                st.markdown("⚠️ **¿Esta diferencia es justificada o conocida?** Apruébela para que el motor la recuerde:")
+                monto_a_guardar = falla['monto_banco'] if tipo in ['ROJA', 'NARANJA'] else falla['monto_sistema']
+                modulo_banco = falla['origen']
                 
-                # Renderizado de alerta nativa
-                if tipo == 'ROJA':
-                    st.error(f"🔴 **ALERTA ROJA (Falta en Sistema)** | Ref: {ref}")
-                elif tipo == 'NARANJA':
-                    st.warning(f"🟠 **ALERTA NARANJA (Diferencia de Monto)** | Ref: {ref} (Dif: {falla['diferencia']:.2f})")
-                elif tipo == 'AMARILLA':
-                    st.warning(f"🟡 **ALERTA AMARILLA (Transacción en Tránsito)** | Ref: {ref}")
-                
-                # Desplegable informativo sin popups molestas
-                with st.expander(f"Detalle de Auditoría - Ref {ref}", expanded=False):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.markdown(f"**Módulo Origen:** {falla['origen']}")
-                        st.markdown(f"**Módulo Destino:** {falla['destino']}")
-                        if tipo != 'AMARILLA':
-                            st.markdown(f"**Monto Banco:** {falla['monto_banco']:.2f}")
-                        if tipo != 'ROJA':
-                            st.markdown(f"**Monto Sistema:** {falla['monto_sistema']:.2f}")
-                    with col2:
-                        if tipo == 'NARANJA':
-                            st.markdown(f"**Discrepancia Exacta:** {falla['diferencia']:.2f}")
-                        st.markdown(f"**Fecha Banco:** {falla['fecha_banco']}")
-                        st.markdown(f"**Fecha Sistema:** {falla['fecha_sistema']}")
-                    
-                    st.markdown(f"💡 **Causa Probable:** {falla['causa']}")
-                    st.markdown(f"🛠️ **Acción Recomendada:** *{falla['accion']}*")
-            
-        # Reporte consolidado tabular elegante con resaltados de colores
-        st.markdown("### 📊 Reporte Consolidado de Discrepancias")
-        columnas_visibles = ['referencia', 'fecha_banco', 'monto_banco', 'fecha_sistema', 'monto_sistema', 'origen_sistema', 'estatus', 'alerta', 'diferencia']
-        columnas_render = [c for c in columnas_visibles if c in df_consolidado.columns]
-        
+                # Botón de aprendizaje
+                if st.button("💾 Validar y Recordar esta Regla", key=f"btn_exc_{ref}_{monto_a_guardar}_{modulo_banco}"):
+                    if not analista_actual or analista_actual == "Analista":
+                        st.warning("⚠️ Escriba su nombre en el campo de Analista actual arriba para registrar la excepción.")
+                    else:
+                        exito = registrar_excepcion(
+                            referencia=ref,
+                            monto=monto_a_guardar,
+                            banco=modulo_banco,
+                            tipo_excepcion=tipo,
+                            usuario_analista=analista_actual
+                        )
+                        if exito:
+                            st.toast(f"✅ Regla guardada para Ref {ref}. Recargando...")
+                            import time
+                            time.sleep(0.6)
+                            st.rerun()  # Limpia la caché y recarga la UI con la auto-corrección activa
+            else:
+                st.markdown(f"🛠️ **Acción Recomendada:** *{falla['accion']}*")
+    
+    # Reporte consolidado tabular con resaltados de colores
+    st.markdown("### 📊 Reporte Consolidado de Discrepancias")
+    columnas_visibles = ['referencia', 'fecha_banco', 'monto_banco', 'fecha_sistema', 'monto_sistema', 'origen_sistema', 'estatus', 'alerta', 'diferencia']
+    columnas_render = [c for c in columnas_visibles if c in df_consolidado.columns]
+    
+    if not df_consolidado.empty and columnas_render:
         st.dataframe(
             df_consolidado[columnas_render].style.map(
                 lambda val: 'background-color: #ffcccc' if val == 'ROJA' else 
                             ('background-color: #ffe6cc' if val == 'NARANJA' else 
-                             ('background-color: #fffae6' if val == 'AMARILLA' else '')),
+                             ('background-color: #fffae6' if val == 'AMARILLA' else 
+                              ('background-color: #d4edda' if val == 'VERDE_CORREGIDO' else ''))),
                 subset=['alerta']
             ),
             use_container_width=True
