@@ -2481,6 +2481,200 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.dataframe(df_comparacion, use_container_width=True, hide_index=True)
 
     # ============================================================
+    # 🔍 DETALLE DE DISCREPANCIAS Y CANDIDATOS DE AJUSTE (TRAZABILIDAD)
+    # ============================================================
+    st.markdown("### 🔍 Análisis de Trazabilidad y Origen de Diferencias")
+    st.caption("💡 El sistema ha analizado los archivos y cruzado las alertas del motor de auditoría para ubicar el origen exacto de las discrepancias:")
+
+    # Diferencia de Inventario
+    diff_inv = inventario_calculado - (inventario_reportado if inventario_reportado is not None else 0.0)
+    # Diferencia de CxC
+    diff_cxc = cx_c_calculado - (cx_c_reportado if cx_c_reportado is not None else 0.0)
+    # Diferencia de CxP
+    diff_cxp = cx_p_calculado - (cx_p_reportado if cx_p_reportado is not None else 0.0)
+    # Diferencia de Tránsito
+    diff_transito = transito_calculado - (transito_reportado if transito_reportado is not None else 0.0)
+
+    # Función genérica de escaneo de DataFrames para montos coincidentes
+    def buscar_candidatos_por_monto(df, target_val, label_origen, tolerance=0.10):
+        cands = []
+        if df is None or df.empty:
+            return cands
+        try:
+            for col in df.columns:
+                try:
+                    col_str = df[col].astype(str)
+                    col_num = pd.to_numeric(col_str.str.replace(r'[^\d\.\-]', '', regex=True), errors='coerce').fillna(0.0)
+                    matches = df[abs(col_num - abs(target_val)) <= tolerance]
+                    for idx, row in matches.iterrows():
+                        ref_val = ""
+                        desc_val = ""
+                        # Intentar extraer referencia y descripción
+                        for c in df.columns:
+                            c_lower = str(c).lower()
+                            val_str = str(row[c]).strip()
+                            if val_str and val_str != 'nan' and val_str != 'None':
+                                if any(k in c_lower for k in ['referencia', 'ref', 'documento', 'doc', 'nro', 'factura', 'soporte']):
+                                    ref_val = val_str
+                                elif any(k in c_lower for k in ['descripcion', 'desc', 'concepto', 'tipo', 'cliente', 'proveedor', 'beneficiario', 'nombre']):
+                                    desc_val = val_str
+                        details = f"Fila {idx+1}: Monto {row[col]}"
+                        if ref_val:
+                            details += f" | Ref: {ref_val}"
+                        if desc_val:
+                            details += f" | Detalle: {desc_val[:60]}"
+                        cands.append(f"📁 {label_origen} -> {details}")
+                except:
+                    pass
+        except:
+            pass
+        return list(set(cands))
+
+    # Obtener alertas del motor de auditoría
+    alertas = st.session_state.get('fallas_detectadas', [])
+
+    # Mostrar Diagnóstico por Cuenta
+    # --- INVENTARIO ---
+    if abs(diff_inv) > 0.01:
+        with st.expander(f"📦 Inventario (Diferencia: {formatear_diferencia(inventario_calculado, inventario_reportado)})", expanded=True):
+            st.markdown(f"**Fórmula**: `Inventario Calculado ({formato_venezolano(inventario_calculado)})` vs `Inventario Reportado ({formato_venezolano(inventario_reportado)})`")
+            st.markdown(f"La diferencia de **{formato_venezolano(diff_inv)} Bs/USD** en Inventario puede explicarse por:")
+            
+            # Buscar transacciones coincidentes
+            cands_inv = []
+            if 'df_recepciones' in locals() and df_recepciones is not None:
+                cands_inv.extend(buscar_candidatos_por_monto(df_recepciones, diff_inv, "Recepciones de Mercancía"))
+            if 'df_costo' in locals() and df_costo is not None:
+                cands_inv.extend(buscar_candidatos_por_monto(df_costo, diff_inv, "Costo de Facturación"))
+            if 'df_inv_rep' in locals() and df_inv_rep is not None:
+                cands_inv.extend(buscar_candidatos_por_monto(df_inv_rep, diff_inv, "Reporte Inventario"))
+                
+            if cands_inv:
+                st.info("🔍 **Transacciones con importe coincidente encontradas en los archivos:**")
+                for c in cands_inv[:5]:
+                    st.markdown(f"- {c}")
+            else:
+                st.write("No se encontraron transacciones individuales con este importe exacto.")
+                
+            # Explicación contable detallada
+            st.markdown("""
+            **💡 Puntos clave a revisar:**
+            - **Costo de Facturación (Costo de Ventas)**: Valide si la sumatoria de costos extraída del Reporte de Utilidad incluye devoluciones o si el método de costeo difiere del sistema de inventario físico.
+            - **Recepciones pendientes**: Valide si hay recepciones de mercancía que se hayan registrado físicamente en el almacén pero cuyas facturas de compra aún no se han procesado administrativamente en el sistema.
+            """)
+
+    # --- CUENTAS POR COBRAR ---
+    if abs(diff_cxc) > 0.01:
+        with st.expander(f"👤 Cuentas por Cobrar (Diferencia: {formatear_diferencia(cx_c_calculado, cx_c_reportado)})", expanded=True):
+            st.markdown(f"**Fórmula**: `CxC Calculado ({formato_venezolano(cx_c_calculado)})` vs `CxC Reportado ({formato_venezolano(cx_c_reportado)})`")
+            st.markdown(f"La diferencia de **{formato_venezolano(diff_cxc)} Bs/USD** en Cuentas por Cobrar puede explicarse por:")
+            
+            # Buscar transacciones coincidentes
+            cands_cxc = []
+            if 'df_facturacion' in locals() and df_facturacion is not None:
+                cands_cxc.extend(buscar_candidatos_por_monto(df_facturacion, diff_cxc, "Facturación Semanal"))
+            if 'df_cobranzas' in locals() and df_cobranzas is not None:
+                cands_cxc.extend(buscar_candidatos_por_monto(df_cobranzas, diff_cxc, "Cobranzas Diarias"))
+            if 'df_notas_cliente' in locals() and df_notas_cliente is not None:
+                cands_cxc.extend(buscar_candidatos_por_monto(df_notas_cliente, diff_cxc, "Notas de Crédito Clientes"))
+            if 'df_cxc_rep' in locals() and df_cxc_rep is not None:
+                cands_cxc.extend(buscar_candidatos_por_monto(df_cxc_rep, diff_cxc, "Reporte CxC"))
+                
+            if cands_cxc:
+                st.info("🔍 **Transacciones con importe coincidente encontradas en los archivos:**")
+                for c in cands_cxc[:5]:
+                    st.markdown(f"- {c}")
+            else:
+                st.write("No se encontraron transacciones individuales con este importe exacto.")
+                
+            # Buscar alertas del motor relacionadas
+            alertas_cxc = [a for a in alertas if any(k in str(a.get('causa','')).lower() or k in str(a.get('destino','')).lower() for k in ['cobranza', 'factura', 'cxc'])]
+            if alertas_cxc:
+                st.warning("⚠️ **Alertas de conciliación que afectan esta cuenta:**")
+                for a in alertas_cxc[:3]:
+                    st.markdown(f"- **Ref {a['referencia']}**: {a['causa']} *(Acción: {a['accion']})*")
+                    
+            st.markdown("""
+            **💡 Puntos clave a revisar:**
+            - **Facturación vs Notas de Crédito**: Valide si hay facturas de crédito anuladas en el sistema mediante notas de crédito que no se hayan descontado correctamente en la sumatoria del día.
+            - **Cobranzas Cruzadas**: Revise si se reportaron cobros que no corresponden a facturas de este cliente, afectando el saldo de Cuentas por Cobrar reportado.
+            """)
+
+    # --- CUENTAS POR PAGAR ---
+    if abs(diff_cxp) > 0.01:
+        with st.expander(f"🤝 Cuentas por Pagar (Diferencia: {formatear_diferencia(cx_p_calculado, cx_p_reportado)})", expanded=True):
+            st.markdown(f"**Fórmula**: `CxP Calculado ({formato_venezolano(cx_p_calculado)})` vs `CxP Reportado ({formato_venezolano(cx_p_reportado)})`")
+            st.markdown(f"La diferencia de **{formato_venezolano(diff_cxp)} Bs/USD** en Cuentas por Pagar puede explicarse por:")
+            
+            # Buscar transacciones coincidentes
+            cands_cxp = []
+            if 'df_recepciones' in locals() and df_recepciones is not None:
+                cands_cxp.extend(buscar_candidatos_por_monto(df_recepciones, diff_cxp, "Recepciones de Mercancía"))
+            if 'df_egresos' in locals() and df_egresos is not None:
+                cands_cxp.extend(buscar_candidatos_por_monto(df_egresos, diff_cxp, "Egresos iPago"))
+            if 'df_notas_proveedor' in locals() and df_notas_proveedor is not None:
+                cands_cxp.extend(buscar_candidatos_por_monto(df_notas_proveedor, diff_cxp, "Notas de Crédito Proveedores"))
+            if 'df_cxp_rep' in locals() and df_cxp_rep is not None:
+                cands_cxp.extend(buscar_candidatos_por_monto(df_cxp_rep, diff_cxp, "Reporte CxP"))
+                
+            if cands_cxp:
+                st.info("🔍 **Transacciones con importe coincidente encontradas en los archivos:**")
+                for c in cands_cxp[:5]:
+                    st.markdown(f"- {c}")
+            else:
+                st.write("No se encontraron transacciones individuales con este importe exacto.")
+                
+            # Buscar alertas del motor relacionadas
+            alertas_cxp = [a for a in alertas if any(k in str(a.get('causa','')).lower() or k in str(a.get('destino','')).lower() for k in ['proveedor', 'egreso', 'cxp'])]
+            if alertas_cxp:
+                st.warning("⚠️ **Alertas de conciliación que afectan esta cuenta:**")
+                for a in alertas_cxp[:3]:
+                    st.markdown(f"- **Ref {a['referencia']}**: {a['causa']} *(Acción: {a['accion']})*")
+                    
+            st.markdown("""
+            **💡 Puntos clave a revisar:**
+            - **Pagos a Proveedores**: Valide si hay egresos ejecutados en iPago que no correspondan a facturas de proveedores de mercancía (p.ej., gastos de administración o servicios) que se clasificaron erróneamente.
+            - **Notas de Crédito Recibidas**: Confirme si hay descuentos otorgados por proveedores que no se reflejaron en el balance de compras.
+            """)
+
+    # --- TRANSFERENCIAS EN TRÁNSITO ---
+    if abs(diff_transito) > 0.01:
+        with st.expander(f"✈️ Transferencias en Tránsito (Diferencia: {formatear_diferencia(transito_calculado, transito_reportado)})", expanded=True):
+            st.markdown(f"**Fórmula**: `Tránsito Calculado ({formato_venezolano(transito_calculado)})` vs `Tránsito Reportado ({formato_venezolano(transito_reportado)})`")
+            st.markdown(f"La diferencia de **{formato_venezolano(diff_transito)} Bs/USD** en Transferencias en Tránsito puede explicarse por:")
+            
+            # Buscar transacciones coincidentes
+            cands_transito = []
+            if 'df_cobranzas' in locals() and df_cobranzas is not None:
+                cands_transito.extend(buscar_candidatos_por_monto(df_cobranzas, diff_transito, "Cobranzas Diarias"))
+            if 'df_estado_cuenta' in locals() and df_estado_cuenta is not None:
+                cands_transito.extend(buscar_candidatos_por_monto(df_estado_cuenta, diff_transito, "Estado de Cuenta Bancario"))
+            if 'df_tb' in locals() and df_tb is not None:
+                cands_transito.extend(buscar_candidatos_por_monto(df_tb, diff_transito, "Balanza / Tránsito"))
+                
+            if cands_transito:
+                st.info("🔍 **Transacciones con importe coincidente encontradas en los archivos:**")
+                for c in cands_transito[:5]:
+                    st.markdown(f"- {c}")
+            else:
+                st.write("No se encontraron transacciones individuales con este importe exacto.")
+                
+            # Alertas en tránsito (egresos/ingresos no conciliados)
+            alertas_transito = [a for a in alertas if a.get('tipo') in ['AMARILLA', 'ROJA']]
+            if alertas_transito:
+                st.warning("⚠️ **Alertas de movimientos no conciliados (Tránsito Bancario):**")
+                for a in alertas_transito[:5]:
+                    st.markdown(f"- **Monto: {formato_venezolano(a['diferencia'])}** (Ref {a['referencia']}): {a['causa']} *(Origen: {a['origen']})*")
+                    
+            st.markdown("""
+            **💡 Puntos clave a revisar:**
+            - **Depósitos en Tránsito**: Cobranzas que fueron registradas en el sistema administrativo del día pero que ingresaron efectivamente al banco al día siguiente hábil.
+            - **Egresos no debitados**: Pagos emitidos a proveedores mediante transferencia que aún no han sido cobrados o debitados por la entidad bancaria.
+            """)
+            
+    st.markdown("---")
+
+    # ============================================================
     # BOTONES PARA VER ARCHIVOS ORIGINALES
     # ============================================================
     st.markdown("---")
