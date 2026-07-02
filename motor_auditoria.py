@@ -9,12 +9,70 @@ import streamlit as st
 # Ruta de la base de datos local en la raíz del proyecto
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "auditoria_memoria.db")
 
+def conectar_bd():
+    """
+    Crea una conexión SQLite y maneja entornos con permisos de solo lectura o archivos
+    corruptos redirigiendo y recreando la BD en directorios temporales si es necesario.
+    """
+    global DB_PATH
+    
+    # Intentar con la ruta por defecto
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=30.0)
+        cursor = conn.cursor()
+        # Verificar integridad
+        cursor.execute("PRAGMA integrity_check;")
+        res = cursor.fetchone()
+        if res and res[0] != "ok":
+            raise sqlite3.DatabaseError("Corrupt database")
+        # Verificar escritura
+        cursor.execute("CREATE TABLE IF NOT EXISTS _test_write (id INTEGER PRIMARY KEY)")
+        conn.commit()
+        return conn
+    except (sqlite3.OperationalError, sqlite3.DatabaseError):
+        # Falló en la ruta por defecto (por permisos o corrupción)
+        # Intentar borrar el archivo si está corrupto y el medio es escribible
+        try:
+            if os.path.exists(DB_PATH):
+                os.remove(DB_PATH)
+        except Exception:
+            pass
+            
+        # Re-enrutar a directorio temporal seguro
+        if os.name == 'nt':
+            temp_dir = os.environ.get('TEMP', os.environ.get('TMP', '.'))
+            DB_PATH = os.path.join(temp_dir, "auditoria_memoria.db")
+        else:
+            DB_PATH = "/tmp/auditoria_memoria.db"
+            
+        # Intentar abrir y reparar en el directorio temporal
+        try:
+            conn = sqlite3.connect(DB_PATH, timeout=30.0)
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA integrity_check;")
+            res = cursor.fetchone()
+            if res and res[0] != "ok":
+                raise sqlite3.DatabaseError("Corrupt database in tmp")
+            cursor.execute("CREATE TABLE IF NOT EXISTS _test_write (id INTEGER PRIMARY KEY)")
+            conn.commit()
+            return conn
+        except (sqlite3.OperationalError, sqlite3.DatabaseError):
+            # Si también falla en temporal (ej. por archivo huérfano bloqueado/corrupto), intentar borrarlo
+            try:
+                if os.path.exists(DB_PATH):
+                    os.remove(DB_PATH)
+            except Exception:
+                pass
+            # Conexión limpia final
+            conn = sqlite3.connect(DB_PATH, timeout=30.0)
+            return conn
+
 def inicializar_bd():
     """
     Inicializa la base de datos SQLite3 y crea las tablas de excepciones, cierres históricos,
     alertas diarias y el reporte consolidado si no existen.
     """
-    conn = sqlite3.connect(DB_PATH)
+    conn = conectar_bd()
     cursor = conn.cursor()
     
     # 1. Tabla de excepciones
@@ -74,7 +132,7 @@ def registrar_excepcion(referencia, monto, banco, tipo_excepcion, usuario_analis
     ref_limpia = re.sub(r'\s+', '', ref_limpia)
     ref_limpia = re.sub(r'^0+', '', ref_limpia)
     
-    conn = sqlite3.connect(DB_PATH)
+    conn = conectar_bd()
     cursor = conn.cursor()
     success = False
     try:
@@ -105,7 +163,7 @@ def buscar_excepcion(referencia, monto, banco_nombre):
     ref_limpia = re.sub(r'\s+', '', ref_limpia)
     ref_limpia = re.sub(r'^0+', '', ref_limpia)
     
-    conn = sqlite3.connect(DB_PATH)
+    conn = conectar_bd()
     cursor = conn.cursor()
     analista = None
     try:
@@ -128,7 +186,7 @@ def guardar_resultado_cierre(hay_errores, fallas, df_consolidado, kpis):
     Limpia los resultados anteriores de la última corrida diaria.
     """
     inicializar_bd()
-    conn = sqlite3.connect(DB_PATH)
+    conn = conectar_bd()
     cursor = conn.cursor()
     
     try:
@@ -179,7 +237,7 @@ def cargar_ultimo_cierre():
     Retorna: (existe_cierre, fecha_cierre, hay_errores, fallas_detectadas, df_consolidado, kpis)
     """
     inicializar_bd()
-    conn = sqlite3.connect(DB_PATH)
+    conn = conectar_bd()
     cursor = conn.cursor()
     
     try:
