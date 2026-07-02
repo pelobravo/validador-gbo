@@ -5,20 +5,21 @@ import json
 import pandas as pd
 from datetime import datetime
 
-# Mapear el módulo de Streamlit para simular la ejecución sin Streamlit instalado
-class StreamlitMock:
-    def cache_data(self, *args, **kwargs):
-        def decorator(func):
-            return func
-        return decorator
-    def error(self, msg):
-        bot_print(f"[ST Mock Error] {msg}")
-    class cache_data_clear_mock:
-        def clear(self):
-            pass
-    cache_data = cache_data_clear_mock()
+# Mapear el módulo de Streamlit para simular la ejecución sin Streamlit instalado (solo si se ejecuta desde consola)
+if __name__ == '__main__':
+    class StreamlitMock:
+        def cache_data(self, *args, **kwargs):
+            def decorator(func):
+                return func
+            return decorator
+        def error(self, msg):
+            bot_print(f"[ST Mock Error] {msg}")
+        class cache_data_clear_mock:
+            def clear(self):
+                pass
+        cache_data = cache_data_clear_mock()
 
-sys.modules['streamlit'] = StreamlitMock()
+    sys.modules['streamlit'] = StreamlitMock()
 
 # Importar funciones del motor de auditoría
 from motor_auditoria import (
