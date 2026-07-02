@@ -516,13 +516,65 @@ class ProcesadorArchivos:
             saldo_inicial: Saldo inicial del día (float)
         
         Returns:
-            tuple: (saldo_inicial, ingresos_id, ingresos_no_id, egresos_bancarios, saldo_final, total_ingresos, total_egresos)
+            tuple: (saldo_inicial, ingresos_id, ingresos_no_id, ingresos_no_id, total_egresos, saldo_final, total_ingresos, total_egresos)
         """
         if df is None or df.empty:
             return saldo_inicial, 0.0, 0.0, 0.0, saldo_inicial, 0.0, 0.0
         
         df = ProcesadorArchivos._limpiar_columnas(df)
         
+        # --- DETECCION DE FORMATO RESUMEN DE SALDOS (BODEGUITA) ---
+        is_resumen_saldos = False
+        for idx, row in df.iterrows():
+            row_str = ' '.join([str(val) for val in row.values if pd.notna(val)]).lower()
+            if 'total consolidado' in row_str or 'resumen de saldos' in row_str:
+                is_resumen_saldos = True
+                break
+
+        if is_resumen_saldos:
+            saldo_final_encontrado = 0.0
+            ingresos_encontrados = 0.0
+            egresos_encontrados = 0.0
+            
+            for idx, row in df.iterrows():
+                row_str = ' '.join([str(val) for val in row.values if pd.notna(val)]).lower()
+                nums = []
+                for col in df.columns:
+                    val = row[col]
+                    num = ProcesadorArchivos._convertir_numero_europeo(val)
+                    if num is not None and not pd.isna(num):
+                        nums.append(float(num))
+                
+                if 'total consolidado' in row_str:
+                    if len(nums) >= 2:
+                        saldo_final_encontrado = nums[1]
+                    elif len(nums) == 1:
+                        saldo_final_encontrado = nums[0]
+                elif 'total ingresos archivos' in row_str or ('ingresos' in row_str and 'total' in row_str):
+                    if len(nums) >= 2:
+                        ingresos_encontrados = nums[1]
+                    elif len(nums) == 1:
+                        ingresos_encontrados = nums[0]
+                elif 'total egresos ipago' in row_str or ('egresos' in row_str and 'total' in row_str):
+                    if len(nums) >= 2:
+                        egresos_encontrados = nums[1]
+                    elif len(nums) == 1:
+                        egresos_encontrados = nums[0]
+                        
+            # Calcular saldo inicial para mantener coherencia contable
+            saldo_inicial_calc = saldo_final_encontrado - ingresos_encontrados + egresos_encontrados
+            
+            return (
+                saldo_inicial_calc,     # saldo_inicial
+                ingresos_encontrados,   # ingresos_id
+                0.0,                    # ingresos_no_id
+                egresos_encontrados,    # total_egresos
+                saldo_final_encontrado, # saldo_final
+                ingresos_encontrados,   # total_ingresos
+                egresos_encontrados     # total_egresos (como total_egresos_banco)
+            )
+
+        # --- FORMATO ESTADO DE CUENTA TRADICIONAL ---
         saldo_inicial_encontrado = None
         ingresos_encontrados = None
         egresos_encontrados = None
