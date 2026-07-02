@@ -851,15 +851,30 @@ st.markdown("""
     }
 
     /* Estilo para los expanders dentro del sidebar (Asistente Virtual) */
-    [data-testid="stSidebar"] .streamlit-expanderHeader {
-        background-color: rgba(255, 255, 255, 0.05) !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    [data-testid="stSidebar"] [data-testid="stExpander"] {
+        background-color: transparent !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
         border-radius: 10px !important;
-        color: #ffffff !important;
     }
     
-    [data-testid="stSidebar"] .streamlit-expanderHeader * {
-        color: #ffffff !important;
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary {
+        background-color: #0a1628 !important; /* Fondo azul oscuro del sidebar */
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 8px !important;
+        justify-content: center !important; /* Centrado */
+        display: flex !important;
+        padding: 10px !important;
+    }
+    
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary * {
+        color: #e8c86a !important; /* Color dorado */
+        font-weight: 700 !important;
+        text-align: center !important;
+    }
+    
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary svg {
+        fill: #e8c86a !important;
+        color: #e8c86a !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -1736,13 +1751,13 @@ with st.sidebar:
                 st.rerun()
 
     # ==============================================================================
-    # 🤖 ASISTENTE VIRTUAL DE AUDITORÍA (Barra Lateral)
+    # 👩‍💼 ASISTENTE VIRTUAL DE AUDITORÍA (Barra Lateral)
     # ==============================================================================
     if "messages" not in st.session_state:
         st.session_state.messages = [
             {
                 "role": "assistant", 
-                "content": "👋 ¡Hola! Soy su Asistente de Auditoría. Puede darme órdenes escribiendo:\n\n"
+                "content": "👩‍💼 ¡Hola! Soy tu IA de Auditoría. Puedes darme órdenes escribiendo:\n\n"
                            "- **ejecutar auditoría**\n"
                            "- **ver alertas auto-corregidas**\n"
                            "- **ver excepciones**\n"
@@ -1752,9 +1767,10 @@ with st.sidebar:
         ]
 
     st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
-    with st.sidebar.expander("🤖 ASISTENTE VIRTUAL DE AUDITORÍA", expanded=True):
+    with st.sidebar.expander("👩‍💼 ASISTENTE VIRTUAL DE AUDITORÍA", expanded=True):
         for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
+            avatar = "👩‍💼" if msg["role"] == "assistant" else None
+            with st.chat_message(msg["role"], avatar=avatar):
                 st.write(msg["content"])
                 
         if user_prompt := st.chat_input("Escribe un comando...", key="chat_input"):
