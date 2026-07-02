@@ -447,6 +447,9 @@ def normalize_cols(df, label):
     if 'monto' not in df.columns:
         df['monto'] = 0.0
         
+    # --- Deduplicar Columnas ---
+    df = df.loc[:, ~df.columns.duplicated()]
+    
     # --- Limpieza de Referencia ---
     df['referencia'] = df['referencia'].astype(str).str.strip()
     df['referencia'] = df['referencia'].str.replace(r'\s+', '', regex=True)
