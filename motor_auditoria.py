@@ -2,6 +2,7 @@ import re
 import os
 import sqlite3
 import json
+from datetime import datetime
 import pandas as pd
 import numpy as np
 import streamlit as st
@@ -111,6 +112,8 @@ def inicializar_bd():
             CREATE TABLE IF NOT EXISTS cierre_diario (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 fecha_cierre TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                fecha TEXT,
+                empresa TEXT,
                 hay_errores INTEGER NOT NULL, -- 0 o 1
                 total_alertas INTEGER NOT NULL,
                 kpis_resumen TEXT NOT NULL -- JSON con KPIs
@@ -121,6 +124,8 @@ def inicializar_bd():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS alertas_diarias (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fecha TEXT,
+                empresa TEXT,
                 tipo TEXT NOT NULL,
                 referencia TEXT NOT NULL,
                 fecha_banco TEXT,
@@ -134,6 +139,24 @@ def inicializar_bd():
                 accion TEXT NOT NULL
             )
         """)
+        
+        # Migración: Verificar y agregar columnas si las tablas ya existían
+        # Para cierre_diario
+        cursor.execute("PRAGMA table_info(cierre_diario);")
+        cols_cierre = [row[1] for row in cursor.fetchall()]
+        if 'fecha' not in cols_cierre:
+            cursor.execute("ALTER TABLE cierre_diario ADD COLUMN fecha TEXT;")
+        if 'empresa' not in cols_cierre:
+            cursor.execute("ALTER TABLE cierre_diario ADD COLUMN empresa TEXT DEFAULT 'General';")
+
+        # Para alertas_diarias
+        cursor.execute("PRAGMA table_info(alertas_diarias);")
+        cols_alertas = [row[1] for row in cursor.fetchall()]
+        if 'fecha' not in cols_alertas:
+            cursor.execute("ALTER TABLE alertas_diarias ADD COLUMN fecha TEXT;")
+        if 'empresa' not in cols_alertas:
+            cursor.execute("ALTER TABLE alertas_diarias ADD COLUMN empresa TEXT DEFAULT 'General';")
+            
         conn.commit()
     finally:
         conn.close()
@@ -198,26 +221,34 @@ def buscar_excepcion(referencia, monto, banco_nombre):
         conn.close()
     return analista
 
-def guardar_resultado_cierre(hay_errores, fallas, df_consolidado, kpis):
+def guardar_resultado_cierre(hay_errores, fallas, df_consolidado, kpis, fecha=None, empresa='General'):
     """
     Guarda los resultados del cierre (alertas, consolidado y KPIs) del bot en la BD local.
-    Limpia los resultados anteriores de la última corrida diaria.
+    Limpia los resultados anteriores de la corrida para esta fecha y empresa.
     """
     inicializar_bd()
+    
+    # Si no se provee fecha, usar la fecha actual (hoy)
+    if fecha is None:
+        fecha_str = datetime.now().strftime('%Y-%m-%d')
+    else:
+        fecha_str = str(fecha)
+        
     conn = conectar_bd()
     cursor = conn.cursor()
     
     try:
-        # 1. Limpiar alertas de la corrida anterior
-        cursor.execute("DELETE FROM alertas_diarias")
+        # 1. Limpiar alertas de la corrida anterior para esta fecha y empresa
+        cursor.execute("DELETE FROM alertas_diarias WHERE fecha = ? AND empresa = ?", (fecha_str, empresa))
         
         # 2. Insertar las alertas actuales
         for f in fallas:
             cursor.execute("""
                 INSERT INTO alertas_diarias 
-                (tipo, referencia, fecha_banco, monto_banco, fecha_sistema, monto_sistema, origen, destino, diferencia, causa, accion)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (fecha, empresa, tipo, referencia, fecha_banco, monto_banco, fecha_sistema, monto_sistema, origen, destino, diferencia, causa, accion)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
+                fecha_str, empresa,
                 f['tipo'], f['referencia'], f['fecha_banco'], f['monto_banco'],
                 f['fecha_sistema'], f['monto_sistema'], f['origen'], f['destino'],
                 f.get('diferencia', 0.0), f['causa'], f['accion']
@@ -231,17 +262,35 @@ def guardar_resultado_cierre(hay_errores, fallas, df_consolidado, kpis):
         if 'fecha_sistema' in df_sql.columns:
             df_sql['fecha_sistema'] = df_sql['fecha_sistema'].dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
             
-        df_sql.to_sql('reporte_consolidado', conn, if_exists='replace', index=False)
+        # Guardar reporte consolidado con columnas fecha y empresa
+        df_sql['fecha'] = fecha_str
+        df_sql['empresa'] = empresa
+        
+        # Verificar si la tabla existe para borrar los registros previos de esta fecha y empresa
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='reporte_consolidado'")
+        if cursor.fetchone():
+            cursor.execute("DELETE FROM reporte_consolidado WHERE fecha = ? AND empresa = ?", (fecha_str, empresa))
+            conn.commit()
+            
+        df_sql.to_sql('reporte_consolidado', conn, if_exists='append', index=False)
         
         # 4. Registrar cierre diario en el histórico
         total_alertas_activas = sum(1 for f in fallas if f['tipo'] in ['ROJA', 'AMARILLA', 'NARANJA'])
+        
+        # Eliminar registro previo de cierre diario de esta fecha y empresa
+        cursor.execute("DELETE FROM cierre_diario WHERE fecha = ? AND empresa = ?", (fecha_str, empresa))
+        
         cursor.execute("""
-            INSERT INTO cierre_diario (hay_errores, total_alertas, kpis_resumen)
-            VALUES (?, ?, ?)
-        """, (1 if hay_errores else 0, total_alertas_activas, json.dumps(kpis)))
+            INSERT INTO cierre_diario (fecha, empresa, hay_errores, total_alertas, kpis_resumen)
+            VALUES (?, ?, ?, ?, ?)
+        """, (fecha_str, empresa, 1 if hay_errores else 0, total_alertas_activas, json.dumps(kpis)))
         
         conn.commit()
-        st.cache_data.clear() # Limpiar caché para forzar que st.cache lea la BD actualizada
+        
+        try:
+            st.cache_data.clear() # Limpiar caché para forzar que st.cache lea la BD actualizada
+        except Exception:
+            pass
         return True
     except Exception as e:
         print(f"Error al guardar resultado del cierre en la BD: {e}")
@@ -249,9 +298,10 @@ def guardar_resultado_cierre(hay_errores, fallas, df_consolidado, kpis):
     finally:
         conn.close()
 
-def cargar_ultimo_cierre():
+def cargar_ultimo_cierre(fecha=None, empresa='General'):
     """
-    Carga de forma pasiva el último reporte consolidado y las alertas registradas en la BD.
+    Carga de forma pasiva el reporte consolidado y las alertas registradas en la BD para una fecha y empresa dadas.
+    Si no se especifica fecha, carga el último registro general.
     Retorna: (existe_cierre, fecha_cierre, hay_errores, fallas_detectadas, df_consolidado, kpis)
     """
     inicializar_bd()
@@ -259,8 +309,22 @@ def cargar_ultimo_cierre():
     cursor = conn.cursor()
     
     try:
-        # Obtener el último cierre
-        cursor.execute("SELECT fecha_cierre, hay_errores, total_alertas, kpis_resumen FROM cierre_diario ORDER BY id DESC LIMIT 1")
+        # Obtener el cierre solicitado o el último
+        if fecha is not None:
+            fecha_str = str(fecha)
+            cursor.execute("""
+                SELECT fecha_cierre, hay_errores, total_alertas, kpis_resumen 
+                FROM cierre_diario 
+                WHERE fecha = ? AND empresa = ? 
+                ORDER BY id DESC LIMIT 1
+            """, (fecha_str, empresa))
+        else:
+            cursor.execute("""
+                SELECT fecha_cierre, hay_errores, total_alertas, kpis_resumen 
+                FROM cierre_diario 
+                ORDER BY id DESC LIMIT 1
+            """)
+            
         row_cierre = cursor.fetchone()
         
         if not row_cierre:
@@ -271,12 +335,27 @@ def cargar_ultimo_cierre():
         hay_errores = True if hay_errores_int == 1 else False
         kpis = json.loads(kpis_json)
         
-        # Cargar alertas diarias de la última corrida
-        df_alertas = pd.read_sql_query("SELECT * FROM alertas_diarias", conn)
+        # Cargar alertas correspondientes
+        if fecha is not None:
+            fecha_str = str(fecha)
+            df_alertas = pd.read_sql_query(
+                "SELECT * FROM alertas_diarias WHERE fecha = ? AND empresa = ?", 
+                conn, params=[fecha_str, empresa]
+            )
+        else:
+            df_alertas = pd.read_sql_query("SELECT * FROM alertas_diarias", conn)
+            
         fallas_detectadas = df_alertas.to_dict('records')
         
-        # Cargar el DataFrame consolidado
-        df_consolidado = pd.read_sql_query("SELECT * FROM reporte_consolidado", conn)
+        # Cargar el DataFrame consolidado correspondiente
+        if fecha is not None:
+            fecha_str = str(fecha)
+            df_consolidado = pd.read_sql_query(
+                "SELECT * FROM reporte_consolidado WHERE fecha = ? AND empresa = ?", 
+                conn, params=[fecha_str, empresa]
+            )
+        else:
+            df_consolidado = pd.read_sql_query("SELECT * FROM reporte_consolidado", conn)
         
         # Re-convertir las fechas a Datetime en Pandas
         if 'fecha_banco' in df_consolidado.columns:
