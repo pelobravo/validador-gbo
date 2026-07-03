@@ -25,6 +25,22 @@ validar_carpetas()
 db = Database()
 logger = Logger()
 
+# Inicializar variables de archivos en None para evitar NameError
+archivo_facturacion = None
+archivo_cobranzas = None
+archivo_egresos = None
+archivo_estado_cuenta = None
+archivo_recepciones = None
+archivo_notas_credito_cliente = None
+archivo_notas_credito_proveedor = None
+archivo_costo_facturacion = None
+archivo_cxc_reportado = None
+archivo_cxp_reportado = None
+archivo_inventario_reportado = None
+archivo_inventario_anterior = None
+archivo_tb = None
+fecha_procesar = datetime.now()
+
 # 🔥 TEMPORAL: Botón para LIMPIAR TODOS los saldos
 if st.button("🗑️ LIMPIAR SALDOS"):
     db.limpiar_saldos()
@@ -1559,6 +1575,10 @@ with st.sidebar:
         
         # Filtro de fecha para el gerente si no está en el consolidado
         if st.session_state.empresa_activa != "📊 Dashboard General":
+            st.markdown('<div class="sidebar-section-title">🔍 Vista Principal</div>', unsafe_allow_html=True)
+            modo_vista = st.radio("Seleccionar Vista", ["📊 Dashboard Histórico", "🔍 Ficha de Validación"], key="modo_vista")
+            st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
+            
             st.markdown('<div class="sidebar-section-title">📅 Historial</div>', unsafe_allow_html=True)
             col_fecha1, col_fecha2 = st.columns(2)
             with col_fecha1:
@@ -1614,6 +1634,10 @@ with st.sidebar:
             ["Bodeguita Guayana", "Bodeguita Monagas", "Bodeguita Corporación", "Bodeguita Anzoátegui", "Bodeguita Nororiental", "Bodeguita Carúpano", "Nexo Comercial"],
             key="analista_empresa"
         )
+        
+        st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-section-title">🔍 Vista Principal</div>', unsafe_allow_html=True)
+        modo_vista = st.radio("Seleccionar Vista", ["📊 Dashboard Histórico", "🔍 Ficha de Validación"], key="modo_vista")
         
         st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
         st.markdown('<div class="sidebar-section-title">📅 Configuración</div>', unsafe_allow_html=True)
@@ -1906,14 +1930,66 @@ with st.sidebar:
             st.rerun()
 
 # ============================================================
+# RESOLUCIÓN Y PERSISTENCIA DE ARCHIVOS
+# ============================================================
+class LocalFileWrapper(str):
+    @property
+    def name(self):
+        return os.path.basename(self)
+
+def obtener_archivo_historico_o_subido(archivo_subido, prefijo_tipo):
+    from config import RUTA_ARCHIVOS
+    empresa_clean = re.sub(r'[^\w\-_]', '_', st.session_state.get('empresa_activa', 'General'))
+    fecha_str = fecha_procesar.strftime('%Y-%m-%d')
+    filename = f"{prefijo_tipo}_{empresa_clean}_{fecha_str}.xlsx"
+    filepath = os.path.join(RUTA_ARCHIVOS, filename)
+
+    if archivo_subido is not None:
+        try:
+            os.makedirs(RUTA_ARCHIVOS, exist_ok=True)
+            archivo_subido.seek(0)
+            bytes_data = archivo_subido.read()
+            with open(filepath, 'wb') as f:
+                f.write(bytes_data)
+            archivo_subido.seek(0)
+        except Exception as e:
+            print(f"Error al autoguardar {prefijo_tipo} en historial: {e}")
+        return archivo_subido
+    else:
+        if os.path.exists(filepath):
+            return LocalFileWrapper(filepath)
+    return None
+
+# Resolve all file variables using the helper
+archivo_facturacion = obtener_archivo_historico_o_subido(archivo_facturacion, "facturacion")
+archivo_cobranzas = obtener_archivo_historico_o_subido(archivo_cobranzas, "cobranzas")
+archivo_egresos = obtener_archivo_historico_o_subido(archivo_egresos, "egresos")
+archivo_estado_cuenta = obtener_archivo_historico_o_subido(archivo_estado_cuenta, "estado_cuenta")
+archivo_recepciones = obtener_archivo_historico_o_subido(archivo_recepciones, "recepciones")
+archivo_notas_credito_cliente = obtener_archivo_historico_o_subido(archivo_notas_credito_cliente, "notas_cliente")
+archivo_notas_credito_proveedor = obtener_archivo_historico_o_subido(archivo_notas_credito_proveedor, "notas_proveedor")
+archivo_costo_facturacion = obtener_archivo_historico_o_subido(archivo_costo_facturacion, "costo_facturacion")
+archivo_cxc_reportado = obtener_archivo_historico_o_subido(archivo_cxc_reportado, "cxc_reportado")
+archivo_cxp_reportado = obtener_archivo_historico_o_subido(archivo_cxp_reportado, "cxp_reportado")
+archivo_inventario_reportado = obtener_archivo_historico_o_subido(archivo_inventario_reportado, "inventario_reportado")
+archivo_inventario_anterior = obtener_archivo_historico_o_subido(archivo_inventario_anterior, "inventario_anterior")
+archivo_tb = obtener_archivo_historico_o_subido(archivo_tb, "tb")
+
+# ============================================================
 # INTERFAZ PRINCIPAL
 # ============================================================
-# Lógica de renderizado para el Gerente (Auditor1) en la pantalla principal
-if es_gerente:
-    if st.session_state.empresa_activa == "📊 Dashboard General":
-        mostrar_dashboard_general_consolidado()
-        st.stop()
-    elif not (archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_estado_cuenta):
+# Lógica de renderizado en la pantalla principal
+if es_gerente and st.session_state.empresa_activa == "📊 Dashboard General":
+    mostrar_dashboard_general_consolidado()
+    st.stop()
+
+# Si se selecciona el Dashboard Histórico o faltan archivos obligatorios
+modo_vista = st.session_state.get("modo_vista", "📊 Dashboard Histórico")
+if modo_vista == "📊 Dashboard Histórico" or not (archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_estado_cuenta):
+    if st.session_state.empresa_activa != "📊 Dashboard General":
+        if not (archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_estado_cuenta) and modo_vista == "🔍 Ficha de Validación":
+            st.warning("⚠️ No se encontraron archivos cargados ni respaldos históricos para esta fecha. Suba los archivos obligatorios del día para realizar la validación.")
+            st.info("Mientras tanto, se muestra el Panel de Historial:")
         mostrar_dashboard_historico_empresa(st.session_state.empresa_activa)
         st.stop()
 
@@ -2859,6 +2935,42 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             - **Egresos no debitados**: Pagos emitidos a proveedores mediante transferencia que aún no han sido cobrados o debitados por la entidad bancaria.
             """)
             
+    # --- BANCOS ---
+    if abs(diferencia_bancos) > 0.01:
+        with st.expander(f"🏦 Bancos (Diferencia: {formatear_diferencia(bancos_calculado, saldo_final)})", expanded=True):
+            st.markdown(f"**Fórmula**: `Bancos Calculado ({formato_venezolano(bancos_calculado)})` vs `Saldo Final Estado de Cuenta ({formato_venezolano(saldo_final)})`")
+            st.markdown(f"La diferencia de **{formato_venezolano(diferencia_bancos)} Bs/USD** en Bancos puede explicarse por:")
+            
+            # Buscar transacciones coincidentes
+            cands_bancos = []
+            if 'df_estado_cuenta' in locals() and df_estado_cuenta is not None:
+                cands_bancos.extend(buscar_candidatos_por_monto(df_estado_cuenta, diferencia_bancos, "Estado de Cuenta"))
+            if 'df_cobranzas' in locals() and df_cobranzas is not None:
+                cands_bancos.extend(buscar_candidatos_por_monto(df_cobranzas, diferencia_bancos, "Cobranzas Diarias"))
+            if 'df_egresos' in locals() and df_egresos is not None:
+                cands_bancos.extend(buscar_candidatos_por_monto(df_egresos, diferencia_bancos, "Egresos iPago"))
+                
+            if cands_bancos:
+                st.info("🔍 **Transacciones con importe coincidente encontradas en los archivos:**")
+                for c in cands_bancos[:5]:
+                    st.markdown(f"- {c}")
+            else:
+                st.write("No se encontraron transacciones individuales con este importe exacto.")
+                
+            # Buscar alertas del motor relacionadas con Bancos
+            alertas_banco = [a for a in alertas if any(k in str(a.get('causa','')).lower() or k in str(a.get('destino','')).lower() or k in str(a.get('origen','')).lower() for k in ['banco', 'banesco', 'bnc', 'estado de cuenta'])]
+            if alertas_banco:
+                st.warning("⚠️ **Alertas de conciliación que afectan esta cuenta:**")
+                for a in alertas_banco[:5]:
+                    st.markdown(f"- **Ref {a['referencia']}**: {a['causa']} *(Acción: {a['accion']})*")
+                    
+            st.markdown("""
+            **💡 Puntos clave a revisar:**
+            - **Comisiones o Impuestos Bancarios (IGTF/IDB)**: Verifique si existen cobros de comisiones o impuestos en el estado de cuenta que no estén registrados en el sistema administrativo.
+            - **Depósitos o Transferencias no identificados**: Revise si hay ingresos en el banco que no tengan soporte o no hayan sido notificados por ventas/cobranzas.
+            - **Cheques o transferencias emitidas no cobradas**: Confirme si hay egresos del sistema que aún no han sido debitados por el banco.
+            """)
+            
     st.markdown("---")
 
     # ============================================================
@@ -3404,10 +3516,78 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 'capital': capital_calculado
             }
             
+            # 1. Guardar saldos diarios
             db.guardar_saldos(
                 fecha_procesar.strftime('%Y-%m-%d'),
                 saldos_guardar,
                 empresa=st.session_state.empresa_activa
+            )
+            
+            # 2. Guardar inconsistencias detectadas históricamente
+            fecha_str = fecha_procesar.strftime('%Y-%m-%d')
+            empresa_activa = st.session_state.empresa_activa
+            
+            try:
+                conn = sqlite3.connect(db.db_path)
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM inconsistencias WHERE fecha = ? AND empresa = ?", (fecha_str, empresa_activa))
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                print(f"Error al borrar inconsistencias previas: {e}")
+
+            if abs(diff_inv) > 0.01:
+                db.guardar_inconsistencia(
+                    fecha_str, "Inventario", inventario_calculado, 
+                    inventario_reportado if inventario_reportado is not None else 0.0, 
+                    diff_inv, f"Diferencia de inventario en el cierre: {diff_inv:.2f}",
+                    empresa=empresa_activa
+                )
+            if abs(diff_cxc) > 0.01:
+                db.guardar_inconsistencia(
+                    fecha_str, "Cuentas por cobrar", cx_c_calculado, 
+                    cx_c_reportado if cx_c_reportado is not None else 0.0, 
+                    diff_cxc, f"Diferencia de CxC en el cierre: {diff_cxc:.2f}",
+                    empresa=empresa_activa
+                )
+            if abs(diff_cxp) > 0.01:
+                db.guardar_inconsistencia(
+                    fecha_str, "Cuentas por pagar", cx_p_calculado, 
+                    cx_p_reportado if cx_p_reportado is not None else 0.0, 
+                    diff_cxp, f"Diferencia de CxP en el cierre: {diff_cxp:.2f}",
+                    empresa=empresa_activa
+                )
+            if abs(diff_transito) > 0.01:
+                db.guardar_inconsistencia(
+                    fecha_str, "Transferencias en tránsito", transito_calculado, 
+                    transito_reportado if transito_reportado is not None else 0.0, 
+                    diff_transito, f"Diferencia de Tránsito en el cierre: {diff_transito:.2f}",
+                    empresa=empresa_activa
+                )
+            if abs(diferencia_bancos) > 0.01:
+                db.guardar_inconsistencia(
+                    fecha_str, "Bancos", bancos_calculado, saldo_final, 
+                    diferencia_bancos, f"Diferencia de Bancos en el cierre vs Estado de Cuenta: {diferencia_bancos:.2f}",
+                    empresa=empresa_activa
+                )
+
+            # 3. Guardar resultado de auditoría en auditoria_memoria.db
+            from motor_auditoria import guardar_resultado_cierre, calcular_kpis
+            fallas = st.session_state.get('fallas_detectadas')
+            df_c = st.session_state.get('df_consolidado')
+            hay_err = st.session_state.get('hay_errores')
+            
+            if fallas is None or df_c is None:
+                from motor_auditoria import ejecutar_auditoria_inteligente
+                hay_err, fallas, df_c = ejecutar_auditoria_inteligente(
+                    archivo_facturacion, archivo_cobranzas, archivo_egresos, archivo_estado_cuenta
+                )
+            
+            kpis = calcular_kpis(df_c)
+            guardar_resultado_cierre(
+                hay_err, fallas, df_c, kpis, 
+                fecha=fecha_str, 
+                empresa=empresa_activa
             )
             
             st.session_state.saldos['inventario'] = inventario_final
@@ -3417,7 +3597,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             st.session_state.saldos['transito'] = transito_final
             st.session_state.saldos['capital_anterior'] = capital_calculado
             
-            st.success("✅ Saldos guardados correctamente")
+            st.success("✅ Saldos, inconsistencias y reporte de auditoría guardados correctamente")
             st.rerun()
     
     with col_btn2:
