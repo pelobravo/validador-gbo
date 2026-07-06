@@ -2735,16 +2735,20 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                             c2 = qty_changes[p2]
                             
                             if abs(c1['qty_diff']) > 0.1 and abs(c2['qty_diff']) > 0.1:
-                                if abs(c1['qty_diff'] + c2['qty_diff']) < 0.10 and abs(c1['val_diff'] + c2['val_diff']) < 1.0:
-                                    reclassifications.append((c1, c2))
-                                    reclass_matched.add(p1)
-                                    reclass_matched.add(p2)
-                                    break
-                                elif abs(c1['qty_diff'] * c1['price15'] + c2['qty_diff'] * c2['price15']) < 5.0 and abs(c1['qty_diff'] + c2['qty_diff']) > 0.5:
-                                    reclassifications.append((c1, c2))
-                                    reclass_matched.add(p1)
-                                    reclass_matched.add(p2)
-                                    break
+                                # Para considerarse reclasificación, los costos unitarios deben ser muy similares (máximo 3% de diferencia o < 0.05)
+                                max_p = max(c1['price15'], c2['price15'], 0.001)
+                                diff_p = abs(c1['price15'] - c2['price15'])
+                                if (diff_p / max_p <= 0.03) or (diff_p < 0.05):
+                                    if abs(c1['qty_diff'] + c2['qty_diff']) < 0.10 and abs(c1['val_diff'] + c2['val_diff']) < 1.0:
+                                        reclassifications.append((c1, c2))
+                                        reclass_matched.add(p1)
+                                        reclass_matched.add(p2)
+                                        break
+                                    elif abs(c1['qty_diff'] * c1['price15'] + c2['qty_diff'] * c2['price15']) < 5.0 and abs(c1['qty_diff'] + c2['qty_diff']) > 0.5:
+                                        reclassifications.append((c1, c2))
+                                        reclass_matched.add(p1)
+                                        reclass_matched.add(p2)
+                                        break
                                 
                     # Clasificar el resto
                     for p, c in qty_changes.items():
