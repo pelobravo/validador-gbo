@@ -1002,7 +1002,7 @@ def extraer_transito_reportado(df, transito_inicial):
                 [str(x) for x in row.values if pd.notna(x)]
             ).lower()
 
-            if 'total' in row_str:
+            if 'total tb' in row_str:
                 for val in row.values:
                     num = ProcesadorArchivos._convertir_numero_europeo(val)
                     if not pd.isna(num) and num > 0:
