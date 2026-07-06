@@ -2789,8 +2789,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                             if price_new == 0.0 and c['qty16'] == 0:
                                 price_new = c['price15']
                             
-                            # Calcular el efecto de valoración directamente sobre la existencia actual
-                            efecto_valoracion = c['qty16'] * (price_new - c['price15'])
+                            # Calcular el efecto de valoración directamente sobre la diferencia de valor real
+                            efecto_valoracion = c['val_diff']
                             
                             price_data.append({
                                 "Código": c['code'],
