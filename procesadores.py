@@ -445,8 +445,9 @@ class ProcesadorArchivos:
             # Crear una copia del DataFrame para el filtro de proveedores
             df_filtrado = df.copy()
             
-            # Convertir la columna de tipo de pago a string para filtrar
+            # Convertir la columna de tipo de pago a string para filtrar y normalizar acentos
             df_filtrado['_tipo_pago_str'] = df_filtrado[col_tipo_pago].astype(str).str.upper().str.strip()
+            df_filtrado['_tipo_pago_str'] = df_filtrado['_tipo_pago_str'].str.replace('Á', 'A').str.replace('É', 'E').str.replace('Í', 'I').str.replace('Ó', 'O').str.replace('Ú', 'U')
             
             # Filtrar SOLO PROVEEDORES DE MERCANCIA
             mascara_proveedores = (
@@ -468,11 +469,12 @@ class ProcesadorArchivos:
                 if pd.isna(monto) or monto == 0:
                     continue
                 
-                # Obtener el tipo de pago
+                # Obtener el tipo de pago y normalizar acentos
                 tipo_pago = str(row[col_tipo_pago]).upper().strip() if pd.notna(row[col_tipo_pago]) else ''
+                tipo_pago_norm = tipo_pago.replace('Á', 'A').replace('É', 'E').replace('Í', 'I').replace('Ó', 'O').replace('Ú', 'U')
                 
                 # Clasificar
-                if 'PROVEEDORES DE MERCANCIA' in tipo_pago or 'PROVEEDOR DE MERCANCIA' in tipo_pago:
+                if 'PROVEEDORES DE MERCANCIA' in tipo_pago_norm or 'PROVEEDOR DE MERCANCIA' in tipo_pago_norm:
                     pagos_proveedores += monto
                 else:
                     pagos_gastos += monto
