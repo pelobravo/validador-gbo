@@ -2764,13 +2764,21 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         st.caption("Los siguientes productos registraron cambios en su precio unitario, devaluando o revaluando el inventario sin cambio físico de existencias:")
                         price_data = []
                         for c in price_changes:
+                            price_new = c['price16']
+                            # Si el precio nuevo es 0 y la existencia nueva es 0, se asume que no hubo cambio de precio
+                            if price_new == 0.0 and c['qty16'] == 0:
+                                price_new = c['price15']
+                            
+                            # Calcular el efecto de valoración directamente sobre la existencia actual
+                            efecto_valoracion = c['qty16'] * (price_new - c['price15'])
+                            
                             price_data.append({
                                 "Código": c['code'],
                                 "Descripción": c['desc'],
                                 "Existencia": c['qty16'],
                                 "Precio Anterior": f"{formato_venezolano(c['price15'])}",
-                                "Precio Nuevo": f"{formato_venezolano(c['price16'])}",
-                                "Efecto Valoración": f"{formato_venezolano(c['val_diff'])}"
+                                "Precio Nuevo": f"{formato_venezolano(price_new)}",
+                                "Efecto Valoración": f"{formato_venezolano(efecto_valoracion)}"
                             })
                         st.dataframe(pd.DataFrame(price_data), use_container_width=True, hide_index=True)
                         
