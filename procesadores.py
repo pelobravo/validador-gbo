@@ -736,29 +736,27 @@ class ProcesadorArchivos:
         total_recepcion = 0.0
         
         col_neto = None
-        # 1. Buscar primero la columna preferencial: Neto + IVA
+        # 1. Buscar primero la columna preferencial: Neto + IVA (normalizando para ser inmunes a formatos)
         for col in df.columns:
             col_str = str(col).strip()
-            if ('$ Neto + IVA' in col_str or 
-                'Neto + IVA' in col_str or 
-                'neto + iva' in col_str.lower()):
+            clean_col = re.sub(r'[^a-z0-9]', '', col_str.lower())
+            if 'neto' in clean_col and 'iva' in clean_col:
                 col_neto = col
                 break
         
-        # 2. Si no se encuentra, buscar la columna Neto simple
+        # 2. Si no se encuentra, buscar la columna Neto simple (sin IVA)
         if col_neto is None:
             for col in df.columns:
                 col_str = str(col).strip()
-                if ('$ Neto' in col_str or 
-                    'Neto' in col_str or 
-                    'neto' in col_str.lower()):
+                clean_col = re.sub(r'[^a-z0-9]', '', col_str.lower())
+                if 'neto' in clean_col and 'iva' not in clean_col:
                     col_neto = col
                     break
         
         if col_neto:
             for idx, row in df.iterrows():
                 row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                if 'total general:' in row_str:
+                if 'total general' in row_str or 'total' in row_str:
                     try:
                         valor = row[col_neto]
                         num = ProcesadorArchivos._convertir_numero_europeo(valor)

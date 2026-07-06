@@ -1451,6 +1451,8 @@ def mostrar_login():
                 if st.button("🚀 Ingresar", use_container_width=True):
                     if usuario_id in USUARIOS and USUARIOS[usuario_id]["password"] == password:
                         st.session_state.usuario_actual = usuario_id
+                        if 'primer_login_ejecutado' in st.session_state:
+                            del st.session_state['primer_login_ejecutado']
                         st.rerun()
                     else:
                         st.error("❌ Usuario o contraseña incorrectos")
@@ -1493,11 +1495,25 @@ st.markdown(f"""
 usuario_info = USUARIOS.get(st.session_state.usuario_actual, {})
 es_gerente = usuario_info.get('rol') == 'auditor'
 
-# Inicializar empresa activa según el rol
+# Inicializar empresa activa según el rol y usuario
 if es_gerente and st.session_state.empresa_activa not in ["📊 Dashboard General", "Bodeguita Guayana", "Bodeguita Monagas", "Bodeguita Corporación", "Bodeguita Anzoátegui", "Bodeguita Nororiental", "Bodeguita Carúpano", "Nexo Comercial"]:
     st.session_state.empresa_activa = "📊 Dashboard General"
-elif not es_gerente and st.session_state.empresa_activa == "📊 Dashboard General":
-    st.session_state.empresa_activa = "Bodeguita Guayana"
+elif not es_gerente:
+    # Si la empresa activa es el Dashboard General (que no es permitido para analistas)
+    # o si se acaba de iniciar sesión, asignamos la empresa por defecto del analista
+    if st.session_state.empresa_activa == "📊 Dashboard General" or st.session_state.get('primer_login_ejecutado') is None:
+        st.session_state.primer_login_ejecutado = True
+        user_key = st.session_state.get("usuario_actual")
+        MAP_DEFAULT_EMPRESAS = {
+            "analista1": "Bodeguita Guayana",
+            "analista2": "Bodeguita Monagas",
+            "analista3": "Bodeguita Anzoátegui",
+            "analista4": "Bodeguita Nororiental",
+            "analista5": "Nexo Comercial",
+            "analista6": "Bodeguita Corporación",
+            "supervisor1": "Bodeguita Guayana"
+        }
+        st.session_state.empresa_activa = MAP_DEFAULT_EMPRESAS.get(user_key, "Bodeguita Guayana")
 
 # ============================================================
 # CARGAR AUTOMÁTICAMENTE EL ÚLTIMO SALDO GUARDADO (Solo Analistas o si Gerente selecciona Empresa específica)
