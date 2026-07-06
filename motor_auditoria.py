@@ -877,3 +877,4 @@ def ejecutar_auditoria_inteligente(file_facturacion, file_cobranzas, file_ipago,
     hay_errores = any(f['tipo'] in ['ROJA', 'AMARILLA', 'NARANJA'] for f in fallas_detectadas)
     
     return hay_errores, fallas_detectadas, df_consolidado
+
