@@ -736,20 +736,22 @@ class ProcesadorArchivos:
         total_recepcion = 0.0
         
         col_neto = None
+        # 1. Buscar primero la columna preferencial: Neto + IVA
         for col in df.columns:
             col_str = str(col).strip()
             if ('$ Neto + IVA' in col_str or 
                 'Neto + IVA' in col_str or 
-                'neto + iva' in col_str.lower() or
-                '$ Neto' in col_str or
-                'Neto' in col_str):
+                'neto + iva' in col_str.lower()):
                 col_neto = col
                 break
         
+        # 2. Si no se encuentra, buscar la columna Neto simple
         if col_neto is None:
             for col in df.columns:
-                col_str = str(col).lower().strip()
-                if 'neto' in col_str:
+                col_str = str(col).strip()
+                if ('$ Neto' in col_str or 
+                    'Neto' in col_str or 
+                    'neto' in col_str.lower()):
                     col_neto = col
                     break
         
