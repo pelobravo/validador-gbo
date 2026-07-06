@@ -1983,6 +1983,13 @@ if es_gerente and st.session_state.empresa_activa == "📊 Dashboard General":
     mostrar_dashboard_general_consolidado()
     st.stop()
 
+# Cambiar automáticamente a Ficha de Validación si todos los archivos obligatorios están presentes
+if (st.session_state.get("fact") is not None and 
+    st.session_state.get("cob") is not None and 
+    st.session_state.get("egr") is not None and 
+    st.session_state.get("estado") is not None):
+    st.session_state.modo_vista = "🔍 Ficha de Validación"
+
 # Si se selecciona el Dashboard Histórico o faltan archivos obligatorios
 modo_vista = st.session_state.get("modo_vista", "📊 Dashboard Histórico")
 if modo_vista == "📊 Dashboard Histórico" or not (archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_estado_cuenta):
