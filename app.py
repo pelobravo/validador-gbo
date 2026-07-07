@@ -2910,8 +2910,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             cands_cxp = []
             if 'df_recepciones' in locals() and df_recepciones is not None:
                 cands_cxp.extend(buscar_candidatos_por_monto(df_recepciones, diff_cxp, "Recepciones de Mercancía"))
-            if 'df_egresos' in locals() and df_egresos is not None:
-                cands_cxp.extend(buscar_candidatos_por_monto(df_egresos, diff_cxp, "Egresos iPago"))
+            if 'df_proveedores' in locals() and df_proveedores is not None:
+                cands_cxp.extend(buscar_candidatos_por_monto(df_proveedores, diff_cxp, "Proveedores de Mercancía"))
             if 'df_notas_proveedor' in locals() and df_notas_proveedor is not None:
                 cands_cxp.extend(buscar_candidatos_por_monto(df_notas_proveedor, diff_cxp, "Notas de Crédito Proveedores"))
             if 'df_cxp_rep' in locals() and df_cxp_rep is not None:
