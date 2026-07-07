@@ -1153,81 +1153,85 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
         
         # 1. Limpiar y estructurar Recepciones
         df_rec_clean = ProcesadorArchivos._limpiar_columnas(df_recepciones)
-        idx_rec = 0
+        idx_rec = None
         for idx, row in df_rec_clean.iterrows():
             row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
             if 'compra' in row_str and 'proveedor' in row_str and 'f. recepción' in row_str:
-                idx_rec = idx + 1
+                idx_rec = idx
                 break
-        if idx_rec == 0:
-            idx_rec = ProcesadorArchivos._encontrar_fila_datos(df_rec_clean, ['compra', 'proveedor', 'f. recepción']) + 1
-        if idx_rec > 0 and idx_rec < len(df_rec_clean):
+        if idx_rec is None:
+            idx_rec = ProcesadorArchivos._encontrar_fila_datos(df_rec_clean, ['compra', 'proveedor', 'f. recepción'])
+        if idx_rec is not None and idx_rec >= 0 and idx_rec < len(df_rec_clean):
             df_datos = df_rec_clean.iloc[idx_rec:].reset_index(drop=True)
             if len(df_datos) > 0:
                 header_row = df_datos.iloc[0]
-                new_cols = []
-                for col in header_row:
-                    new_cols.append(str(col).strip() if pd.notna(col) else f'col_{len(new_cols)}')
+                new_cols = [str(col).strip() if pd.notna(col) else f'col_{i}' for i, col in enumerate(header_row)]
                 df_datos.columns = new_cols
                 df_rec_clean = df_datos.iloc[1:].reset_index(drop=True)
                 
         # 2. Limpiar y estructurar CxP de hoy
         df_cxp_clean = ProcesadorArchivos._limpiar_columnas(df_cxp_rep)
-        idx_cxp = 0
+        idx_cxp = None
         for idx, row in df_cxp_clean.iterrows():
             row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-            if 'proveedor' in row_str and 'documento' in row_str and 'saldo' in row_str:
-                idx_cxp = idx + 1
+            if 'documento' in row_str and any(k in row_str for k in ['saldo', 'pendt', 'pendiente']):
+                idx_cxp = idx
                 break
-        if idx_cxp == 0:
-            idx_cxp = ProcesadorArchivos._encontrar_fila_datos(df_cxp_clean, ['proveedor', 'documento', 'saldo']) + 1
-        if idx_cxp > 0 and idx_cxp < len(df_cxp_clean):
+        if idx_cxp is None:
+            idx_cxp = ProcesadorArchivos._encontrar_fila_datos(df_cxp_clean, ['proveedor', 'documento', 'saldo'])
+        if idx_cxp is not None and idx_cxp >= 0 and idx_cxp < len(df_cxp_clean):
             df_datos = df_cxp_clean.iloc[idx_cxp:].reset_index(drop=True)
             if len(df_datos) > 0:
                 header_row = df_datos.iloc[0]
-                new_cols = []
-                for col in header_row:
-                    new_cols.append(str(col).strip() if pd.notna(col) else f'col_{len(new_cols)}')
+                new_cols = [str(col).strip() if pd.notna(col) else f'col_{i}' for i, col in enumerate(header_row)]
                 df_datos.columns = new_cols
                 df_cxp_clean = df_datos.iloc[1:].reset_index(drop=True)
 
-        # 3. Buscar y estructurar CxP del día anterior
+        # 3. Buscar y estructurar CxP del día anterior (Búsqueda hacia atrás de hasta 5 días para encontrar el anterior disponible)
         empresa_clean = re.sub(r'[^\w\-_]', '_', empresa)
-        fecha_ant_str = (pd.to_datetime(fecha_actual) - timedelta(days=1)).strftime('%Y-%m-%d')
-        filename_ant = f"cxp_reportado_{empresa_clean}_{fecha_ant_str}.xlsx"
-        filepath_ant = os.path.join(RUTA_ARCHIVOS, filename_ant)
-        
         df_cxp_ant_clean = None
-        if os.path.exists(filepath_ant):
-            try:
-                df_ant_raw = pd.read_excel(filepath_ant)
-                df_cxp_ant_clean = ProcesadorArchivos._limpiar_columnas(df_ant_raw)
-                idx_ant = 0
-                for idx, row in df_cxp_ant_clean.iterrows():
-                    row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                    if 'proveedor' in row_str and 'documento' in row_str and 'saldo' in row_str:
-                        idx_ant = idx + 1
-                        break
-                if idx_ant == 0:
-                    idx_ant = ProcesadorArchivos._encontrar_fila_datos(df_cxp_ant_clean, ['proveedor', 'documento', 'saldo']) + 1
-                if idx_ant > 0 and idx_ant < len(df_cxp_ant_clean):
-                    df_datos = df_cxp_ant_clean.iloc[idx_ant:].reset_index(drop=True)
-                    if len(df_datos) > 0:
-                        header_row = df_datos.iloc[0]
-                        new_cols = []
-                        for col in header_row:
-                            new_cols.append(str(col).strip() if pd.notna(col) else f'col_{len(new_cols)}')
-                        df_datos.columns = new_cols
-                        df_cxp_ant_clean = df_datos.iloc[1:].reset_index(drop=True)
-            except Exception as e:
-                print(f"Error cargando CxP anterior para cotejo: {e}")
+        fecha_ant_encontrada = ""
+        for i in range(1, 6):
+            fecha_ant_dt = pd.to_datetime(fecha_actual) - timedelta(days=i)
+            fecha_ant_str = fecha_ant_dt.strftime('%Y-%m-%d')
+            filename_ant = f"cxp_reportado_{empresa_clean}_{fecha_ant_str}.xlsx"
+            filepath_ant = os.path.join(RUTA_ARCHIVOS, filename_ant)
+            
+            if os.path.exists(filepath_ant):
+                try:
+                    df_ant_raw = pd.read_excel(filepath_ant)
+                    df_cxp_ant_clean = ProcesadorArchivos._limpiar_columnas(df_ant_raw)
+                    idx_ant = None
+                    for idx, row in df_cxp_ant_clean.iterrows():
+                        row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                        if 'documento' in row_str and any(k in row_str for k in ['saldo', 'pendt', 'pendiente']):
+                            idx_ant = idx
+                            break
+                    if idx_ant is None:
+                        idx_ant = ProcesadorArchivos._encontrar_fila_datos(df_cxp_ant_clean, ['proveedor', 'documento', 'saldo'])
+                    if idx_ant is not None and idx_ant >= 0 and idx_ant < len(df_cxp_ant_clean):
+                        df_datos = df_cxp_ant_clean.iloc[idx_ant:].reset_index(drop=True)
+                        if len(df_datos) > 0:
+                            header_row = df_datos.iloc[0]
+                            new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
+                            df_datos.columns = new_cols
+                            df_cxp_ant_clean = df_datos.iloc[1:].reset_index(drop=True)
+                    fecha_ant_encontrada = fecha_ant_dt.strftime('%d/%m/%Y')
+                    break
+                except Exception as e:
+                    print(f"Error cargando CxP anterior del {fecha_ant_str}: {e}")
 
-        # 4. Buscar columnas clave en Recepciones
-        col_rec_doc = ProcesadorArchivos._buscar_columna(df_rec_clean, 'documento', 'doc', 'factura', 'compra', 'nro')
+        # 4. Buscar columnas clave en Recepciones (Búsqueda multi-columna para referencias)
+        cols_doc_rec = []
+        for col in df_rec_clean.columns:
+            col_l = str(col).lower()
+            if any(k in col_l for k in ['compra', 'fact', 'doc', 'nro', 'ref']):
+                cols_doc_rec.append(col)
+                
         col_rec_monto = None
         for col in df_rec_clean.columns:
             clean_col = re.sub(r'[^a-z0-9]', '', str(col).lower())
-            if 'neto' in clean_col:
+            if 'neto' in clean_col and 'iva' in clean_col:
                 col_rec_monto = col
                 break
         if col_rec_monto is None:
@@ -1241,34 +1245,39 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
         col_cxp_doc = ProcesadorArchivos._buscar_columna(df_cxp_clean, 'documento', 'doc', 'factura', 'nro_doc', 'referencia')
         col_cxp_monto = ProcesadorArchivos._buscar_columna(df_cxp_clean, 'saldo', 'saldo pendt', 'pendiente', 'monto')
 
-        if not col_rec_doc or not col_cxp_doc or not col_rec_monto or not col_cxp_monto:
+        if not cols_doc_rec or not col_cxp_doc or not col_rec_monto or not col_cxp_monto:
             st.warning(
                 f"⚠️ **Cotejo de documentos deshabilitado**: No se pudieron identificar las columnas requeridas en los archivos.\n"
-                f"- Documento en Recepciones: {'✅ Encontrado (' + str(col_rec_doc) + ')' if col_rec_doc else '❌ No encontrado (buscaba: documento, doc, factura, compra, nro)'}\n"
+                f"- Documentos en Recepciones: {'✅ Encontrado (' + str(cols_doc_rec) + ')' if cols_doc_rec else '❌ No encontrado (buscaba: compra, factura, documento, ref)'}\n"
                 f"- Monto en Recepciones: {'✅ Encontrado (' + str(col_rec_monto) + ')' if col_rec_monto else '❌ No encontrado (buscaba: neto, total)'}\n"
-                f"- Documento en CxP: {'✅ Encontrado (' + str(col_cxp_doc) + ')' if col_cxp_doc else '❌ No encontrado (buscaba: documento, doc, factura, nro_doc, referencia)'}\n"
-                f"- Monto en CxP: {'✅ Encontrado (' + str(col_cxp_monto) + ')' if col_cxp_monto else '❌ No encontrado (buscaba: saldo, saldo pendt, pendiente, monto)'}"
+                f"- Documento en CxP: {'✅ Encontrado (' + str(col_cxp_doc) + ')' if col_cxp_doc else '❌ No encontrado (buscaba: documento, referencia, nro)'}\n"
+                f"- Monto en CxP: {'✅ Encontrado (' + str(col_cxp_monto) + ')' if col_cxp_monto else '❌ No encontrado (buscaba: saldo, pendiente, monto)'}"
             )
             return
 
-        # 5. Extraer conjuntos de documentos con sus montos
+        # 5. Extraer conjuntos de documentos con sus montos (normalización por solo dígitos)
         rec_dict = {}
         for idx, row in df_rec_clean.iterrows():
-            doc = str(row[col_rec_doc]).strip()
             monto = ProcesadorArchivos._convertir_numero_europeo(row[col_rec_monto])
-            if doc and doc != 'nan' and doc != 'None' and monto:
-                doc_norm = re.sub(r'\s+', '', doc).upper()
-                doc_norm = re.sub(r'^0+', '', doc_norm)
-                rec_dict[doc_norm] = {'original': doc, 'monto': float(monto)}
+            if not monto:
+                continue
+            for col_doc in cols_doc_rec:
+                doc = str(row[col_doc]).strip()
+                if doc and doc != 'nan' and doc != 'None':
+                    doc_norm = re.sub(r'[^0-9]', '', doc)
+                    doc_norm = re.sub(r'^0+', '', doc_norm)
+                    if doc_norm:
+                        rec_dict[doc_norm] = {'original': doc, 'monto': float(monto)}
 
         cxp_dict = {}
         for idx, row in df_cxp_clean.iterrows():
             doc = str(row[col_cxp_doc]).strip()
             monto = ProcesadorArchivos._convertir_numero_europeo(row[col_cxp_monto])
             if doc and doc != 'nan' and doc != 'None' and monto:
-                doc_norm = re.sub(r'\s+', '', doc).upper()
+                doc_norm = re.sub(r'[^0-9]', '', doc)
                 doc_norm = re.sub(r'^0+', '', doc_norm)
-                cxp_dict[doc_norm] = {'original': doc, 'monto': float(monto)}
+                if doc_norm:
+                    cxp_dict[doc_norm] = {'original': doc, 'monto': float(monto)}
 
         cxp_ant_dict = {}
         if df_cxp_ant_clean is not None:
@@ -1279,9 +1288,10 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                     doc = str(row[col_cxp_ant_doc]).strip()
                     monto = ProcesadorArchivos._convertir_numero_europeo(row[col_cxp_ant_monto])
                     if doc and doc != 'nan' and doc != 'None' and monto:
-                        doc_norm = re.sub(r'\s+', '', doc).upper()
+                        doc_norm = re.sub(r'[^0-9]', '', doc)
                         doc_norm = re.sub(r'^0+', '', doc_norm)
-                        cxp_ant_dict[doc_norm] = {'original': doc, 'monto': float(monto)}
+                        if doc_norm:
+                            cxp_ant_dict[doc_norm] = {'original': doc, 'monto': float(monto)}
 
         # 6. Cruzar información
         rec_encontradas_hoy = []
