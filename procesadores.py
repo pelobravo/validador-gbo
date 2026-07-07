@@ -690,13 +690,13 @@ class ProcesadorArchivos:
         
         return total
     
-    # ===================== RECEPCIONES - CORREGIDO =====================
+    # ===================== RECEPCIONES =====================
     
     @staticmethod
     def procesar_recepciones(df):
         """
         Procesa archivo de recepciones.
-        Busca la columna "$ Neto + IVA" y extrae el total correcto.
+        Busca "$ Neto + IVA" y extrae el total correcto (sin duplicar).
         
         Args:
             df: DataFrame de pandas
@@ -709,147 +709,118 @@ class ProcesadorArchivos:
         
         df = ProcesadorArchivos._limpiar_columnas(df)
         
-        # Mostrar columnas para depuración (se puede eliminar después)
-        print(f"📋 Columnas en recepciones: {df.columns.tolist()}")
-        
-        # ============================================================
-        # 🔥 BUSCAR LA COLUMNA CORRECTA: "$ Neto + IVA"
-        # ============================================================
-        col_neto = None
-        
-        # 1. Buscar por nombre exacto (normalizado)
-        for col in df.columns:
-            col_str = str(col).strip()
-            # Limpiar caracteres especiales para comparar
-            clean_col = re.sub(r'[^a-zA-Z0-9]', '', col_str)
-            clean_col = clean_col.lower()
-            
-            # Buscar "netoiva" o "neto+iva" en el nombre
-            if 'netoiva' in clean_col or 'netoiva' in clean_col.replace('iva', ''):
-                col_neto = col
-                print(f"✅ Columna 'Neto + IVA' encontrada: {col}")
-                break
-            
-            # Buscar "neto" y "iva" en el mismo nombre
-            if 'neto' in clean_col and 'iva' in clean_col:
-                col_neto = col
-                print(f"✅ Columna 'Neto + IVA' encontrada: {col}")
-                break
-        
-        # 2. Si no se encuentra, buscar por nombre parcial
-        if col_neto is None:
-            for col in df.columns:
-                col_str = str(col).strip().lower()
-                # Buscar "neto" y "iva" en el nombre
-                if 'neto' in col_str and 'iva' in col_str:
-                    col_neto = col
-                    print(f"✅ Columna 'Neto + IVA' encontrada (parcial): {col}")
-                    break
-        
-        # 3. Si aún no se encuentra, buscar por índice (columna M, índice 12)
-        if col_neto is None and len(df.columns) > 12:
-            col_neto = df.columns[12]  # Columna M (índice 12)
-            print(f"⚠️ Usando columna por índice (M): {col_neto}")
-        
-        # 4. Último recurso: buscar cualquier columna que contenga "neto"
-        if col_neto is None:
-            for col in df.columns:
-                if 'neto' in str(col).strip().lower():
-                    col_neto = col
-                    print(f"⚠️ Usando columna fallback con 'neto': {col}")
-                    break
-        
-        if col_neto is None:
-            print("❌ No se encontró columna de Neto + IVA")
-            return 0.0, 0.0, 0, 0.0
-        
-        # ============================================================
-        # 🔥 EXTRAER EL TOTAL DE LA FILA "Total General:"
-        # ============================================================
-        total_recepcion = 0.0
-        
-        # Buscar la fila con "Total General" en cualquier columna
+        idx_inicio = 0
         for idx, row in df.iterrows():
             row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+            if 'compra' in row_str and 'proveedor' in row_str and 'recep' in row_str:
+                idx_inicio = idx + 1
+                break
+        
+        if idx_inicio == 0:
+            patrones = ['compra', 'proveedor', 'recep']
+            idx_inicio = ProcesadorArchivos._encontrar_fila_datos(df, patrones) + 1
+        
+        if idx_inicio > 0 and idx_inicio < len(df):
+            df_datos = df.iloc[idx_inicio:].reset_index(drop=True)
+            if len(df_datos) > 0:
+                header_row = df_datos.iloc[0] if len(df_datos) > 0 else None
+                if header_row is not None:
+                    new_columns = []
+                    for col in header_row:
+                        if pd.notna(col):
+                            new_columns.append(str(col).strip())
+                        else:
+                            new_columns.append(f'col_{len(new_columns)}')
+                    df_datos.columns = new_columns
+                    df_datos = df_datos.iloc[1:].reset_index(drop=True)
+                    df = df_datos
+        
+        total_recepcion = 0.0
+        
+        col_neto = None
+        # 1. Buscar primero la columna preferencial: Neto + IVA (normalizando para ser inmunes a formatos)
+        for col in df.columns:
+            col_str = str(col).strip()
+            clean_col = re.sub(r'[^a-z0-9]', '', col_str.lower())
+            if 'neto' in clean_col and 'iva' in clean_col:
+                col_neto = col
+                break
+        
+        # 2. Si no se encuentra, buscar la columna Neto simple (sin IVA)
+        if col_neto is None:
+            for col in df.columns:
+                col_str = str(col).strip()
+                clean_col = re.sub(r'[^a-z0-9]', '', col_str.lower())
+                if 'neto' in clean_col and 'iva' not in clean_col:
+                    col_neto = col
+                    break
+        
+        if col_neto:
+            for idx, row in df.iterrows():
+                row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                if 'total general' in row_str or 'total' in row_str:
+                    try:
+                        valor = row[col_neto]
+                        num = ProcesadorArchivos._convertir_numero_europeo(valor)
+                        if not pd.isna(num) and num > 0:
+                            total_recepcion = float(num)
+                            break
+                    except:
+                        pass
             
-            if 'total general' in row_str or 'total general:' in row_str:
-                try:
-                    # Extraer el valor de la columna encontrada
-                    valor = row[col_neto]
-                    num = ProcesadorArchivos._convertir_numero_europeo(valor)
+            if total_recepcion == 0:
+                for val in df[col_neto]:
+                    num = ProcesadorArchivos._convertir_numero_europeo(val)
                     if not pd.isna(num) and num > 0:
                         total_recepcion = float(num)
-                        print(f"✅ Total de Recepciones (Neto + IVA): {total_recepcion}")
                         break
-                except Exception as e:
-                    print(f"Error al extraer valor de columna {col_neto}: {e}")
         
-        # ============================================================
-        # 🔥 FALLBACK: Si no encontró "Total General", sumar todas las filas
-        # ============================================================
         if total_recepcion == 0:
-            print("⚠️ No se encontró 'Total General', sumando filas individuales...")
-            try:
-                for idx, row in df.iterrows():
-                    # Saltar filas de encabezado
-                    row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                    if 'compra' in row_str or 'proveedor' in row_str or 'fact' in row_str or 'neto' in row_str:
-                        # Si la fila parece encabezado, saltar
-                        if 'compra' in row_str and 'proveedor' in row_str:
-                            continue
-                    
-                    # Extraer valor de la columna
-                    valor = row[col_neto]
-                    num = ProcesadorArchivos._convertir_numero_europeo(valor)
-                    if not pd.isna(num) and num > 0:
-                        total_recepcion += float(num)
-                        print(f"  Sumando fila: {num}")
-                
-                print(f"✅ Total sumado de recepciones: {total_recepcion}")
-            except Exception as e:
-                print(f"Error al sumar filas: {e}")
-        
-        # ============================================================
-        # 🔥 VERIFICACIÓN: Si el total es 8.220 (Neto), buscar la columna de IVA
-        # ============================================================
-        if total_recepcion == 8220.00:
-            print("⚠️ Se detectó que se está tomando el valor NETO (8.220,00), buscando columna con IVA...")
-            
-            # Buscar otra columna que pueda ser "Neto + IVA"
-            for col in df.columns:
-                col_str = str(col).strip().lower()
-                if 'iva' in col_str or 'neto' in col_str:
-                    # Intentar extraer el total de la fila "Total General" con esta columna
-                    for idx, row in df.iterrows():
-                        row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                        if 'total general' in row_str or 'total general:' in row_str:
-                            try:
-                                valor = row[col]
-                                num = ProcesadorArchivos._convertir_numero_europeo(valor)
-                                if not pd.isna(num) and num > total_recepcion:
-                                    total_recepcion = float(num)
-                                    print(f"✅ Total de Recepciones (con IVA): {total_recepcion}")
-                                    break
-                            except:
-                                pass
-                    if total_recepcion > 8220:
+            for col in reversed(df.columns):
+                try:
+                    for val in df[col]:
+                        num = ProcesadorArchivos._convertir_numero_europeo(val)
+                        if not pd.isna(num) and num > 0:
+                            total_recepcion = float(num)
+                            break
+                    if total_recepcion > 0:
                         break
+                except:
+                    pass
         
-        # ============================================================
-        # 🔥 CÁLCULOS ADICIONALES
-        # ============================================================
         compras_credito = total_recepcion * 0.6
         
-        # Contar cantidad de recepciones
+        tipo_col = ProcesadorArchivos._buscar_columna(
+            df, 
+            'tipo_compra', 'compra', 'tipo', 'forma_pago', 'condicion_pago',
+            'pago', 'modalidad', 'metodo_pago'
+        )
+        
+        if tipo_col and total_recepcion > 0:
+            try:
+                tipos = df[tipo_col].astype(str).str.lower()
+                mascara_credito = tipos.str.contains('credito|crédito|cred|c/c|plazo|30|60|90|diferido', na=False, case=False)
+                if col_neto:
+                    valores = []
+                    for val in df[col_neto]:
+                        num = ProcesadorArchivos._convertir_numero_europeo(val)
+                        if not pd.isna(num) and num > 0:
+                            valores.append(num)
+                        else:
+                            valores.append(0.0)
+                    compras_credito = sum([valores[i] for i, m in enumerate(mascara_credito) if m])
+                else:
+                    compras_credito = total_recepcion * 0.6
+            except:
+                compras_credito = total_recepcion * 0.6
+        
         doc_col = ProcesadorArchivos._buscar_columna(
             df, 
-            'documento', 'comprobante', 'doc', 'id', 'nro_recibo', 'recibo', 'factura', 'compra'
+            'documento', 'comprobante', 'doc', 'id', 'nro_recibo', 'recibo', 'factura'
         )
         cantidad = df[doc_col].nunique() if doc_col else len(df)
         
         promedio = total_recepcion / cantidad if cantidad > 0 else 0.0
-        
-        print(f"📊 Resultado final - Recepciones: {total_recepcion}, Compras crédito: {compras_credito}")
         
         return total_recepcion, compras_credito, cantidad, promedio
     
