@@ -3312,8 +3312,13 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     st.markdown(f"- **Ref {a['referencia']}**: {a['causa']} *(Acción: {a['accion']})*")
                     
             # Mostrar cotejo automático de recepciones contra CxP
-            if 'df_recepciones' in locals() and 'df_cxp_rep' in locals():
+            df_recepciones_ok = 'df_recepciones' in locals() and df_recepciones is not None
+            df_cxp_rep_ok = 'df_cxp_rep' in locals() and df_cxp_rep is not None
+            
+            if df_recepciones_ok and df_cxp_rep_ok:
                 mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_procesar, st.session_state.empresa_activa)
+            else:
+                st.info("ℹ️ *Sube el archivo de **Recepciones** para ver el cotejo automático de documentos (NE / OT) contra Cuentas por Pagar.*")
                 
             st.markdown("""
             **💡 Puntos clave a revisar:**
