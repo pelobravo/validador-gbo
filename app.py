@@ -2508,7 +2508,7 @@ def obtener_archivo_historico_o_subido(archivo_subido, prefijo_tipo):
                 f.write(bytes_data)
             archivo_subido.seek(0)
         except Exception as e:
-            print(f"Error al autoguardar {prefijo_tipo} en historial: {e}")
+            st.error(f"❌ Error al autoguardar {prefijo_tipo} en historial: {e} (Ruta: {filepath})")
         return archivo_subido
     else:
         if os.path.exists(filepath):
