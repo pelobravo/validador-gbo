@@ -1136,7 +1136,7 @@ def mostrar_recepciones_rezagadas(df_recepciones, fecha_actual, empresa):
     except Exception as e:
         print(f"Error en análisis de recepciones rezagadas: {e}")
 
-def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, empresa):
+def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, empresa, diferencia_cxp=0.0):
     """
     Compara las recepciones del día contra el reporte de Cuentas por Pagar (CxP)
     de hoy y de ayer para identificar documentos conciliados, faltantes o sobrantes.
@@ -1328,22 +1328,82 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                         'monto': info['monto']
                     })
 
-        # 7. Renderizar en Streamlit
+        # 7. Buscar combinaciones que sumen/cuadren la diferencia
+        propuestas = []
+        target_diff = abs(diferencia_cxp)
+        tolerance = 2.0  # Tolerancia de hasta 2 Bs/USD por redondeos
+        
+        # Unir todos los candidatos no conciliados
+        candidatos = []
+        for x in rec_faltantes:
+            candidatos.append({
+                'documento': x['documento'],
+                'monto': x['monto'],
+                'origen': 'Recepción de Hoy (No en CxP)',
+                'ref': x
+            })
+        for x in cxp_sobrantes:
+            candidatos.append({
+                'documento': x['documento'],
+                'monto': x['monto'],
+                'origen': 'Cuentas por Pagar (No en Recepción)',
+                'ref': x
+            })
+            
+        # Buscar individuales
+        for c in candidatos:
+            if abs(c['monto'] - target_diff) <= tolerance:
+                propuestas.append([c])
+                
+        # Buscar combinaciones de 2 (suma y resta)
+        n_c = len(candidatos)
+        for i in range(n_c):
+            for j in range(i+1, n_c):
+                sum_monto = candidatos[i]['monto'] + candidatos[j]['monto']
+                if abs(sum_monto - target_diff) <= tolerance:
+                    propuestas.append([candidatos[i], candidatos[j]])
+                diff_monto = abs(candidatos[i]['monto'] - candidatos[j]['monto'])
+                if abs(diff_monto - target_diff) <= tolerance:
+                    propuestas.append([candidatos[i], candidatos[j]])
+
+        # Filtrar listas por participantes de propuestas
+        rec_faltantes_mostrar = rec_faltantes
+        cxp_sobrantes_mostrar = cxp_sobrantes
+        
+        # Checkbox para alternar entre ver todos o ver solo los filtrados
         st.markdown("---")
         st.markdown("#### 🔍 Cotejo Automático de Documentos (NE / OT)")
         st.caption("Cruce automático por número de documento entre las Recepciones del día y el balance de Cuentas por Pagar (hoy y día anterior)")
-        
+
+        # Renderizar propuestas en un cuadro destacado
+        if propuestas:
+            st.success(f"🎯 **Propuestas de Conciliación de la Diferencia (Bs/USD {formato_venezolano(diferencia_cxp)}):**")
+            st.markdown("Se identificaron las siguientes combinaciones de documentos que cuadran exactamente la diferencia actual:")
+            for idx_p, prop in enumerate(propuestas[:3]): # Mostrar máximo 3 propuestas
+                str_prop = " + ".join([f"**{item['documento']}** ({formato_venezolano(item['monto'])})" for item in prop])
+                st.markdown(f"👉 **Opción {idx_p + 1}**: {str_prop} (Origen: {', '.join(set(item['origen'] for item in prop))})")
+                
+            mostrar_todos = st.checkbox("Mostrar todos los documentos no conciliados (desactivar filtro por diferencia)", value=False)
+            if not mostrar_todos:
+                docs_participantes = set()
+                for prop in propuestas[:3]:
+                    for item in prop:
+                        docs_participantes.add(item['documento'])
+                rec_faltantes_mostrar = [x for x in rec_faltantes if x['documento'] in docs_participantes]
+                cxp_sobrantes_mostrar = [x for x in cxp_sobrantes if x['documento'] in docs_participantes]
+                st.info(f"💡 *Las listas inferiores han sido filtradas automáticamente para mostrar solo los {len(rec_faltantes_mostrar) + len(cxp_sobrantes_mostrar)} documentos clave que cuadran la diferencia.*")
+
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("✅ Conciliados Hoy", len(rec_encontradas_hoy))
         with col2:
             st.metric("⏳ Conciliados Ayer (Anterior)", len(rec_encontradas_ayer))
         with col3:
-            st.metric("⚠️ No en CxP (Posible Contado)", len(rec_faltantes))
+            st.metric("⚠️ No en CxP (Posible Contado)", len(rec_faltantes_mostrar))
         with col4:
-            st.metric("📝 Pendientes en CxP (NE/OT)", len(cxp_sobrantes))
+            st.metric("📝 Pendientes en CxP (NE/OT)", len(cxp_sobrantes_mostrar))
             
-        with st.expander("📋 Detalle del Cotejo de Documentos", expanded=False):
+        with st.expander("📋 Detalle del Cotejo de Documentos", expanded=True):
             t1, t2, t3, t4 = st.tabs(["Conciliados Hoy", "Conciliados Ayer", "No en CxP (Contado)", "Pendientes en CxP"])
             
             with t1:
@@ -1363,22 +1423,22 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                     st.info("No hay documentos que coincidieran con el balance del día anterior.")
                     
             with t3:
-                if rec_faltantes:
+                if rec_faltantes_mostrar:
                     st.warning("Recepciones de hoy que no aparecen en el reporte de CxP (pueden ser de contado o sin registrar):")
-                    df_falt = pd.DataFrame(rec_faltantes)
+                    df_falt = pd.DataFrame(rec_faltantes_mostrar)
                     df_falt.columns = ["Documento", "Monto"]
                     st.dataframe(df_falt, use_container_width=True)
                 else:
-                    st.info("Todas las recepciones están registradas en el reporte de CxP.")
+                    st.info("No hay documentos que cumplan con este criterio.")
                     
             with t4:
-                if cxp_sobrantes:
-                    st.info("Documentos de recepción (NE/OT) pendientes en CxP que no están en las Recepciones de hoy (pueden ser rezagos de días anteriores):")
-                    df_sob = pd.DataFrame(cxp_sobrantes)
+                if cxp_sobrantes_mostrar:
+                    st.info("Documentos de recepción (NE/OT) pendientes en CxP que no están en las Recepciones de hoy:")
+                    df_sob = pd.DataFrame(cxp_sobrantes_mostrar)
                     df_sob.columns = ["Documento", "Monto"]
                     st.dataframe(df_sob, use_container_width=True)
                 else:
-                    st.info("No hay recepciones pendientes adicionales registradas en CxP.")
+                    st.info("No hay documentos que cumplan con este criterio.")
                     
     except Exception as e:
         print(f"Error al comparar recepciones con CxP: {e}")
@@ -3334,7 +3394,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             df_cxp_rep_ok = 'df_cxp_rep' in locals() and df_cxp_rep is not None
             
             if df_recepciones_ok and df_cxp_rep_ok:
-                mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_procesar, st.session_state.empresa_activa)
+                mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_procesar, st.session_state.empresa_activa, diff_cxp)
             else:
                 st.info("ℹ️ *Sube el archivo de **Recepciones** para ver el cotejo automático de documentos (NE / OT) contra Cuentas por Pagar.*")
                 
