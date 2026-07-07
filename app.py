@@ -1444,32 +1444,42 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                             'Variación': -info['monto']
                         })
 
-        # Filtrar listas por participantes de propuestas
-        rec_faltantes_mostrar = rec_faltantes
-        cxp_sobrantes_mostrar = cxp_sobrantes
+        # Filtrar listas: por defecto, mostrar solo los documentos de CxP que tienen actividad hoy (nuevos o modificados)
+        # para no abrumar al analista con el historial antiguo de 35 documentos.
+        novedades_docs = set(x['Documento'] for x in novedades_cxp) if novedades_cxp else set()
         
-        # Checkbox para alternar entre ver todos o ver solo los filtrados
+        # Permitir desactivar el filtro de actividad
         st.markdown("---")
         st.markdown("#### 🔍 Cotejo Automático de Documentos (NE / OT)")
         st.caption("Cruce automático por número de documento entre las Recepciones del día y el balance de Cuentas por Pagar (hoy y día anterior)")
 
-        # Renderizar propuestas en un cuadro destacado
+        # Renderizar propuestas de diferencia en un cuadro destacado (si existen)
         if propuestas:
             st.success(f"🎯 **Propuestas de Conciliación de la Diferencia (Bs/USD {formato_venezolano(diferencia_cxp)}):**")
             st.markdown("Se identificaron las siguientes combinaciones de documentos que cuadran exactamente la diferencia actual:")
-            for idx_p, prop in enumerate(propuestas[:3]): # Mostrar máximo 3 propuestas
+            for idx_p, prop in enumerate(propuestas[:3]):
                 str_prop = " + ".join([f"**{item['documento']}** ({formato_venezolano(item['monto'])})" for item in prop])
                 st.markdown(f"👉 **Opción {idx_p + 1}**: {str_prop} (Origen: {', '.join(set(item['origen'] for item in prop))})")
-                
-            mostrar_todos = st.checkbox("Mostrar todos los documentos no conciliados (desactivar filtro por diferencia)", value=False)
-            if not mostrar_todos:
-                docs_participantes = set()
-                for prop in propuestas[:3]:
-                    for item in prop:
-                        docs_participantes.add(item['documento'])
-                rec_faltantes_mostrar = [x for x in rec_faltantes if x['documento'] in docs_participantes]
-                cxp_sobrantes_mostrar = [x for x in cxp_sobrantes if x['documento'] in docs_participantes]
-                st.info(f"💡 *Las listas inferiores han sido filtradas automáticamente para mostrar solo los {len(rec_faltantes_mostrar) + len(cxp_sobrantes_mostrar)} documentos clave que cuadran la diferencia.*")
+
+        mostrar_todos_historicos = st.checkbox("Mostrar todo el historial de saldos pendientes de días anteriores (desactivar filtro)", value=False)
+        
+        if mostrar_todos_historicos:
+            rec_faltantes_mostrar = rec_faltantes
+            cxp_sobrantes_mostrar = cxp_sobrantes
+        else:
+            rec_faltantes_mostrar = rec_faltantes
+            if df_cxp_ant_clean is not None:
+                cxp_sobrantes_mostrar = [x for x in cxp_sobrantes if x['documento'] in novedades_docs]
+                if propuestas:
+                    # Si hay propuestas específicas para la diferencia, priorizamos filtrar por los participantes de las propuestas
+                    docs_participantes = set()
+                    for prop in propuestas[:3]:
+                        for item in prop:
+                            docs_participantes.add(item['documento'])
+                    cxp_sobrantes_mostrar = [x for x in cxp_sobrantes_mostrar if x['documento'] in docs_participantes]
+                st.info(f"💡 *Se muestran solo los documentos que tienen actividad o variaciones hoy ({len(cxp_sobrantes_mostrar)}). Activa la casilla de arriba para ver los {len(cxp_sobrantes)} saldos históricos.*")
+            else:
+                cxp_sobrantes_mostrar = cxp_sobrantes
 
         col1, col2, col3, col4 = st.columns(4)
         with col1:
