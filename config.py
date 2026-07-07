@@ -33,42 +33,42 @@ USUARIOS = {
         "email": "marianguaipo@grupobodeguita.com",
         "rol": "analista",
         "password": "cambiar123",
-        "empresa": "Bodeguita Guayana"  # 🔥 NUEVO
+        "empresa": "Bodeguita Monagas"  # 🔥 NUEVO
     },
     "analista2": {
         "nombre": "Francia Mota",
         "email": "franciamota@grupobodeguita.com",
         "rol": "analista",
         "password": "cambiar123",
-        "empresa": "Bodeguita Monagas"  # 🔥 NUEVO
+        "empresa": "Bodeguita Nororiental"  # 🔥 NUEVO
     },
     "analista3": {
         "nombre": "Carmen Villahermosa",
         "email": "carmenvillahermosa@grupobodeguita.com",
         "rol": "analista",
         "password": "cambiar123",
-        "empresa": "Bodeguita Anzoátegui"  # 🔥 NUEVO
+        "empresa": "Bodeguita Guayana"  # 🔥 NUEVO
     },
     "analista4": {
         "nombre": "Aura Galán",
         "email": "auragalan@grupobodeguita.com",
         "rol": "analista",
         "password": "cambiar123",
-        "empresa": "Bodeguita Nororiental"  # 🔥 NUEVO
+        "empresa": "Bodeguita Anzoátegui"  # 🔥 NUEVO
     },
     "analista5": {
         "nombre": "Ismariely Gómez",
         "email": "ismarielygomez@grupobodeguita.com",
         "rol": "analista",
         "password": "cambiar123",
-        "empresa": "Nexo Comercial"  # 🔥 SU EMPRESA CORRECTA
+        "empresa": "Nexo Comercial Oriente"  # 🔥 SU EMPRESA CORRECTA
     },
     "analista6": {
         "nombre": "Mayerlin Rondón",
         "email": "mayerlinrondon@grupobodeguita.com",
         "rol": "analista",
         "password": "cambiar123",
-        "empresa": "Bodeguita Corporación"  # 🔥 NUEVO
+        "empresa": "Auditora Principal"  # 🔥 NUEVO
     },
     "supervisor1": {
         "nombre": "Mayerlin Rondón",
