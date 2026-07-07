@@ -36,6 +36,7 @@ archivo_notas_credito_proveedor = None
 archivo_costo_facturacion = None
 archivo_cxc_reportado = None
 archivo_cxp_reportado = None
+archivo_cxp_anterior = None
 archivo_inventario_reportado = None
 archivo_inventario_anterior = None
 archivo_tb = None
@@ -1187,39 +1188,53 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                 df_datos.columns = new_cols
                 df_cxp_clean = df_datos.iloc[1:].reset_index(drop=True)
 
-        # 3. Buscar y estructurar CxP del día anterior (Búsqueda hacia atrás de hasta 5 días para encontrar el anterior disponible)
-        empresa_clean = re.sub(r'[^\w\-_]', '_', empresa)
+        # 3. Buscar y estructurar CxP del día anterior (Búsqueda hacia atrás o archivo subido directamente)
         df_cxp_ant_clean = None
         fecha_ant_encontrada = ""
-        for i in range(1, 6):
-            fecha_ant_dt = pd.to_datetime(fecha_actual) - timedelta(days=i)
-            fecha_ant_str = fecha_ant_dt.strftime('%Y-%m-%d')
-            filename_ant = f"cxp_reportado_{empresa_clean}_{fecha_ant_str}.xlsx"
-            filepath_ant = os.path.join(RUTA_ARCHIVOS, filename_ant)
-            
-            if os.path.exists(filepath_ant):
-                try:
-                    df_ant_raw = pd.read_excel(filepath_ant)
-                    df_cxp_ant_clean = ProcesadorArchivos._limpiar_columnas(df_ant_raw)
-                    idx_ant = None
-                    for idx, row in df_cxp_ant_clean.iterrows():
-                        row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                        if 'documento' in row_str and any(k in row_str for k in ['saldo', 'pendt', 'pendiente']):
-                            idx_ant = idx
-                            break
-                    if idx_ant is None:
-                        idx_ant = ProcesadorArchivos._encontrar_fila_datos(df_cxp_ant_clean, ['proveedor', 'documento', 'saldo'])
-                    if idx_ant is not None and idx_ant >= 0 and idx_ant < len(df_cxp_ant_clean):
-                        df_datos = df_cxp_ant_clean.iloc[idx_ant:].reset_index(drop=True)
-                        if len(df_datos) > 0:
-                            header_row = df_datos.iloc[0]
-                            new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
-                            df_datos.columns = new_cols
-                            df_cxp_ant_clean = df_datos.iloc[1:].reset_index(drop=True)
-                    fecha_ant_encontrada = fecha_ant_dt.strftime('%d/%m/%Y')
+        
+        # Si el usuario subió el archivo del día anterior manualmente, priorizarlo
+        if 'archivo_cxp_anterior' in globals() and archivo_cxp_anterior is not None:
+            try:
+                df_ant_raw = pd.read_excel(archivo_cxp_anterior)
+                df_cxp_ant_clean = ProcesadorArchivos._limpiar_columnas(df_ant_raw)
+                fecha_ant_encontrada = "Archivo Subido (Manual)"
+            except Exception as e:
+                print(f"Error al leer archivo_cxp_anterior subido: {e}")
+                
+        if df_cxp_ant_clean is None:
+            empresa_clean = re.sub(r'[^\w\-_]', '_', empresa)
+            for i in range(1, 6):
+                fecha_ant_dt = pd.to_datetime(fecha_actual) - timedelta(days=i)
+                fecha_ant_str = fecha_ant_dt.strftime('%Y-%m-%d')
+                filename_ant = f"cxp_reportado_{empresa_clean}_{fecha_ant_str}.xlsx"
+                filepath_ant = os.path.join(RUTA_ARCHIVOS, filename_ant)
+                
+                if os.path.exists(filepath_ant):
+                    try:
+                        df_ant_raw = pd.read_excel(filepath_ant)
+                        df_cxp_ant_clean = ProcesadorArchivos._limpiar_columnas(df_ant_raw)
+                        fecha_ant_encontrada = fecha_ant_dt.strftime('%d/%m/%Y')
+                        break
+                    except Exception as e:
+                        print(f"Error cargando CxP anterior del {fecha_ant_str}: {e}")
+
+        # Estructurar las cabeceras si se cargó el archivo anterior
+        if df_cxp_ant_clean is not None:
+            idx_ant = None
+            for idx, row in df_cxp_ant_clean.iterrows():
+                row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                if 'documento' in row_str and any(k in row_str for k in ['saldo', 'pendt', 'pendiente']):
+                    idx_ant = idx
                     break
-                except Exception as e:
-                    print(f"Error cargando CxP anterior del {fecha_ant_str}: {e}")
+            if idx_ant is None:
+                idx_ant = ProcesadorArchivos._encontrar_fila_datos(df_cxp_ant_clean, ['proveedor', 'documento', 'saldo'])
+            if idx_ant is not None and idx_ant >= 0 and idx_ant < len(df_cxp_ant_clean):
+                df_datos = df_cxp_ant_clean.iloc[idx_ant:].reset_index(drop=True)
+                if len(df_datos) > 0:
+                    header_row = df_datos.iloc[0]
+                    new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
+                    df_datos.columns = new_cols
+                    df_cxp_ant_clean = df_datos.iloc[1:].reset_index(drop=True)
 
         # 4. Buscar columnas clave en Recepciones (Búsqueda multi-columna para referencias)
         cols_doc_rec = []
@@ -2178,6 +2193,7 @@ with st.sidebar:
                 st.markdown('<div style="font-size:0.65rem;opacity:0.25;text-transform:uppercase;letter-spacing:1px;margin-top:12px;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.03);padding-bottom:4px;">Verificación</div>', unsafe_allow_html=True)
                 archivo_cxc_reportado = st.file_uploader("📄 CxC Reportado", type=["xlsx", "xls"], key="cxc_rep")
                 archivo_cxp_reportado = st.file_uploader("📄 CxP Reportado", type=["xlsx", "xls"], key="cxp_rep")
+                archivo_cxp_anterior = st.file_uploader("📄 CxP Día Anterior (opcional)", type=["xlsx", "xls"], key="cxp_ant")
                 archivo_inventario_reportado = st.file_uploader("📄 Inventario Reportado", type=["xlsx", "xls"], key="inv_rep")
                 archivo_inventario_anterior = st.file_uploader("📄 Inventario Día Anterior (para desglose a profundidad)", type=["xlsx", "xls"], key="inv_ant")
                 archivo_tb = st.file_uploader("🔄 TB.xlsx", type=["xlsx", "xls"], key="tb")
@@ -2312,6 +2328,7 @@ with st.sidebar:
         st.markdown('<div style="font-size:0.65rem; color:rgba(255,255,255,0.25); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.03); padding-bottom:4px;">🔍 Verificación</div>', unsafe_allow_html=True)
         archivo_cxc_reportado = st.file_uploader("📄 CxC Reportado", type=["xlsx", "xls"], key="cxc_rep")
         archivo_cxp_reportado = st.file_uploader("📄 CxP Reportado", type=["xlsx", "xls"], key="cxp_rep")
+        archivo_cxp_anterior = st.file_uploader("📄 CxP Día Anterior (opcional)", type=["xlsx", "xls"], key="cxp_ant")
         archivo_inventario_reportado = st.file_uploader("📄 Inventario Reportado", type=["xlsx", "xls"], key="inv_rep")
         archivo_inventario_anterior = st.file_uploader("📄 Inventario Día Anterior (para desglose a profundidad)", type=["xlsx", "xls"], key="inv_ant")
         archivo_tb = st.file_uploader("🔄 TB.xlsx", type=["xlsx", "xls"], key="tb")
@@ -2511,6 +2528,12 @@ def obtener_archivo_historico_o_subido(archivo_subido, prefijo_tipo):
     filename = f"{prefijo_tipo}_{empresa_clean}_{fecha_str}.xlsx"
     filepath = os.path.join(RUTA_ARCHIVOS, filename)
 
+    try:
+        with open(r'C:\Users\Ccom\Desktop\Validador Motor de Auditoria\log_guardado.txt', 'a', encoding='utf-8') as log_f:
+            log_f.write(f"Call for {prefijo_tipo} | subido={archivo_subido is not None} | path={filepath}\n")
+    except:
+        pass
+
     if archivo_subido is not None:
         try:
             os.makedirs(RUTA_ARCHIVOS, exist_ok=True)
@@ -2519,7 +2542,17 @@ def obtener_archivo_historico_o_subido(archivo_subido, prefijo_tipo):
             with open(filepath, 'wb') as f:
                 f.write(bytes_data)
             archivo_subido.seek(0)
+            try:
+                with open(r'C:\Users\Ccom\Desktop\Validador Motor de Auditoria\log_guardado.txt', 'a', encoding='utf-8') as log_f:
+                    log_f.write(f"  Successfully wrote {filepath}\n")
+            except:
+                pass
         except Exception as e:
+            try:
+                with open(r'C:\Users\Ccom\Desktop\Validador Motor de Auditoria\log_guardado.txt', 'a', encoding='utf-8') as log_f:
+                    log_f.write(f"  FAILED to write: {e}\n")
+            except:
+                pass
             st.error(f"❌ Error al autoguardar {prefijo_tipo} en historial: {e} (Ruta: {filepath})")
         return archivo_subido
     else:
@@ -2538,6 +2571,7 @@ archivo_notas_credito_proveedor = obtener_archivo_historico_o_subido(archivo_not
 archivo_costo_facturacion = obtener_archivo_historico_o_subido(archivo_costo_facturacion, "costo_facturacion")
 archivo_cxc_reportado = obtener_archivo_historico_o_subido(archivo_cxc_reportado, "cxc_reportado")
 archivo_cxp_reportado = obtener_archivo_historico_o_subido(archivo_cxp_reportado, "cxp_reportado")
+archivo_cxp_anterior = obtener_archivo_historico_o_subido(archivo_cxp_anterior, "cxp_anterior")
 archivo_inventario_reportado = obtener_archivo_historico_o_subido(archivo_inventario_reportado, "inventario_reportado")
 archivo_inventario_anterior = obtener_archivo_historico_o_subido(archivo_inventario_anterior, "inventario_anterior")
 archivo_tb = obtener_archivo_historico_o_subido(archivo_tb, "tb")
