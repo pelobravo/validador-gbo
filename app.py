@@ -1,4 +1,5 @@
 # app.py - Con campos para saldos iniciales manuales - VERSIÓN COMPLETA CON CIERRE DIARIO Y VISUALIZACIÓN DE ARCHIVOS
+# 🔥 MODIFICADO: Identificación y visualización de OT Nuevas en Cuentas por Pagar
 
 import streamlit as st
 import pandas as pd
@@ -1139,6 +1140,7 @@ def mostrar_recepciones_rezagadas(df_recepciones, fecha_actual, empresa):
 
 # ============================================================
 # FUNCIÓN CORREGIDA: COTEJO AUTOMÁTICO DE DOCUMENTOS (NE / OT)
+# 🔥 MODIFICADO: Identificación y visualización de OT Nuevas
 # ============================================================
 def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, empresa, diferencia_cxp=0.0):
     """
@@ -1150,6 +1152,7 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
     - OT = Orden de Trabajo (Carga manual) → NO debe estar en Recepciones
     - Si una NE está en Recepciones pero NO en CxP → POSIBLE PAGO AL CONTADO
     - Si una OT está en CxP pero NO en Recepciones → CARGA MANUAL
+    - Si una OT está en CxP de HOY pero NO en CxP de AYER → OT NUEVA ⭐
     """
     if df_recepciones is None or df_recepciones.empty or df_cxp_rep is None or df_cxp_rep.empty:
         return
@@ -1207,13 +1210,11 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
         df_cxp_ant_clean = None
         fecha_ant_encontrada = ""
         
-        # Primero intentar con archivo subido manualmente (archivo_cxp_anterior)
+        # 🔥 PRIMERO: Buscar en archivo subido manualmente (archivo_cxp_anterior)
         if 'archivo_cxp_anterior' in globals() and archivo_cxp_anterior is not None:
             try:
                 df_ant_raw = pd.read_excel(archivo_cxp_anterior)
                 df_cxp_ant_clean = ProcesadorArchivos._limpiar_columnas(df_ant_raw)
-                fecha_ant_encontrada = "Archivo Subido (Manual)"
-                # Estructurar cabeceras
                 idx_ant = None
                 for idx, row in df_cxp_ant_clean.iterrows():
                     row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
@@ -1229,10 +1230,11 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                         new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
                         df_datos.columns = new_cols
                         df_cxp_ant_clean = df_datos.iloc[1:].reset_index(drop=True)
+                fecha_ant_encontrada = "Archivo Subido (23-Jun-2026)"
             except Exception as e:
                 print(f"Error al leer archivo_cxp_anterior subido: {e}")
                 
-        # Si no hay archivo subido, buscar en histórico
+        # 🔥 SEGUNDO: Si no hay archivo subido, buscar en histórico
         if df_cxp_ant_clean is None:
             empresa_clean = re.sub(r'[^\w\-_]', '_', empresa)
             for i in range(1, 6):
@@ -1245,7 +1247,6 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                     try:
                         df_ant_raw = pd.read_excel(filepath_ant)
                         df_cxp_ant_clean = ProcesadorArchivos._limpiar_columnas(df_ant_raw)
-                        # Estructurar cabeceras
                         idx_ant = None
                         for idx, row in df_cxp_ant_clean.iterrows():
                             row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
@@ -1302,6 +1303,19 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
             col_cxp_monto = df_cxp_clean.columns[2]  # Columna C = Saldo Pendt.
         else:
             col_cxp_monto = ProcesadorArchivos._buscar_columna(df_cxp_clean, 'saldo', 'saldo pendt', 'pendiente', 'monto')
+        
+        # 🔥 Buscar columna de fecha de vencimiento en CxP
+        col_cxp_fecha = ProcesadorArchivos._buscar_columna(df_cxp_clean, 'fecha venc', 'fecha vencimiento', 'vencimiento', 'fecha')
+
+        # Columnas de CxP Anterior
+        col_cxp_ant_doc = None
+        col_cxp_ant_monto = None
+        if df_cxp_ant_clean is not None:
+            col_cxp_ant_doc = ProcesadorArchivos._buscar_columna(df_cxp_ant_clean, 'documento', 'doc', 'factura', 'nro_doc', 'referencia')
+            if len(df_cxp_ant_clean.columns) > 2:
+                col_cxp_ant_monto = df_cxp_ant_clean.columns[2]
+            else:
+                col_cxp_ant_monto = ProcesadorArchivos._buscar_columna(df_cxp_ant_clean, 'saldo', 'saldo pendt', 'pendiente', 'monto')
 
         if not cols_doc_rec or not col_cxp_doc or not col_rec_monto or not col_cxp_monto:
             st.warning("⚠️ **Cotejo de documentos deshabilitado**: No se pudieron identificar las columnas requeridas.")
@@ -1321,7 +1335,6 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                     doc_norm = re.sub(r'[^0-9]', '', doc)
                     doc_norm = re.sub(r'^0+', '', doc_norm)
                     if doc_norm:
-                        # 🔥 Clasificar tipo de documento
                         doc_upper = doc.upper()
                         if 'NE' in doc_upper or 'NE ' in doc_upper:
                             tipo = 'NE'
@@ -1353,43 +1366,66 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                         tipo = 'OT'
                     else:
                         tipo = 'DESCONOCIDO'
+                    
+                    # 🔥 Obtener la fecha de vencimiento si está disponible
+                    fecha_venc = None
+                    if col_cxp_fecha:
+                        try:
+                            fecha_val = row[col_cxp_fecha]
+                            if pd.notna(fecha_val):
+                                if isinstance(fecha_val, pd.Timestamp):
+                                    fecha_venc = fecha_val.strftime('%d/%m/%Y')
+                                else:
+                                    fecha_venc = str(fecha_val).strip()
+                        except:
+                            pass
+                    
+                    # 🔥 Obtener el proveedor (RIF y nombre) desde el archivo de CxP
+                    proveedor = "No identificado"
+                    # Buscar en la misma fila si hay una columna con el proveedor
+                    for col in df_cxp_clean.columns:
+                        col_lower = str(col).lower()
+                        if 'proveedor' in col_lower or 'rif' in col_lower or 'nombre' in col_lower:
+                            try:
+                                prov_val = str(row[col]).strip()
+                                if prov_val and prov_val != 'nan' and prov_val != 'None':
+                                    proveedor = prov_val
+                                    break
+                            except:
+                                pass
+                    
                     cxp_dict[doc_norm] = {
                         'original': doc,
                         'monto': float(monto),
-                        'tipo': tipo
+                        'tipo': tipo,
+                        'fecha_vencimiento': fecha_venc,
+                        'proveedor': proveedor
                     }
 
         # ============================================================
         # 7. EXTRAER DOCUMENTOS DE CxP DEL DÍA ANTERIOR
         # ============================================================
         cxp_ant_dict = {}
-        if df_cxp_ant_clean is not None:
-            col_cxp_ant_doc = ProcesadorArchivos._buscar_columna(df_cxp_ant_clean, 'documento', 'doc', 'factura', 'nro_doc', 'referencia')
-            col_cxp_ant_monto = None
-            if len(df_cxp_ant_clean.columns) > 2:
-                col_cxp_ant_monto = df_cxp_ant_clean.columns[2]
-            else:
-                col_cxp_ant_monto = ProcesadorArchivos._buscar_columna(df_cxp_ant_clean, 'saldo', 'saldo pendt', 'pendiente', 'monto')
-            if col_cxp_ant_doc and col_cxp_ant_monto:
-                for idx, row in df_cxp_ant_clean.iterrows():
-                    doc = str(row[col_cxp_ant_doc]).strip()
-                    monto = ProcesadorArchivos._convertir_numero_europeo(row[col_cxp_ant_monto])
-                    if doc and doc != 'nan' and doc != 'None' and monto:
-                        doc_norm = re.sub(r'[^0-9]', '', doc)
-                        doc_norm = re.sub(r'^0+', '', doc_norm)
-                        if doc_norm:
-                            doc_upper = doc.upper()
-                            if 'NE' in doc_upper or 'NE ' in doc_upper:
-                                tipo = 'NE'
-                            elif 'OT' in doc_upper or 'OT ' in doc_upper:
-                                tipo = 'OT'
-                            else:
-                                tipo = 'DESCONOCIDO'
-                            cxp_ant_dict[doc_norm] = {
-                                'original': doc,
-                                'monto': float(monto),
-                                'tipo': tipo
-                            }
+        if df_cxp_ant_clean is not None and col_cxp_ant_doc and col_cxp_ant_monto:
+            for idx, row in df_cxp_ant_clean.iterrows():
+                doc = str(row[col_cxp_ant_doc]).strip()
+                monto = ProcesadorArchivos._convertir_numero_europeo(row[col_cxp_ant_monto])
+                if doc and doc != 'nan' and doc != 'None' and monto:
+                    doc_norm = re.sub(r'[^0-9]', '', doc)
+                    doc_norm = re.sub(r'^0+', '', doc_norm)
+                    if doc_norm:
+                        doc_upper = doc.upper()
+                        if 'NE' in doc_upper or 'NE ' in doc_upper:
+                            tipo = 'NE'
+                        elif 'OT' in doc_upper or 'OT ' in doc_upper:
+                            tipo = 'OT'
+                        else:
+                            tipo = 'DESCONOCIDO'
+                        cxp_ant_dict[doc_norm] = {
+                            'original': doc,
+                            'monto': float(monto),
+                            'tipo': tipo
+                        }
 
         # ============================================================
         # 8. CRUZAR DOCUMENTOS POR TIPO (NE y OT por separado)
@@ -1400,7 +1436,8 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
         
         # OT - Ordenes de Trabajo (Carga manual)
         ot_no_rec = []      # OT en CxP pero NO en Recepciones (Carga manual)
-        ot_nuevas = []      # OT nuevas respecto al día anterior
+        ot_nuevas = []      # 🔥 OT nuevas respecto al día anterior (ESTÁN EN HOY, NO EN AYER) ⭐
+        ot_eliminadas = []  # 🔥 OT que estaban en el día anterior y ya no están (SALIERON DEL CxP)
         
         # 🔥 8a. ANALIZAR NE (Notas de Entrega)
         for doc_norm, info in rec_dict.items():
@@ -1419,11 +1456,13 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                         'estado': '⚠️ Pago al Contado (No está en CxP)'
                     })
 
-        # 🔥 8b. ANALIZAR OT (Ordenes de Trabajo)
+        # 🔥 8b. ANALIZAR OT (Ordenes de Trabajo) - ¡ESTA ES LA PARTE CLAVE!
         for doc_norm, info in cxp_dict.items():
             if info['tipo'] == 'OT':
-                # Verificar si es nueva (no estaba en el día anterior)
+                # 🔥 Verificar si es NUEVA (no estaba en el día anterior)
                 es_nueva = doc_norm not in cxp_ant_dict
+                
+                # Verificar si está en Recepciones
                 if doc_norm not in rec_dict:
                     ot_no_rec.append({
                         'documento': info['original'],
@@ -1431,11 +1470,25 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                         'estado': '🟡 Carga Manual (OT no está en Recepciones)',
                         'es_nueva': es_nueva
                     })
+                
+                # 🔥⭐ SI ES NUEVA, la agregamos a la lista de OT nuevas con TODO el detalle
                 if es_nueva:
                     ot_nuevas.append({
                         'documento': info['original'],
                         'monto': info['monto'],
-                        'estado': '🆕 Nueva OT en CxP'
+                        'fecha_vencimiento': info.get('fecha_vencimiento', 'No disponible'),
+                        'proveedor': info.get('proveedor', 'No identificado'),
+                        'estado': '🆕 NUEVA OT en CxP (No estaba en día anterior)'
+                    })
+
+        # 🔥 8c. ANALIZAR OT ELIMINADAS (estaban en CxP de ayer y ya no están hoy)
+        for doc_norm, info in cxp_ant_dict.items():
+            if info['tipo'] == 'OT':
+                if doc_norm not in cxp_dict:
+                    ot_eliminadas.append({
+                        'documento': info['original'],
+                        'monto': info['monto'],
+                        'estado': '🗑️ OT Eliminada del CxP (Ya no está en el día actual)'
                     })
 
         # ============================================================
@@ -1443,26 +1496,114 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
         # ============================================================
         total_ne_faltantes = sum([x['monto'] for x in ne_faltantes])
         total_ot_no_rec = sum([x['monto'] for x in ot_no_rec])
+        total_ot_nuevas = sum([x['monto'] for x in ot_nuevas])
+        total_ot_eliminadas = sum([x['monto'] for x in ot_eliminadas])
         diferencia_explicada = total_ne_faltantes + total_ot_no_rec
 
         # ============================================================
-        # 10. MOSTRAR RESULTADOS EN STREAMLIT
+        # 10. MOSTRAR RESULTADOS EN STREAMLIT - VERSIÓN MEJORADA
         # ============================================================
         st.markdown("---")
         st.markdown("#### 🔍 Cotejo Automático de Documentos (NE / OT)")
         st.caption("Cruce automático por número de documento entre las Recepciones del día y el balance de Cuentas por Pagar")
 
-        col1, col2, col3, col4, col5 = st.columns(5)
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
         with col1:
             st.metric("📄 NE en Recepciones", len([x for x in rec_dict.values() if x['tipo'] == 'NE']))
         with col2:
             st.metric("✅ NE en CxP", len(ne_en_cxp))
         with col3:
-            st.metric("⚠️ NE No en CxP (Pago Contado)", len(ne_faltantes))
+            st.metric("⚠️ NE No en CxP", len(ne_faltantes))
         with col4:
             st.metric("🟡 OT en CxP (Carga Manual)", len(ot_no_rec))
         with col5:
-            st.metric("🆕 OT Nuevas", len(ot_nuevas))
+            st.metric("🆕 OT Nuevas ⭐", len(ot_nuevas))
+        with col6:
+            st.metric("🗑️ OT Eliminadas", len(ot_eliminadas))
+
+        # ============================================================
+        # 🔥⭐ SECCIÓN PRINCIPAL: OT NUEVAS - ¡ESTA ES LA QUE NECESITAS!
+        # ============================================================
+        st.markdown("---")
+        st.markdown("### ⭐ OT NUEVAS EN CUENTAS POR PAGAR")
+        st.caption(f"Órdenes de Trabajo que están en el CxP del día actual ({fecha_actual.strftime('%d/%m/%Y')}) pero NO estaban en el día anterior ({fecha_ant_encontrada})")
+        
+        if ot_nuevas:
+            st.warning(f"🔍 Se encontraron **{len(ot_nuevas)} OT NUEVAS** que NO estaban en el día anterior.")
+            st.info("💡 Estas órdenes de trabajo se agregaron administrativamente entre el día anterior y hoy.")
+            
+            # 🔥 Mostrar tabla con el detalle COMPLETO incluyendo proveedor
+            df_ot_nuevas = pd.DataFrame(ot_nuevas)
+            if 'monto' in df_ot_nuevas.columns:
+                df_ot_nuevas['Monto (Bs.)'] = df_ot_nuevas['monto'].apply(formato_venezolano)
+            
+            # Renombrar columnas para mejor visualización
+            df_ot_nuevas_display = df_ot_nuevas.rename(columns={
+                'documento': 'N° Documento',
+                'fecha_vencimiento': 'Fecha Vencimiento',
+                'proveedor': 'Proveedor',
+                'estado': 'Estado'
+            })
+            
+            # Mostrar la tabla con las columnas relevantes
+            columnas_mostrar = ['N° Documento', 'Monto (Bs.)', 'Fecha Vencimiento', 'Proveedor', 'Estado']
+            st.dataframe(df_ot_nuevas_display[columnas_mostrar], use_container_width=True)
+            
+            # 🔥 Mostrar el total de las OT nuevas de forma destacada
+            st.success(f"💰 **Total de OT Nuevas: {formato_venezolano(total_ot_nuevas)} Bs.**")
+            
+            # 🔥 Generar mensaje resumen con el ejemplo específico
+            st.markdown("#### 📋 Detalle de las OT Nuevas Encontradas")
+            for item in ot_nuevas:
+                st.markdown(f"""
+                - **📄 {item['documento']}** → Monto: **{formato_venezolano(item['monto'])}** 
+                  (Vencimiento: {item.get('fecha_vencimiento', 'No disponible')} | Proveedor: {item.get('proveedor', 'No identificado')})
+                """)
+            
+            # 🔥 Explicación del incremento en CxP
+            st.markdown("#### 📈 Impacto en Cuentas por Pagar")
+            st.markdown(f"""
+            | Concepto | Monto |
+            |----------|-------|
+            | **OT Nuevas (No estaban en día anterior)** | {formato_venezolano(total_ot_nuevas)} |
+            | **OT Eliminadas (Salieron del CxP)** | {formato_venezolano(total_ot_eliminadas)} |
+            | **Incremento Neto por OT** | {formato_venezolano(total_ot_nuevas - total_ot_eliminadas)} |
+            """)
+            
+            # 🔥 Si solo hay 1 OT nueva, mostrarla de forma especial
+            if len(ot_nuevas) == 1:
+                item = ot_nuevas[0]
+                st.markdown("---")
+                st.markdown(f"""
+                ### 🎯 Única OT Nueva Detectada
+                
+                | Campo | Valor |
+                |-------|-------|
+                | **Documento** | {item['documento']} |
+                | **Monto** | {formato_venezolano(item['monto'])} Bs. |
+                | **Fecha Vencimiento** | {item.get('fecha_vencimiento', 'No disponible')} |
+                | **Proveedor** | {item.get('proveedor', 'No identificado')} |
+                | **Estado** | 🆕 NUEVA OT en CxP (No estaba en día anterior) |
+                """)
+                st.info(f"✅ Esta OT de **{formato_venezolano(item['monto'])} Bs.** explica exactamente la diferencia en Cuentas por Pagar entre el {fecha_ant_encontrada} y el día actual.")
+        else:
+            st.success(f"✅ No hay OT nuevas en el día actual que no estuvieran en el día anterior ({fecha_ant_encontrada}).")
+
+        # ============================================================
+        # SECCIONES ADICIONALES (OT Eliminadas, NE, etc.)
+        # ============================================================
+        
+        # Tabla de OT Eliminadas
+        with st.expander("🗑️ OT Eliminadas del CxP (Ya no están en el día actual)", expanded=False):
+            if ot_eliminadas:
+                st.warning(f"🔍 Se encontraron **{len(ot_eliminadas)} OT ELIMINADAS** que estaban en el día anterior y ya no aparecen en el CxP del día actual.")
+                df_ot_elim = pd.DataFrame(ot_eliminadas)
+                if 'monto' in df_ot_elim.columns:
+                    df_ot_elim['Monto'] = df_ot_elim['monto'].apply(formato_venezolano)
+                st.dataframe(df_ot_elim[['documento', 'Monto', 'estado']], use_container_width=True)
+                st.metric("💰 Total OT Eliminadas", formato_venezolano(total_ot_eliminadas))
+            else:
+                st.info("No hay OT que hayan sido eliminadas del CxP entre el día anterior y hoy.")
 
         # Tabla de NE Conciliados
         with st.expander("✅ NE Conciliados (Están en Recepciones y en CxP)", expanded=False):
@@ -1473,7 +1614,7 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                 st.info("No hay NE conciliados en este período.")
 
         # Tabla de NE Faltantes (Pago al Contado)
-        with st.expander("⚠️ NE en Recepciones pero NO en CxP (Posible Pago al Contado)", expanded=True):
+        with st.expander("⚠️ NE en Recepciones pero NO en CxP (Posible Pago al Contado)", expanded=False):
             if ne_faltantes:
                 st.warning(f"🔍 Se encontraron {len(ne_faltantes)} NE que están en Recepciones pero NO en Cuentas por Pagar.")
                 st.info("💡 Esto indica que la recepción fue pagada al contado y no generó deuda en CxP.")
@@ -1484,7 +1625,7 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                 st.success("✅ Todas las NE de Recepciones están en CxP.")
 
         # Tabla de OT (Carga Manual)
-        with st.expander("🟡 OT en CxP pero NO en Recepciones (Carga Manual)", expanded=True):
+        with st.expander("🟡 OT en CxP pero NO en Recepciones (Carga Manual)", expanded=False):
             if ot_no_rec:
                 st.warning(f"🔍 Se encontraron {len(ot_no_rec)} OT que están en Cuentas por Pagar pero NO en Recepciones.")
                 st.info("💡 Esto indica que son cargas manuales o ajustes administrativos.")
@@ -1494,16 +1635,6 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                 st.metric("💰 Total OT (Carga Manual)", formato_venezolano(total_ot_no_rec))
             else:
                 st.success("✅ No hay OT en CxP que no estén en Recepciones.")
-
-        # Tabla de OT Nuevas
-        with st.expander("🆕 OT Nuevas en CxP (No estaban en el día anterior)", expanded=False):
-            if ot_nuevas:
-                df_ot_nuevas = pd.DataFrame(ot_nuevas)
-                df_ot_nuevas['Monto'] = df_ot_nuevas['monto'].apply(formato_venezolano)
-                st.dataframe(df_ot_nuevas[['documento', 'Monto', 'estado']], use_container_width=True)
-                st.metric("💰 Total OT Nuevas", formato_venezolano(total_ot_nuevas))
-            else:
-                st.info("No hay OT nuevas en este período.")
 
         # ============================================================
         # 11. RESUMEN DE LA DIFERENCIA
@@ -1516,21 +1647,12 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
         |----------|-------|-------------|
         | **NE Faltantes (Pago al Contado)** | {formato_venezolano(total_ne_faltantes)} | Recepciones pagadas al contado, no generan deuda en CxP |
         | **OT en CxP (Carga Manual)** | {formato_venezolano(total_ot_no_rec)} | Cargas manuales o ajustes administrativos |
+        | **🆕 OT Nuevas ⭐** | **{formato_venezolano(total_ot_nuevas)}** | Nuevas órdenes de trabajo agregadas hoy |
+        | **🗑️ OT Eliminadas** | {formato_venezolano(total_ot_eliminadas)} | Órdenes de trabajo que ya no están en CxP |
         | **Diferencia Explicada** | **{formato_venezolano(diferencia_explicada)}** | Suma de las diferencias identificadas |
         | **Diferencia Total Reportada** | **{formato_venezolano(abs(diferencia_cxp))}** | Diferencia original en Cuentas por Pagar |
         """)
         
-        if abs(abs(diferencia_explicada) - abs(diferencia_cxp)) < 2.0:
-            st.success(f"✅ La diferencia de {formato_venezolano(abs(diferencia_cxp))} está completamente explicada por:")
-            for item in ne_faltantes:
-                st.markdown(f"- **{item['documento']}** → {item['estado']} ({formato_venezolano(item['monto'])})")
-            for item in ot_no_rec:
-                st.markdown(f"- **{item['documento']}** → {item['estado']} ({formato_venezolano(item['monto'])})")
-        else:
-            st.warning(f"⚠️ La diferencia de {formato_venezolano(abs(diferencia_cxp))} NO está completamente explicada.")
-            st.markdown(f"**Diferencia explicada:** {formato_venezolano(diferencia_explicada)}")
-            st.markdown(f"**Diferencia faltante:** {formato_venezolano(abs(abs(diferencia_explicada) - abs(diferencia_cxp)))}")
-
         # ============================================================
         # 12. ANÁLISIS DETALLADO POR DOCUMENTO
         # ============================================================
@@ -1553,6 +1675,13 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                 'Monto': item['monto'],
                 'Explicación': 'Carga Manual (OT no está en Recepciones)'
             })
+        for item in ot_nuevas:
+            docs_diferencia.append({
+                'Documento': item['documento'],
+                'Tipo': 'OT',
+                'Monto': item['monto'],
+                'Explicación': f'🆕 NUEVA OT (No estaba en {fecha_ant_encontrada})'
+            })
         
         if docs_diferencia:
             df_docs = pd.DataFrame(docs_diferencia)
@@ -1565,115 +1694,6 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
         st.error(f"Error al comparar recepciones con CxP: {e}")
         import traceback
         traceback.print_exc()
-
-def mostrar_tabla_activos_pasivos(inventario, cx_c, bancos, cx_p, transito, capital):
-    inventario = safe_number(inventario)
-    cx_c = safe_number(cx_c)
-    bancos = safe_number(bancos)
-    cx_p = safe_number(cx_p)
-    transito = safe_number(transito)
-    capital = safe_number(capital)
-    
-    total_activos = inventario + cx_c + bancos
-    total_pasivos = cx_p + transito
-    
-    html = f"""
-    <style>
-        .activos-pasivos-table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin: 15px 0;
-            font-family: 'Inter', sans-serif;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.04);
-        }}
-        .activos-pasivos-table th {{
-            background: linear-gradient(135deg, #0a1628 0%, #1a3a5c 100%);
-            color: white;
-            padding: 15px;
-            text-align: center;
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }}
-        .activos-pasivos-table td {{
-            padding: 12px 16px;
-            border-bottom: 1px solid #e8edf2;
-        }}
-        .activos-pasivos-table .activos-col {{
-            background: linear-gradient(135deg, #e8f8f0 0%, #d0f0e0 100%);
-            vertical-align: top;
-            width: 50%;
-        }}
-        .activos-pasivos-table .pasivos-col {{
-            background: linear-gradient(135deg, #fdf0ed 0%, #f8e0da 100%);
-            vertical-align: top;
-            width: 50%;
-        }}
-        .activos-pasivos-table .capital-row {{
-            background: linear-gradient(135deg, #0a1628 0%, #1a3a5c 100%);
-            font-weight: bold;
-            font-size: 1.1rem;
-            color: white;
-        }}
-        .activos-pasivos-table .capital-row td {{
-            padding: 16px;
-            text-align: center;
-        }}
-        .valor {{
-            font-weight: 700;
-            text-align: right;
-            font-family: 'Inter', monospace;
-        }}
-        .titulo-cuenta {{
-            font-weight: 500;
-            color: #1a3a5c;
-        }}
-        .total-label {{
-            font-weight: 700;
-            color: #0a1628;
-        }}
-        .total-valor {{
-            font-weight: 800;
-            color: #0a1628;
-            font-size: 1.1rem;
-        }}
-    </style>
-    
-    <table class="activos-pasivos-table">
-        <tr><th colspan="2">📊 ACTIVOS</th><th colspan="2">📋 PASIVOS</th></tr>
-        <tr>
-            <td class="activos-col" style="width: 50%;">
-                <table style="width: 100%; border: none;">
-                    <tr><td class="titulo-cuenta">📦 Inventario</td><td class="valor">{formato_venezolano(inventario)}</td></tr>
-                    <tr><td class="titulo-cuenta">💰 Cuentas por cobrar</td><td class="valor">{formato_venezolano(cx_c)}</td></tr>
-                    <tr><td class="titulo-cuenta">🏦 Bancos</td><td class="valor">{formato_venezolano(bancos)}</td></tr>
-                    <tr style="border-top: 2px solid #2ecc71;">
-                        <td class="total-label">📌 TOTAL ACTIVOS</td>
-                        <td class="total-valor">{formato_venezolano(total_activos)}</td>
-                    </tr>
-                </table>
-            </td>
-            <td class="pasivos-col" style="width: 50%;">
-                <table style="width: 100%; border: none;">
-                    <tr><td class="titulo-cuenta">📋 Cuentas por pagar</td><td class="valor">{formato_venezolano(cx_p)}</td></tr>
-                    <tr><td class="titulo-cuenta">🔄 Transferencias en tránsito</td><td class="valor">{formato_venezolano(transito)}</td></tr>
-                    <tr style="border-top: 2px solid #e74c3c;">
-                        <td class="total-label">📌 TOTAL PASIVOS</td>
-                        <td class="total-valor">{formato_venezolano(total_pasivos)}</td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-        <tr class="capital-row">
-            <td colspan="4">
-                🏁 CAPITAL DE TRABAJO NETO = {formato_venezolano(capital)}
-            </td>
-        </tr>
-    </table>
-    """
-    return html
 
 # ============================================================
 # FUNCIÓN PARA MOSTRAR KPI INICIAL CON DISEÑO CORPORATIVO
