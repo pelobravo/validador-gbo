@@ -157,6 +157,15 @@ def inicializar_bd():
         if 'empresa' not in cols_alertas:
             cursor.execute("ALTER TABLE alertas_diarias ADD COLUMN empresa TEXT DEFAULT 'General';")
             
+        # Para reporte_consolidado
+        cursor.execute("PRAGMA table_info(reporte_consolidado);")
+        cols_consolidado = [row[1] for row in cursor.fetchall()]
+        if cols_consolidado:
+            if 'fecha' not in cols_consolidado:
+                cursor.execute("ALTER TABLE reporte_consolidado ADD COLUMN fecha TEXT;")
+            if 'empresa' not in cols_consolidado:
+                cursor.execute("ALTER TABLE reporte_consolidado ADD COLUMN empresa TEXT DEFAULT 'General';")
+            
         conn.commit()
     finally:
         conn.close()
@@ -593,10 +602,12 @@ def ejecutar_auditoria_inteligente(file_facturacion, file_cobranzas, file_ipago,
     df_ipag_n = normalize_cols(df_ipag, 'iPago')
     df_bnco_n = normalize_cols(df_bnco, 'Banco')
     
-    # 3. Consolidar el lado del sistema (Solo Cobranzas para cruzar ingresos; iPago se excluye del cruce bancario)
+    # 3. Consolidar el lado del sistema (Cobranzas para ingresos y egresos iPago para egresos)
     system_dfs = []
     if df_cobr_n is not None and not df_cobr_n.empty:
         system_dfs.append(df_cobr_n)
+    if df_ipag_n is not None and not df_ipag_n.empty:
+        system_dfs.append(df_ipag_n)
         
     if system_dfs:
         df_sistema = pd.concat(system_dfs, ignore_index=True)
@@ -877,4 +888,3 @@ def ejecutar_auditoria_inteligente(file_facturacion, file_cobranzas, file_ipago,
     hay_errores = any(f['tipo'] in ['ROJA', 'AMARILLA', 'NARANJA'] for f in fallas_detectadas)
     
     return hay_errores, fallas_detectadas, df_consolidado
-
