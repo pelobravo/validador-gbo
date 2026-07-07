@@ -1321,7 +1321,8 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
         cxp_sobrantes = []
         for doc_norm, info in cxp_dict.items():
             if doc_norm not in rec_dict:
-                if any(pref in doc_norm for pref in ['NE', 'OT', 'RECE', 'REC', 'ODT']):
+                orig_upper = info['original'].upper()
+                if any(pref in orig_upper for pref in ['NE', 'OT', 'RECE', 'REC', 'ODT']):
                     cxp_sobrantes.append({
                         'documento': info['original'],
                         'monto': info['monto']
