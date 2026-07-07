@@ -6,16 +6,16 @@
 import os
 
 # =============================================
-# 1. RUTAS DEL SISTEMA (Ajustar según su servidor)
+# 1. RUTAS DEL SISTEMA (Auto-detecta el entorno)
 # =============================================
 
-# Windows (usar esta)
-RUTA_BASE = r"C:\CONCILIACION_GBO"
+# 🔥 OBTENER LA CARPETA DONDE ESTÁ ESTE ARCHIVO
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Linux/Mac (descomentar y comentar la de Windows)
-# RUTA_BASE = "/home/usuario/CONCILIACION_GBO"
+# 🔥 USAR RUTAS RELATIVAS (funciona en cualquier entorno)
+RUTA_BASE = BASE_DIR
 
-# Subcarpetas
+# Subcarpetas (se crearán automáticamente)
 RUTA_ARCHIVOS = os.path.join(RUTA_BASE, "01_ARCHIVOS_SUBIDOS")
 RUTA_BASE_DATOS = os.path.join(RUTA_BASE, "02_BASE_DATOS")
 RUTA_LOGS = os.path.join(RUTA_BASE, "03_LOG_AUDITORIA")
@@ -24,7 +24,7 @@ RUTA_REPORTES = os.path.join(RUTA_BASE, "05_REPORTES")
 RUTA_DOCS = os.path.join(RUTA_BASE, "06_DOCUMENTACION")
 
 # =============================================
-# 2. USUARIOS DEL SISTEMA (Tarea 4)
+# 2. USUARIOS DEL SISTEMA (CON EMPRESA ASIGNADA)
 # =============================================
 
 USUARIOS = {
@@ -32,55 +32,64 @@ USUARIOS = {
         "nombre": "Marian Guaipo",
         "email": "marianguaipo@grupobodeguita.com",
         "rol": "analista",
-        "password": "cambiar123"  # CAMBIAR en primera ejecución
+        "password": "cambiar123",
+        "empresa": "Bodeguita Guayana"  # 🔥 NUEVO
     },
     "analista2": {
         "nombre": "Francia Mota",
         "email": "franciamota@grupobodeguita.com",
         "rol": "analista",
-        "password": "cambiar123"
+        "password": "cambiar123",
+        "empresa": "Bodeguita Monagas"  # 🔥 NUEVO
     },
     "analista3": {
         "nombre": "Carmen Villahermosa",
         "email": "carmenvillahermosa@grupobodeguita.com",
         "rol": "analista",
-        "password": "cambiar123"
+        "password": "cambiar123",
+        "empresa": "Bodeguita Anzoátegui"  # 🔥 NUEVO
     },
     "analista4": {
         "nombre": "Aura Galán",
         "email": "auragalan@grupobodeguita.com",
         "rol": "analista",
-        "password": "cambiar123"
+        "password": "cambiar123",
+        "empresa": "Bodeguita Nororiental"  # 🔥 NUEVO
     },
     "analista5": {
         "nombre": "Ismariely Gómez",
         "email": "ismarielygomez@grupobodeguita.com",
         "rol": "analista",
-        "password": "cambiar123"
+        "password": "cambiar123",
+        "empresa": "Nexo Comercial"  # 🔥 SU EMPRESA CORRECTA
     },
     "analista6": {
         "nombre": "Mayerlin Rondón",
         "email": "mayerlinrondon@grupobodeguita.com",
         "rol": "analista",
-        "password": "cambiar123"
+        "password": "cambiar123",
+        "empresa": "Bodeguita Corporación"  # 🔥 NUEVO
     },
     "supervisor1": {
         "nombre": "Mayerlin Rondón",
         "email": "mayerlinrondon@grupobodeguita.com",
         "rol": "supervisor",
-        "password": "cambiar123"
+        "password": "cambiar123",
+        "empresa": "📊 Dashboard General"  # 🔥 NUEVO
     },
     "auditor1": {
         "nombre": "Gabriel Palomo",
         "email": "gabrielpalomo@grupobodeguita.com",
         "rol": "auditor",
-        "password": "cambiar123"
+        "password": "cambiar123",
+        "empresa": "📊 Dashboard General"  # 🔥 NUEVO
     },
     "admin": {
         "nombre": "Administrador",
         "email": "carlos.marcano@grupobodeguita.com",
         "rol": "admin",
-        "password": "admin123"  # CAMBIAR después de la primera ejecución
+        "password": "admin123",
+        "empresa": "📊 Dashboard General"  # 🔥 NUEVO
     }
 }
 
@@ -176,6 +185,13 @@ def get_usuario_info(usuario_id):
         return USUARIOS[usuario_id]
     return None
 
+def get_empresa_usuario(usuario_id):
+    """Obtiene la empresa asignada a un usuario"""
+    
+    if usuario_id in USUARIOS:
+        return USUARIOS[usuario_id].get("empresa", "General")
+    return "General"
+
 # =============================================
 # 10. VALIDAR QUE LAS CARPETAS EXISTAN
 # =============================================
@@ -195,11 +211,12 @@ def validar_carpetas():
     
     for carpeta in carpetas:
         os.makedirs(carpeta, exist_ok=True)
+        print(f"📂 Carpeta validada/creada: {carpeta}")
     
     print("✅ Carpetas validadas/creadas correctamente")
+    print(f"📁 Ruta base: {RUTA_BASE}")
+    print(f"👥 Usuarios cargados: {len(USUARIOS)}")
 
 # Si ejecutan este archivo directamente, validar carpetas
 if __name__ == "__main__":
     validar_carpetas()
-    print(f"📁 Ruta base: {RUTA_BASE}")
-    print(f"👥 Usuarios cargados: {len(USUARIOS)}")
