@@ -1293,34 +1293,74 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                         if doc_norm:
                             cxp_ant_dict[doc_norm] = {'original': doc, 'monto': float(monto)}
 
-        # 6. Cruzar información
+        # 6. Cruzar Recepciones por fila para evitar duplicados cuando hay múltiples columnas de referencia
         rec_encontradas_hoy = []
         rec_encontradas_ayer = []
         rec_faltantes = []
         
-        for doc_norm, info in rec_dict.items():
-            if doc_norm in cxp_dict:
+        # Guardamos qué documentos de CxP fueron cruzados para saber cuáles quedan pendientes
+        docs_cxp_cruzados = set()
+        
+        for idx, row in df_rec_clean.iterrows():
+            monto = ProcesadorArchivos._convertir_numero_europeo(row[col_rec_monto])
+            if not monto:
+                continue
+            monto = float(monto)
+            
+            # Obtener todas las referencias de esta fila
+            refs_fila = []
+            for col_doc in cols_doc_rec:
+                doc = str(row[col_doc]).strip()
+                if doc and doc != 'nan' and doc != 'None':
+                    doc_norm = re.sub(r'[^0-9]', '', doc)
+                    doc_norm = re.sub(r'^0+', '', doc_norm)
+                    if doc_norm:
+                        refs_fila.append((doc, doc_norm))
+                        
+            if not refs_fila:
+                continue
+                
+            # Buscar coincidencia en CxP de hoy
+            match_hoy = None
+            for doc_orig, doc_norm in refs_fila:
+                if doc_norm in cxp_dict:
+                    match_hoy = cxp_dict[doc_norm]
+                    docs_cxp_cruzados.add(doc_norm)
+                    break
+                    
+            if match_hoy:
                 rec_encontradas_hoy.append({
-                    'documento': info['original'],
-                    'monto_rec': info['monto'],
-                    'monto_cxp': cxp_dict[doc_norm]['monto']
+                    'documento': refs_fila[0][0], # Usar la primera referencia como etiqueta
+                    'monto_rec': monto,
+                    'monto_cxp': match_hoy['monto']
                 })
-            elif doc_norm in cxp_ant_dict:
+                continue
+                
+            # Buscar coincidencia en CxP de ayer
+            match_ayer = None
+            for doc_orig, doc_norm in refs_fila:
+                if doc_norm in cxp_ant_dict:
+                    match_ayer = cxp_ant_dict[doc_norm]
+                    break
+                    
+            if match_ayer:
                 rec_encontradas_ayer.append({
-                    'documento': info['original'],
-                    'monto_rec': info['monto'],
-                    'monto_cxp_ant': cxp_ant_dict[doc_norm]['monto']
+                    'documento': refs_fila[0][0],
+                    'monto_rec': monto,
+                    'monto_cxp_ant': match_ayer['monto']
                 })
-            else:
-                rec_faltantes.append({
-                    'documento': info['original'],
-                    'monto': info['monto']
-                })
+                continue
+                
+            # Si no coincide en ninguna, es faltante
+            rec_faltantes.append({
+                'documento': refs_fila[0][0],
+                'monto': monto
+            })
 
-        # Notas en CxP de hoy con prefijo NE o OT que no están en Recepciones del día
+        # Notas en CxP de hoy que no fueron cruzadas con ninguna Recepción
         cxp_sobrantes = []
         for doc_norm, info in cxp_dict.items():
-            if doc_norm not in rec_dict:
+            if doc_norm not in docs_cxp_cruzados:
                 orig_upper = info['original'].upper()
                 if any(pref in orig_upper for pref in ['NE', 'OT', 'RECE', 'REC', 'ODT']):
                     cxp_sobrantes.append({
@@ -1366,6 +1406,44 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                 if abs(diff_monto - target_diff) <= tolerance:
                     propuestas.append([candidatos[i], candidatos[j]])
 
+        # 8. Analizar novedades/actividad respecto al día anterior
+        novedades_cxp = []
+        if df_cxp_ant_clean is not None:
+            # Buscar nuevos o modificados
+            for doc_norm, info in cxp_dict.items():
+                orig_upper = info['original'].upper()
+                if any(pref in orig_upper for pref in ['NE', 'OT', 'RECE', 'REC', 'ODT']):
+                    if doc_norm not in cxp_ant_dict:
+                        novedades_cxp.append({
+                            'Documento': info['original'],
+                            'Estado': '🆕 Nuevo en CxP',
+                            'Monto Anterior': 0.0,
+                            'Monto Actual': info['monto'],
+                            'Variación': info['monto']
+                        })
+                    else:
+                        monto_ant = cxp_ant_dict[doc_norm]['monto']
+                        if abs(monto_ant - info['monto']) > 0.01:
+                            novedades_cxp.append({
+                                'Documento': info['original'],
+                                'Estado': '🔄 Saldo Modificado',
+                                'Monto Anterior': monto_ant,
+                                'Monto Actual': info['monto'],
+                                'Variación': info['monto'] - monto_ant
+                            })
+            # Buscar retirados
+            for doc_norm, info in cxp_ant_dict.items():
+                orig_upper = info['original'].upper()
+                if any(pref in orig_upper for pref in ['NE', 'OT', 'RECE', 'REC', 'ODT']):
+                    if doc_norm not in cxp_dict:
+                        novedades_cxp.append({
+                            'Documento': info['original'],
+                            'Estado': '❌ Retirado / Liquidado',
+                            'Monto Anterior': info['monto'],
+                            'Monto Actual': 0.0,
+                            'Variación': -info['monto']
+                        })
+
         # Filtrar listas por participantes de propuestas
         rec_faltantes_mostrar = rec_faltantes
         cxp_sobrantes_mostrar = cxp_sobrantes
@@ -1404,7 +1482,7 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
             st.metric("📝 Pendientes en CxP (NE/OT)", len(cxp_sobrantes_mostrar))
             
         with st.expander("📋 Detalle del Cotejo de Documentos", expanded=True):
-            t1, t2, t3, t4 = st.tabs(["Conciliados Hoy", "Conciliados Ayer", "No en CxP (Contado)", "Pendientes en CxP"])
+            t1, t2, t3, t4, t5 = st.tabs(["Conciliados Hoy", "Conciliados Ayer", "No en CxP (Contado)", "Pendientes en CxP", "🔄 Actividad vs Cierre Anterior"])
             
             with t1:
                 if rec_encontradas_hoy:
@@ -1439,6 +1517,18 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                     st.dataframe(df_sob, use_container_width=True)
                 else:
                     st.info("No hay documentos que cumplan con este criterio.")
+                    
+            with t5:
+                if novedades_cxp:
+                    st.info(f"📝 **Documentos NE/OT que variaron su saldo, se crearon o se liquidaron hoy respecto al cierre anterior ({fecha_ant_encontrada if fecha_ant_encontrada else 'Ayer'}):**")
+                    df_nov = pd.DataFrame(novedades_cxp)
+                    # Formatear columnas numéricas
+                    df_nov["Monto Anterior"] = df_nov["Monto Anterior"].apply(formato_venezolano)
+                    df_nov["Monto Actual"] = df_nov["Monto Actual"].apply(formato_venezolano)
+                    df_nov["Variación"] = df_nov["Variación"].apply(formato_venezolano)
+                    st.dataframe(df_nov, use_container_width=True)
+                else:
+                    st.info("No se detectaron variaciones en saldos de NE/OT respecto al cierre anterior.")
                     
     except Exception as e:
         print(f"Error al comparar recepciones con CxP: {e}")
