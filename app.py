@@ -1156,11 +1156,11 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
         idx_rec = None
         for idx, row in df_rec_clean.iterrows():
             row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-            if 'compra' in row_str and 'proveedor' in row_str and 'f. recepción' in row_str:
+            if 'compra' in row_str and 'proveedor' in row_str and 'recep' in row_str:
                 idx_rec = idx
                 break
         if idx_rec is None:
-            idx_rec = ProcesadorArchivos._encontrar_fila_datos(df_rec_clean, ['compra', 'proveedor', 'f. recepción'])
+            idx_rec = ProcesadorArchivos._encontrar_fila_datos(df_rec_clean, ['compra', 'proveedor', 'recep'])
         if idx_rec is not None and idx_rec >= 0 and idx_rec < len(df_rec_clean):
             df_datos = df_rec_clean.iloc[idx_rec:].reset_index(drop=True)
             if len(df_datos) > 0:
@@ -1223,16 +1223,18 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
 
         # 4. Buscar columnas clave en Recepciones (Búsqueda multi-columna para referencias)
         cols_doc_rec = []
-        # Priorizar columnas de factura/proveedor para que sea la primera referencia (etiqueta principal)
+        # Si contiene 'fact', es la factura del proveedor (etiqueta principal)
         for col in df_rec_clean.columns:
             col_l = str(col).lower()
-            if any(k in col_l for k in ['fact', 'provee']):
+            if 'fact' in col_l:
                 cols_doc_rec.append(col)
+        # Buscar luego compra, doc, nro, ref, excluyendo nombres de proveedor, códigos, RIFs y montos
         for col in df_rec_clean.columns:
             col_l = str(col).lower()
-            if any(k in col_l for k in ['compra', 'doc', 'nro', 'ref']):
-                if col not in cols_doc_rec:
-                    cols_doc_rec.append(col)
+            if any(k in col_l for k in ['compra', 'documento', 'nro_doc', 'referencia', 'nro', 'ref']):
+                if not any(k in col_l for k in ['proveedor', 'prov', 'rif', 'nombre', 'fecha', 'monto', 'total', 'neto', 'iva', 'cod']):
+                    if col not in cols_doc_rec:
+                        cols_doc_rec.append(col)
                 
         col_rec_monto = None
         for col in df_rec_clean.columns:
