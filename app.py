@@ -994,6 +994,115 @@ def formatear_diferencia(valor_calculado, valor_reportado):
     else:
         return f"📉 {formato_venezolano(diferencia)}"
 
+def mostrar_tabla_activos_pasivos(inventario, cx_c, bancos, cx_p, transito, capital):
+    inventario = safe_number(inventario)
+    cx_c = safe_number(cx_c)
+    bancos = safe_number(bancos)
+    cx_p = safe_number(cx_p)
+    transito = safe_number(transito)
+    capital = safe_number(capital)
+    
+    total_activos = inventario + cx_c + bancos
+    total_pasivos = cx_p + transito
+    
+    html = f"""
+    <style>
+        .activos-pasivos-table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-family: 'Inter', sans-serif;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.04);
+        }}
+        .activos-pasivos-table th {{
+            background: linear-gradient(135deg, #0a1628 0%, #1a3a5c 100%);
+            color: white;
+            padding: 15px;
+            text-align: center;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+        .activos-pasivos-table td {{
+            padding: 12px 16px;
+            border-bottom: 1px solid #e8edf2;
+        }}
+        .activos-pasivos-table .activos-col {{
+            background: linear-gradient(135deg, #e8f8f0 0%, #d0f0e0 100%);
+            vertical-align: top;
+            width: 50%;
+        }}
+        .activos-pasivos-table .pasivos-col {{
+            background: linear-gradient(135deg, #fdf0ed 0%, #f8e0da 100%);
+            vertical-align: top;
+            width: 50%;
+        }}
+        .activos-pasivos-table .capital-row {{
+            background: linear-gradient(135deg, #0a1628 0%, #1a3a5c 100%);
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: white;
+        }}
+        .activos-pasivos-table .capital-row td {{
+            padding: 16px;
+            text-align: center;
+        }}
+        .valor {{
+            font-weight: 700;
+            text-align: right;
+            font-family: 'Inter', monospace;
+        }}
+        .titulo-cuenta {{
+            font-weight: 500;
+            color: #1a3a5c;
+        }}
+        .total-label {{
+            font-weight: 700;
+            color: #0a1628;
+        }}
+        .total-valor {{
+            font-weight: 800;
+            color: #0a1628;
+            font-size: 1.1rem;
+        }}
+    </style>
+    
+    <table class="activos-pasivos-table">
+        <tr><th colspan="2">📊 ACTIVOS</th><th colspan="2">📋 PASIVOS</th></tr>
+        <tr>
+            <td class="activos-col" style="width: 50%;">
+                <table style="width: 100%; border: none;">
+                    <tr><td class="titulo-cuenta">📦 Inventario</td><td class="valor">{formato_venezolano(inventario)}</td></tr>
+                    <tr><td class="titulo-cuenta">💰 Cuentas por cobrar</td><td class="valor">{formato_venezolano(cx_c)}</td></tr>
+                    <tr><td class="titulo-cuenta">🏦 Bancos</td><td class="valor">{formato_venezolano(bancos)}</td></tr>
+                    <tr style="border-top: 2px solid #2ecc71;">
+                        <td class="total-label">📌 TOTAL ACTIVOS</td>
+                        <td class="total-valor">{formato_venezolano(total_activos)}</td>
+                    </tr>
+                </table>
+            </td>
+            <td class="pasivos-col" style="width: 50%;">
+                <table style="width: 100%; border: none;">
+                    <tr><td class="titulo-cuenta">📋 Cuentas por pagar</td><td class="valor">{formato_venezolano(cx_p)}</td></tr>
+                    <tr><td class="titulo-cuenta">🔄 Transferencias en tránsito</td><td class="valor">{formato_venezolano(transito)}</td></tr>
+                    <tr style="border-top: 2px solid #e74c3c;">
+                        <td class="total-label">📌 TOTAL PASIVOS</td>
+                        <td class="total-valor">{formato_venezolano(total_pasivos)}</td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        <tr class="capital-row">
+            <td colspan="4">
+                🏁 CAPITAL DE TRABAJO NETO = {formato_venezolano(capital)}
+            </td>
+        </tr>
+    </table>
+    """
+    return html
+
 def extraer_transito_reportado(df, transito_inicial):
     try:
         if df is None or df.empty:
