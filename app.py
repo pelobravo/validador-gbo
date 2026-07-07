@@ -1242,6 +1242,13 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
         col_cxp_monto = ProcesadorArchivos._buscar_columna(df_cxp_clean, 'saldo', 'saldo pendt', 'pendiente', 'monto')
 
         if not col_rec_doc or not col_cxp_doc or not col_rec_monto or not col_cxp_monto:
+            st.warning(
+                f"⚠️ **Cotejo de documentos deshabilitado**: No se pudieron identificar las columnas requeridas en los archivos.\n"
+                f"- Documento en Recepciones: {'✅ Encontrado (' + str(col_rec_doc) + ')' if col_rec_doc else '❌ No encontrado (buscaba: documento, doc, factura, compra, nro)'}\n"
+                f"- Monto en Recepciones: {'✅ Encontrado (' + str(col_rec_monto) + ')' if col_rec_monto else '❌ No encontrado (buscaba: neto, total)'}\n"
+                f"- Documento en CxP: {'✅ Encontrado (' + str(col_cxp_doc) + ')' if col_cxp_doc else '❌ No encontrado (buscaba: documento, doc, factura, nro_doc, referencia)'}\n"
+                f"- Monto en CxP: {'✅ Encontrado (' + str(col_cxp_monto) + ')' if col_cxp_monto else '❌ No encontrado (buscaba: saldo, saldo pendt, pendiente, monto)'}"
+            )
             return
 
         # 5. Extraer conjuntos de documentos con sus montos
