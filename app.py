@@ -2760,29 +2760,53 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         if df is None or df.empty:
             return cands
         try:
+            # Función auxiliar para formatear la información de una fila
+            def get_row_info(row, idx, col_name):
+                ref_val = ""
+                desc_val = ""
+                for c in df.columns:
+                    c_lower = str(c).lower()
+                    val_str = str(row[c]).strip()
+                    if val_str and val_str != 'nan' and val_str != 'None':
+                        if any(k in c_lower for k in ['referencia', 'ref', 'documento', 'doc', 'nro', 'factura', 'soporte']):
+                            ref_val = val_str
+                        elif any(k in c_lower for k in ['descripcion', 'desc', 'concepto', 'tipo', 'cliente', 'proveedor', 'beneficiario', 'nombre']):
+                            desc_val = val_str
+                info = f"Fila {idx+1}: Monto {row[col_name]}"
+                if ref_val:
+                    info += f" | Ref: {ref_val}"
+                if desc_val:
+                    info += f" | Detalle: {desc_val[:40]}"
+                return info
+
             for col in df.columns:
                 try:
                     col_str = df[col].astype(str)
                     col_num = pd.to_numeric(col_str.str.replace(r'[^\d\.\-]', '', regex=True), errors='coerce').fillna(0.0)
+                    
+                    # 1. Búsqueda individual
                     matches = df[abs(col_num - abs(target_val)) <= tolerance]
                     for idx, row in matches.iterrows():
-                        ref_val = ""
-                        desc_val = ""
-                        # Intentar extraer referencia y descripción
-                        for c in df.columns:
-                            c_lower = str(c).lower()
-                            val_str = str(row[c]).strip()
-                            if val_str and val_str != 'nan' and val_str != 'None':
-                                if any(k in c_lower for k in ['referencia', 'ref', 'documento', 'doc', 'nro', 'factura', 'soporte']):
-                                    ref_val = val_str
-                                elif any(k in c_lower for k in ['descripcion', 'desc', 'concepto', 'tipo', 'cliente', 'proveedor', 'beneficiario', 'nombre']):
-                                    desc_val = val_str
-                        details = f"Fila {idx+1}: Monto {row[col]}"
-                        if ref_val:
-                            details += f" | Ref: {ref_val}"
-                        if desc_val:
-                            details += f" | Detalle: {desc_val[:60]}"
-                        cands.append(f"📁 {label_origen} -> {details}")
+                        cands.append(f"📁 {label_origen} -> {get_row_info(row, idx, col)}")
+                        
+                    # 2. Búsqueda de combinaciones de 2 transacciones (parejas)
+                    valores_validos = [(idx, val) for idx, val in col_num.items() if val > 0.01]
+                    n = len(valores_validos)
+                    target_abs = abs(target_val)
+                    
+                    if n < 300: # Evitar lentitud en archivos extremadamente grandes
+                        for i in range(n):
+                            for j in range(i + 1, n):
+                                idx1, val1 = valores_validos[i]
+                                idx2, val2 = valores_validos[j]
+                                if abs((val1 + val2) - target_abs) <= tolerance:
+                                    info1 = get_row_info(df.loc[idx1], idx1, col)
+                                    info2 = get_row_info(df.loc[idx2], idx2, col)
+                                    cands.append(
+                                        f"📁 {label_origen} (Suma de 2 transacciones) -> \n"
+                                        f"   * {info1}\n"
+                                        f"   * {info2}"
+                                    )
                 except:
                     pass
         except:
