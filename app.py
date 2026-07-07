@@ -1012,6 +1012,130 @@ def extraer_transito_reportado(df, transito_inicial):
     except Exception:
         return None
         
+def mostrar_recepciones_rezagadas(df_recepciones, fecha_actual, empresa):
+    """
+    Analiza si el archivo de recepciones contiene registros con fechas anteriores
+    y si coinciden con inconsistencias históricas de Cuentas por Pagar.
+    """
+    if df_recepciones is None or df_recepciones.empty:
+        return
+        
+    try:
+        import re
+        import sqlite3
+        from datetime import datetime
+        
+        # 1. Limpiar columnas como lo hace el procesador
+        df_limpio = ProcesadorArchivos._limpiar_columnas(df_recepciones)
+        
+        idx_inicio = 0
+        for idx, row in df_limpio.iterrows():
+            row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+            if 'compra' in row_str and 'proveedor' in row_str and 'f. recepción' in row_str:
+                idx_inicio = idx + 1
+                break
+        
+        if idx_inicio == 0:
+            patrones = ['compra', 'proveedor', 'f. recepción']
+            idx_inicio = ProcesadorArchivos._encontrar_fila_datos(df_limpio, patrones) + 1
+            
+        if idx_inicio > 0 and idx_inicio < len(df_limpio):
+            df_datos = df_limpio.iloc[idx_inicio:].reset_index(drop=True)
+            if len(df_datos) > 0:
+                header_row = df_datos.iloc[0]
+                new_columns = []
+                for col in header_row:
+                    if pd.notna(col):
+                        new_columns.append(str(col).strip())
+                    else:
+                        new_columns.append(f'col_{len(new_columns)}')
+                df_datos.columns = new_columns
+                df_limpio = df_datos.iloc[1:].reset_index(drop=True)
+                
+        # 2. Buscar columnas de fecha y monto
+        col_fecha = None
+        for col in df_limpio.columns:
+            if 'recep' in str(col).lower() or 'fecha' in str(col).lower():
+                col_fecha = col
+                break
+                
+        col_neto = None
+        for col in df_limpio.columns:
+            clean_col = re.sub(r'[^a-z0-9]', '', str(col).lower())
+            if 'neto' in clean_col and 'iva' in clean_col:
+                col_neto = col
+                break
+        if col_neto is None:
+            for col in df_limpio.columns:
+                clean_col = re.sub(r'[^a-z0-9]', '', str(col).lower())
+                if 'neto' in clean_col:
+                    col_neto = col
+                    break
+                    
+        if not col_fecha or not col_neto:
+            return
+            
+        # 3. Extraer los registros
+        registros_por_fecha = {}
+        fecha_actual_dt = pd.to_datetime(fecha_actual).date()
+        
+        for idx, row in df_limpio.iterrows():
+            val_fecha = row[col_fecha]
+            val_monto = row[col_neto]
+            
+            if pd.isna(val_fecha) or pd.isna(val_monto):
+                continue
+                
+            # Intentar convertir fecha
+            try:
+                if isinstance(val_fecha, (pd.Timestamp, datetime)):
+                    fecha_dt = val_fecha.date()
+                else:
+                    fecha_dt = pd.to_datetime(str(val_fecha).strip(), errors='coerce', dayfirst=True).date()
+            except:
+                continue
+                
+            if pd.isna(fecha_dt):
+                continue
+                
+            # Solo nos interesan fechas estrictamente anteriores a la actual
+            if fecha_dt < fecha_actual_dt:
+                monto = ProcesadorArchivos._convertir_numero_europeo(val_monto)
+                if monto and monto > 0:
+                    registros_por_fecha.setdefault(fecha_dt, []).append(monto)
+                    
+        # 4. Si hay registros de fechas anteriores, buscar inconsistencias en la BD
+        if registros_por_fecha:
+            conn = sqlite3.connect(db.db_path)
+            cursor = conn.cursor()
+            
+            for f_dt, montos in registros_por_fecha.items():
+                f_str = f_dt.strftime('%Y-%m-%d')
+                total_rezagado = sum(montos)
+                
+                # Consultar inconsistencias históricas en CxP para ese día
+                cursor.execute("""
+                    SELECT diferencia, descripcion 
+                    FROM inconsistencias 
+                    WHERE fecha = ? AND empresa = ? AND cuenta = 'Cuentas por pagar'
+                """, (f_str, empresa))
+                
+                row_incons = cursor.fetchone()
+                if row_incons:
+                    diff_historica = abs(float(row_incons[0]))
+                    # Si el total rezagado es cercano a la diferencia (margen de 1.0)
+                    if abs(total_rezagado - diff_historica) < 1.0:
+                        st.info(
+                            f"💡 **Recepciones Rezagadas Detectadas:** El archivo de hoy contiene "
+                            f"{len(montos)} recepción(es) con fecha **{f_dt.strftime('%d/%m/%Y')}** por un total de "
+                            f"**{formato_venezolano(total_rezagado)}**.\n\n"
+                            f"Esto coincide perfectamente y explica la diferencia de **{formato_venezolano(diff_historica)}** "
+                            f"que fue reportada en esa fecha para Cuentas por Pagar."
+                        )
+            conn.close()
+    except Exception as e:
+        print(f"Error en análisis de recepciones rezagadas: {e}")
+
 def mostrar_tabla_activos_pasivos(inventario, cx_c, bancos, cx_p, transito, capital):
     inventario = safe_number(inventario)
     cx_c = safe_number(cx_c)
@@ -2178,6 +2302,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             mostrar_archivo_con_formato(df_recepciones, archivo_recepciones.name, "Recepción de Mercancía")
             recepcion_total, compras_credito, _, _ = ProcesadorArchivos.procesar_recepciones(df_recepciones)
             st.info(f"✅ Recepción de mercancía procesada: {formato_venezolano(recepcion_total)}")
+            
+            # Análisis de recepciones rezagadas de días anteriores
+            mostrar_recepciones_rezagadas(df_recepciones, fecha_procesar, st.session_state.empresa_activa)
         except Exception as e:
             st.warning(f"⚠️ Error procesando Recepción: {str(e)}")
             recepcion_total = 0.0
