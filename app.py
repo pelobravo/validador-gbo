@@ -1223,10 +1223,16 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
 
         # 4. Buscar columnas clave en Recepciones (Búsqueda multi-columna para referencias)
         cols_doc_rec = []
+        # Priorizar columnas de factura/proveedor para que sea la primera referencia (etiqueta principal)
         for col in df_rec_clean.columns:
             col_l = str(col).lower()
-            if any(k in col_l for k in ['compra', 'fact', 'doc', 'nro', 'ref']):
+            if any(k in col_l for k in ['fact', 'provee']):
                 cols_doc_rec.append(col)
+        for col in df_rec_clean.columns:
+            col_l = str(col).lower()
+            if any(k in col_l for k in ['compra', 'doc', 'nro', 'ref']):
+                if col not in cols_doc_rec:
+                    cols_doc_rec.append(col)
                 
         col_rec_monto = None
         for col in df_rec_clean.columns:
@@ -1322,15 +1328,17 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                 
             # Buscar coincidencia en CxP de hoy
             match_hoy = None
+            matched_doc_orig = None
             for doc_orig, doc_norm in refs_fila:
                 if doc_norm in cxp_dict:
                     match_hoy = cxp_dict[doc_norm]
+                    matched_doc_orig = doc_orig
                     docs_cxp_cruzados.add(doc_norm)
                     break
                     
             if match_hoy:
                 rec_encontradas_hoy.append({
-                    'documento': refs_fila[0][0], # Usar la primera referencia como etiqueta
+                    'documento': matched_doc_orig,
                     'monto_rec': monto,
                     'monto_cxp': match_hoy['monto']
                 })
@@ -1338,14 +1346,16 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                 
             # Buscar coincidencia en CxP de ayer
             match_ayer = None
+            matched_doc_orig = None
             for doc_orig, doc_norm in refs_fila:
                 if doc_norm in cxp_ant_dict:
                     match_ayer = cxp_ant_dict[doc_norm]
+                    matched_doc_orig = doc_orig
                     break
                     
             if match_ayer:
                 rec_encontradas_ayer.append({
-                    'documento': refs_fila[0][0],
+                    'documento': matched_doc_orig,
                     'monto_rec': monto,
                     'monto_cxp_ant': match_ayer['monto']
                 })
