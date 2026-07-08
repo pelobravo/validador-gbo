@@ -1033,9 +1033,21 @@ def cargar_ultimo_saldo_automatico(empresa='General'):
     return False
 
 def formatear_diferencia(valor_calculado, valor_reportado):
+    """
+    Formatea la diferencia entre dos valores con emojis y colores.
+    - Si la diferencia es 0 → ✅ 0,00 (verde)
+    - Si es positiva → 📈 +X.XXX,XX
+    - Si es negativa → 📉 -X.XXX,XX
+    - Si no hay valor reportado → N/A
+    """
+    # Si no hay valor de referencia, mostrar "N/A"
     if valor_reportado is None:
         return "N/A"
+    
+    # Calcular la diferencia
     diferencia = safe_number(valor_calculado) - safe_number(valor_reportado)
+    
+    # Si la diferencia es 0 (dentro de un margen de 0.01)
     if abs(diferencia) < 0.01:
         return "✅ 0,00"
     elif diferencia > 0:
@@ -3348,21 +3360,20 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'transito'
     ))
 
-    # --- Capital de Trabajo Neto (CORREGIDO) ---
-    # Determinar el valor de referencia para la diferencia
+        # --- Capital de Trabajo Neto (CORREGIDO) ---
     referencia_capital = capital_anterior if capital_anterior > 0 else None
 
     resultados_data.append({
-    "Cuenta": "Capital de Trabajo Neto",
-    "Fórmula": "(Inv + CxC + Bancos) - (CxP + Tránsito)",
-    "Información día anterior": formato_venezolano(capital_anterior) if capital_anterior > 0 else "-",
-    "Calculado": formato_venezolano(capital_calculado),
-    "Reportado": formato_venezolano(capital_calculado),
-    "Diferencia": formatear_diferencia(capital_calculado, referencia_capital) if referencia_capital is not None else "-",
-    "Ajuste": 0,
-    "Diferencia Ajustada": "-",
-    "Justificación": "-",
-    "Origen": "Calculado automáticamente"
+        "Cuenta": "Capital de Trabajo Neto",
+        "Fórmula": "(Inv + CxC + Bancos) - (CxP + Tránsito)",
+        "Información día anterior": formato_venezolano(capital_anterior) if capital_anterior > 0 else "-",
+        "Calculado": formato_venezolano(capital_calculado),
+        "Reportado": formato_venezolano(capital_calculado),
+        "Diferencia": formatear_diferencia(capital_calculado, referencia_capital) if referencia_capital is not None else "-",
+        "Ajuste": 0,
+        "Diferencia Ajustada": "-",
+        "Justificación": "-",
+        "Origen": "Calculado automáticamente"
     })
 
     # Mostrar tabla de comparación
