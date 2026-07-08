@@ -60,6 +60,101 @@ def consultar_deepseek(pregunta, contexto=""):
 # FIN FUNCIÓN DEEPSEEK
 # ============================================================
 
+# ============================================================
+# 🔥 FUNCIÓN PARA BUSCAR CANDIDATOS POR MONTO (NUEVA)
+# ============================================================
+def buscar_candidatos_por_monto(df, monto_buscar, origen):
+    """
+    Busca en un DataFrame filas que tengan un monto cercano al valor buscado.
+    Retorna una lista de strings con la descripción de cada candidato.
+    """
+    candidatos = []
+    if df is None or df.empty:
+        return candidatos
+    
+    monto_buscar = abs(monto_buscar)  # Usamos el valor absoluto para la búsqueda
+    
+    try:
+        # Identificar columnas numéricas que podrían contener montos
+        columnas_numericas = df.select_dtypes(include=['number']).columns.tolist()
+        
+        # Si no hay columnas numéricas, intentar convertir algunas columnas
+        if not columnas_numericas:
+            for col in df.columns:
+                try:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+                    if df[col].notna().sum() > 0:
+                        columnas_numericas.append(col)
+                except:
+                    pass
+        
+        # Buscar en cada columna numérica
+        for col in columnas_numericas:
+            # Buscar valores cercanos al monto (con un margen del 5%)
+            margen = max(0.01, abs(monto_buscar) * 0.05)
+            mascara = (df[col] >= monto_buscar - margen) & (df[col] <= monto_buscar + margen)
+            filas_encontradas = df[mascara]
+            
+            if not filas_encontradas.empty:
+                for idx, row in filas_encontradas.iterrows():
+                    # Construir una descripción de la fila
+                    desc = f"[{origen}] "
+                    # Tomar las primeras 3 columnas no numéricas como identificadores
+                    cols_no_numericas = df.select_dtypes(exclude=['number']).columns.tolist()
+                    for c in cols_no_numericas[:3]:
+                        if c in row and pd.notna(row[c]):
+                            desc += f"{c}: {str(row[c])} | "
+                    desc += f"Monto: {formato_venezolano(row[col])}"
+                    candidatos.append(desc)
+                    
+                    # Limitar a 3 candidatos por columna para no saturar
+                    if len(candidatos) >= 5:
+                        return candidatos[:5]
+        
+        # Si no se encontraron candidatos, buscar por cualquier columna que parezca tener montos
+        if not candidatos:
+            for col in df.columns:
+                col_lower = str(col).lower()
+                if any(palabra in col_lower for palabra in ['monto', 'total', 'importe', 'saldo', 'valor', 'neto', 'precio']):
+                    try:
+                        valores = df[col].dropna()
+                        if not valores.empty:
+                            # Buscar el valor más cercano
+                            mejor_match = None
+                            mejor_diff = float('inf')
+                            for val in valores:
+                                try:
+                                    val_num = float(val)
+                                    diff = abs(abs(val_num) - monto_buscar)
+                                    if diff < mejor_diff and diff < max(0.01, monto_buscar * 0.05):
+                                        mejor_diff = diff
+                                        mejor_match = val_num
+                                except:
+                                    pass
+                            if mejor_match is not None:
+                                # Encontrar la fila con ese valor
+                                fila = df[df[col] == mejor_match]
+                                if not fila.empty:
+                                    row = fila.iloc[0]
+                                    desc = f"[{origen}] "
+                                    cols_no_numericas = df.select_dtypes(exclude=['number']).columns.tolist()
+                                    for c in cols_no_numericas[:2]:
+                                        if c in row and pd.notna(row[c]):
+                                            desc += f"{c}: {str(row[c])} | "
+                                    desc += f"Monto: {formato_venezolano(mejor_match)} (aprox.)"
+                                    candidatos.append(desc)
+                    except:
+                        pass
+                    
+    except Exception as e:
+        print(f"Error en buscar_candidatos_por_monto: {e}")
+    
+    return candidatos[:5]  # Máximo 5 candidatos
+
+# ============================================================
+# FIN FUNCIÓN BUSCAR CANDIDATOS
+# ============================================================
+
 # Inicializar componentes
 validar_carpetas()
 db = Database()
@@ -261,7 +356,7 @@ def mostrar_archivo_con_formato(df, nombre_archivo, titulo):
         
         st.dataframe(
             df.style.background_gradient(subset=columnas_numericas, cmap='Blues', low=0.1, high=0.9),
-            width='stretch',  # <--- CAMBIADO
+            width='stretch',
             height=400
         )
         
@@ -969,10 +1064,9 @@ def inicializar_saldos_empresa(empresa, fecha_str):
             'bancos': safe_number(ultimo['bancos']),
             'cx_p': safe_number(ultimo['cx_p']),
             'transito': safe_number(ultimo['transito']),
-            'capital_anterior': safe_number(ultimo['capital']),  # 🔥 CLAVE
+            'capital_anterior': safe_number(ultimo['capital']),
             'historico': []
         }
-        # Mostrar mensaje de éxito (opcional)
         st.success(f"✅ Saldos del día anterior ({ultimo['fecha']}) cargados automáticamente para {empresa}.")
     else:
         # ❌ No hay saldo guardado → inicializar en 0
