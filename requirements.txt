@@ -54,3 +54,4 @@ lxml
 html5lib
 beautifulsoup4
 openai>=1.0.0
+supabase>=2.0.0
