@@ -13,6 +13,7 @@ import numpy as np
 import re
 import matplotlib.pyplot as plt
 import sqlite3
+import warnings
 from openai import OpenAI  # <--- NUEVO: Para DeepSeek API
 
 # Importar módulos del sistema
@@ -236,6 +237,16 @@ def mostrar_archivo_con_formato(df, nombre_archivo, titulo):
         st.warning(f"⚠️ El archivo {nombre_archivo} está vacío")
         return
     
+    # 🔥 CONVERTIR TODAS LAS FECHAS A STRING PARA EVITAR ERRORES DE PYARROW
+    for col in df.columns:
+        if pd.api.types.is_datetime64_any_dtype(df[col]):
+            df[col] = df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+        elif df[col].dtype == 'object':
+            try:
+                df[col] = df[col].apply(lambda x: str(x) if not pd.isna(x) else x)
+            except:
+                pass
+    
     with st.expander(f"📄 {titulo} - {nombre_archivo}", expanded=False):
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -250,7 +261,7 @@ def mostrar_archivo_con_formato(df, nombre_archivo, titulo):
         
         st.dataframe(
             df.style.background_gradient(subset=columnas_numericas, cmap='Blues', low=0.1, high=0.9),
-            use_container_width=True,
+            width='stretch',  # <--- CAMBIADO
             height=400
         )
         
@@ -1694,7 +1705,7 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
             
             # Mostrar la tabla con las columnas relevantes
             columnas_mostrar = ['N° Documento', 'Monto (Bs.)', 'Fecha Vencimiento', 'Proveedor', 'Estado']
-            st.dataframe(df_ot_nuevas_display[columnas_mostrar], use_container_width=True)
+            st.dataframe(df_ot_nuevas_display[columnas_mostrar], width='stretch')
             
             # 🔥 Mostrar el total de las OT nuevas de forma destacada
             st.success(f"💰 **Total de OT Nuevas: {formato_venezolano(total_ot_nuevas)} Bs.**")
@@ -1747,7 +1758,7 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                 df_ot_elim = pd.DataFrame(ot_eliminadas)
                 if 'monto' in df_ot_elim.columns:
                     df_ot_elim['Monto'] = df_ot_elim['monto'].apply(formato_venezolano)
-                st.dataframe(df_ot_elim[['documento', 'Monto', 'estado']], use_container_width=True)
+                st.dataframe(df_ot_elim[['documento', 'Monto', 'estado']], width='stretch')
                 st.metric("💰 Total OT Eliminadas", formato_venezolano(total_ot_eliminadas))
             else:
                 st.info("No hay OT que hayan sido eliminadas del CxP entre el día anterior y hoy.")
@@ -1756,7 +1767,7 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
         with st.expander("✅ NE Conciliados (Están en Recepciones y en CxP)", expanded=False):
             if ne_en_cxp:
                 df_ne_conc = pd.DataFrame(ne_en_cxp)
-                st.dataframe(df_ne_conc, use_container_width=True)
+                st.dataframe(df_ne_conc, width='stretch')
             else:
                 st.info("No hay NE conciliados en este período.")
 
@@ -1766,7 +1777,7 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                 st.warning(f"🔍 Se encontraron {len(ne_faltantes)} NE que están en Recepciones pero NO en Cuentas por Pagar.")
                 st.info("💡 Esto indica que la recepción fue pagada al contado y no generó deuda en CxP.")
                 df_ne_falt = pd.DataFrame(ne_faltantes)
-                st.dataframe(df_ne_falt, use_container_width=True)
+                st.dataframe(df_ne_falt, width='stretch')
                 st.metric("💰 Total NE Faltantes (Pago al Contado)", formato_venezolano(total_ne_faltantes))
             else:
                 st.success("✅ Todas las NE de Recepciones están en CxP.")
@@ -1778,7 +1789,7 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                 st.info("💡 Esto indica que son cargas manuales o ajustes administrativos.")
                 df_ot = pd.DataFrame(ot_no_rec)
                 df_ot['Monto'] = df_ot['monto'].apply(formato_venezolano)
-                st.dataframe(df_ot[['documento', 'Monto', 'estado']], use_container_width=True)
+                st.dataframe(df_ot[['documento', 'Monto', 'estado']], width='stretch')
                 st.metric("💰 Total OT (Carga Manual)", formato_venezolano(total_ot_no_rec))
             else:
                 st.success("✅ No hay OT en CxP que no estén en Recepciones.")
@@ -1833,7 +1844,7 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
         if docs_diferencia:
             df_docs = pd.DataFrame(docs_diferencia)
             df_docs['Monto'] = df_docs['Monto'].apply(formato_venezolano)
-            st.dataframe(df_docs, use_container_width=True)
+            st.dataframe(df_docs, width='stretch')
         else:
             st.info("No se identificaron documentos que expliquen la diferencia.")
                     
@@ -1969,7 +1980,7 @@ def mostrar_dashboard_general_consolidado():
     for col in ['Inventario', 'CxC', 'Bancos', 'CxP', 'Tránsito', 'Capital Neto']:
         df_formatted[col] = df_formatted[col].apply(formato_venezolano)
         
-    st.dataframe(df_formatted, use_container_width=True, hide_index=True)
+    st.dataframe(df_formatted, width='stretch', hide_index=True)
     
     # Evolución Consolidada Histórica
     st.markdown("### 📈 Evolución Histórica Comparativa")
@@ -2099,7 +2110,7 @@ def mostrar_dashboard_historico_empresa(empresa):
         for col in ['inventario', 'cx_c', 'bancos', 'cx_p', 'transito', 'capital']:
             if col in df_mostrar.columns:
                 df_mostrar[col] = df_mostrar[col].apply(formato_venezolano)
-        st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
+        st.dataframe(df_mostrar, width='stretch', hide_index=True)
     else:
         st.info("No hay registros en el rango de fechas seleccionado.")
 
@@ -2112,7 +2123,7 @@ def mostrar_dashboard_historico_empresa(empresa):
         for col in ['valor_calculado', 'valor_reportado', 'diferencia']:
             if col in df_incons.columns:
                 df_incons[col] = df_incons[col].apply(formato_venezolano)
-        st.dataframe(df_incons, use_container_width=True, hide_index=True)
+        st.dataframe(df_incons, width='stretch', hide_index=True)
     else:
         st.success("✅ No se han detectado inconsistencias para esta empresa.")
 
@@ -2169,7 +2180,7 @@ def mostrar_login():
                 usuario_id = st.text_input("👤 Usuario", key="login_usuario", placeholder="Ingrese su usuario")
                 password = st.text_input("🔑 Contraseña", type="password", key="login_password", placeholder="Ingrese su contraseña")
                 
-                if st.button("🚀 Ingresar", use_container_width=True):
+                if st.button("🚀 Ingresar", width='stretch'):
                     if usuario_id in USUARIOS and USUARIOS[usuario_id]["password"] == password:
                         st.session_state.usuario_actual = usuario_id
                         if 'primer_login_ejecutado' in st.session_state:
@@ -2284,7 +2295,7 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
     
-    if st.button("🚪 Cerrar Sesión", use_container_width=True):
+    if st.button("🚪 Cerrar Sesión", width='stretch'):
         st.session_state.usuario_actual = None
         st.rerun()
     
@@ -2310,9 +2321,9 @@ with st.sidebar:
             label = opcion
             
             if is_selected:
-                st.button(label, key=f"menu_{opcion}", type="primary", use_container_width=True)
+                st.button(label, key=f"menu_{opcion}", type="primary", width='stretch')
             else:
-                if st.button(label, key=f"menu_{opcion}", type="secondary", use_container_width=True):
+                if st.button(label, key=f"menu_{opcion}", type="secondary", width='stretch'):
                     st.session_state.empresa_activa = opcion
                     st.rerun()
                     
@@ -2331,7 +2342,7 @@ with st.sidebar:
             with col_fecha2:
                 fecha_hasta = st.date_input("📅 Hasta", st.session_state.fecha_hasta, key="gerente_hasta")
                 
-            if st.button("🔍 Filtrar", key="btn_filtrar_gerente", use_container_width=True):
+            if st.button("🔍 Filtrar", key="btn_filtrar_gerente", width='stretch'):
                 st.session_state.fecha_desde = fecha_desde
                 st.session_state.fecha_hasta = fecha_hasta
                 st.rerun()
@@ -2411,7 +2422,7 @@ with st.sidebar:
             
         transito_manual = st.number_input("🔄 Tránsito", value=float(st.session_state.saldos['transito']), step=100.0, format="%.2f", key="tran_manual")
         
-        if st.button("💾 Actualizar Saldos", use_container_width=True):
+        if st.button("💾 Actualizar Saldos", width='stretch'):
             st.session_state.saldos['inventario'] = inventario_manual
             st.session_state.saldos['cx_c'] = cx_c_manual
             st.session_state.saldos['bancos'] = bancos_manual
@@ -2431,13 +2442,13 @@ with st.sidebar:
             
         col_btn_f1, col_btn_f2 = st.columns(2)
         with col_btn_f1:
-            if st.button("🔍 Aplicar", use_container_width=True):
+            if st.button("🔍 Aplicar", width='stretch'):
                 st.session_state.fecha_desde = fecha_desde
                 st.session_state.fecha_hasta = fecha_hasta
                 st.session_state.mostrar_historial = True
                 st.rerun()
         with col_btn_f2:
-            if st.button("🔄 Reset", use_container_width=True):
+            if st.button("🔄 Reset", width='stretch'):
                 st.session_state.fecha_desde = datetime.now() - pd.Timedelta(days=7)
                 st.session_state.fecha_hasta = datetime.now()
                 st.session_state.mostrar_historial = False
@@ -2456,7 +2467,7 @@ with st.sidebar:
                 for col in columnas_numericas:
                     if col in df_mostrar.columns:
                         df_mostrar[col] = df_mostrar[col].apply(formato_venezolano)
-                st.dataframe(df_mostrar, use_container_width=True)
+                st.dataframe(df_mostrar, width='stretch')
                 st.caption(f"📊 {len(historial)} registros")
                 
                 col_res1, col_res2 = st.columns(2)
@@ -2501,7 +2512,7 @@ with st.sidebar:
         
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🔄 Cargar Día Anterior", use_container_width=True):
+            if st.button("🔄 Cargar Día Anterior", width='stretch'):
                 ultimo = db.obtener_ultimo_saldo(st.session_state.empresa_activa)
                 if ultimo:
                     st.session_state.saldos['inventario'] = safe_number(ultimo['inventario'])
@@ -2514,7 +2525,7 @@ with st.sidebar:
                 else:
                     st.warning("No hay historial")
         with col2:
-            if st.button("🧹 Resetear", use_container_width=True):
+            if st.button("🧹 Resetear", width='stretch'):
                 st.session_state.saldos['inventario'] = 0
                 st.session_state.saldos['cx_c'] = 0
                 st.session_state.saldos['bancos'] = 0
@@ -2779,7 +2790,7 @@ if st.session_state.get('mostrar_historial', False) and st.session_state.get('hi
             if col in df_mostrar.columns:
                 df_mostrar[col] = df_mostrar[col].apply(formato_venezolano)
         
-        st.dataframe(df_mostrar, use_container_width=True)
+        st.dataframe(df_mostrar, width='stretch')
         
         if 'capital' in historial.columns and len(historial) > 1:
             try:
@@ -2807,7 +2818,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     # --- MÓDULO VISUAL DE AUDITORÍA INTEGRADO (MANUAL) ---
     st.markdown("---")
     st.markdown("#### 🔍 Motor de Auditoría y Trazabilidad de Errores")
-    if st.button("🔍 Ejecutar Auditoría de Trazabilidad Manual", use_container_width=True, key="btn_auditoria_manual_principal"):
+    if st.button("🔍 Ejecutar Auditoría de Trazabilidad Manual", width='stretch', key="btn_auditoria_manual_principal"):
         hay_err_m, fallas_m, df_c_m = ejecutar_auditoria_inteligente(
             archivo_facturacion, archivo_cobranzas, archivo_egresos, archivo_estado_cuenta
         )
@@ -3049,7 +3060,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         if not df_proveedores.empty:
             with st.expander("📋 Detalle de PROVEEDORES DE MERCANCIA (filtrados)", expanded=False):
                 st.success(f"✅ Se encontraron {len(df_proveedores)} registros de PROVEEDORES DE MERCANCIA")
-                st.dataframe(df_proveedores, use_container_width=True)
+                st.dataframe(df_proveedores, width='stretch')
                 
                 col1, col2 = st.columns(2)
                 with col1:
@@ -3125,7 +3136,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             formato_venezolano(saldos_reportados.get('Transferencias en tránsito', 0))
         ]
     }
-    st.dataframe(pd.DataFrame(mov_data), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(mov_data), width='stretch', hide_index=True)
     
     st.info(f"""
     📊 **Resumen de Egresos iPago:**
@@ -3356,7 +3367,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
 
     # Mostrar tabla de comparación
     df_comparacion = pd.DataFrame(resultados_data)
-    st.dataframe(df_comparacion, use_container_width=True, hide_index=True)
+    st.dataframe(df_comparacion, width='stretch', hide_index=True)
 
     # ============================================================
     # 🔍 DETALLE DE DISCREPANCIAS Y CANDIDATOS DE AJUSTE (TRAZABILIDAD)
@@ -3570,7 +3581,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 "Precio Nuevo": f"{formato_venezolano(price_new)}",
                                 "Efecto Valoración": f"{formato_venezolano(efecto_valoracion)}"
                             })
-                        st.dataframe(pd.DataFrame(price_data), use_container_width=True, hide_index=True)
+                        st.dataframe(pd.DataFrame(price_data), width='stretch', hide_index=True)
                         
                     if reclassifications:
                         st.markdown("#### 🔄 Reclasificaciones y Repaques de Productos")
@@ -3586,7 +3597,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 "Cant. Dest.": f"{c2['qty_diff']:.1f}",
                                 "Neto Valor": f"{formato_venezolano(c1['val_diff'] + c2['val_diff'])}"
                             })
-                        st.dataframe(pd.DataFrame(reclass_data), use_container_width=True, hide_index=True)
+                        st.dataframe(pd.DataFrame(reclass_data), width='stretch', hide_index=True)
                         
                     if qty_discrepancies:
                         st.markdown("#### 📦 Faltantes y Sobrantes de Cantidad Física")
@@ -3605,7 +3616,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 "Diferencia": f"{c['qty_diff']:.2f}",
                                 "Impacto Financiero": f"{formato_venezolano(c['val_diff'])}"
                             })
-                        st.dataframe(pd.DataFrame(qty_data), use_container_width=True, hide_index=True)
+                        st.dataframe(pd.DataFrame(qty_data), width='stretch', hide_index=True)
                 else:
                     st.warning("⚠️ No se pudo formatear el detalle de inventario para el desglose a nivel de producto.")
             
@@ -3807,14 +3818,14 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     for col, (nombre, archivo, titulo) in zip(cols, archivos_verificacion):
         with col:
             if archivo and archivos_cargados.get(titulo) is not None:
-                if st.button(f"📄 Ver {nombre}", key=f"btn_{nombre}", use_container_width=True):
+                if st.button(f"📄 Ver {nombre}", key=f"btn_{nombre}", width='stretch'):
                     mostrar_archivo_con_formato(
                         archivos_cargados[titulo], 
                         archivo.name, 
                         f"Archivo {titulo}"
                     )
             else:
-                st.button(f"❌ {nombre} no cargado", disabled=True, use_container_width=True)
+                st.button(f"❌ {nombre} no cargado", disabled=True, width='stretch')
 
     # ============================================================
     # FORMULARIO DE AJUSTES
@@ -3885,7 +3896,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
 
     col_btn_ajuste1, col_btn_ajuste2 = st.columns(2)
     with col_btn_ajuste1:
-        if st.button("💾 Guardar Ajustes", use_container_width=True):
+        if st.button("💾 Guardar Ajustes", width='stretch'):
             st.session_state.ajustes['inventario'] = {'monto': ajuste_inv, 'justificacion': just_inv}
             st.session_state.ajustes['cx_c'] = {'monto': ajuste_cxc, 'justificacion': just_cxc}
             st.session_state.ajustes['cx_p'] = {'monto': ajuste_cxp, 'justificacion': just_cxp}
@@ -3901,7 +3912,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             st.rerun()
     
     with col_btn_ajuste2:
-        if st.button("🔄 Resetear Ajustes", use_container_width=True):
+        if st.button("🔄 Resetear Ajustes", width='stretch'):
             st.session_state.ajustes = {
                 'inventario': {'monto': 0.0, 'justificacion': ''},
                 'cx_c': {'monto': 0.0, 'justificacion': ''},
@@ -4046,7 +4057,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         return [''] * len(row)
 
     styled_df = df_cierre.style.apply(color_cierre_rows, axis=1).hide(axis='index')
-    st.dataframe(styled_df, use_container_width=True)
+    st.dataframe(styled_df, width='stretch')
 
     with st.expander("📂 Ver origen detallado de cada archivo", expanded=False):
         st.markdown("""
@@ -4119,7 +4130,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         ✅ Valores tomados de los archivos de verificación.
         """
         
-        with st.popover("", use_container_width=True):
+        with st.popover("", width='stretch'):
             st.markdown(popover_activos)
             if cx_c_cierre > 0 or inventario_cierre > 0 or bancos_cierre > 0:
                 fig, ax = plt.subplots(figsize=(6, 3))
@@ -4155,7 +4166,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         ✅ Valores tomados de los archivos de verificación.
         """
         
-        with st.popover("", use_container_width=True):
+        with st.popover("", width='stretch'):
             st.markdown(popover_pasivos)
         
         st.markdown(f"""
@@ -4189,7 +4200,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         {f"✅ Capital de Trabajo Neto POSITIVO: {formato_venezolano(capital_neto)}" if capital_neto >= 0 else f"❌ Capital de Trabajo Neto NEGATIVO: {formato_venezolano(capital_neto)}"}
         """
         
-        with st.popover("", use_container_width=True):
+        with st.popover("", width='stretch'):
             st.markdown(popover_capital)
         
         st.markdown(f"""
@@ -4322,7 +4333,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     col_btn1, col_btn2 = st.columns(2)
     
     with col_btn1:
-        if st.button("💾 Guardar saldos calculados", use_container_width=True):
+        if st.button("💾 Guardar saldos calculados", width='stretch'):
             saldos_guardar = {
                 'inventario': inventario_final,
                 'cx_c': cx_c_final,
@@ -4417,7 +4428,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             st.rerun()
     
     with col_btn2:
-        if st.button("📊 Ver gráfico evolución", use_container_width=True):
+        if st.button("📊 Ver gráfico evolución", width='stretch'):
             historial = db.obtener_historial_saldos_completo(30, empresa=st.session_state.empresa_activa)
             if not historial.empty and len(historial) > 1:
                 try:
@@ -4562,7 +4573,7 @@ with st.expander("💬 Haz una consulta al asistente", expanded=True):
         height=100
     )
     
-    if st.button("Consultar a DeepSeek", use_container_width=True):
+    if st.button("Consultar a DeepSeek", width='stretch'):
         if pregunta_usuario:
             with st.spinner("Consultando a DeepSeek... ⏳"):
                 try:
