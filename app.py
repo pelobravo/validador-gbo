@@ -4318,6 +4318,464 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 st.error(f"❌ Error en el análisis de documentos: {str(e)}")
                 import traceback
                 st.code(traceback.format_exc())
+                    st.markdown("---")
+    
+    # ============================================================
+    # 🔥 TRAZABILIDAD DE TRANSFERENCIAS EN TRÁNSITO
+    # ============================================================
+    st.markdown("### 🔍 Trazabilidad de Transferencias en Tránsito")
+    st.caption("Análisis detallado: Tránsito Anterior + Ingresos - Cobranzas = Tránsito Calculado vs Tránsito Reportado")
+    
+    # Mostrar el cálculo paso a paso
+    st.markdown("#### 📊 Paso a paso del cálculo")
+    
+    col_t1, col_t2, col_t3, col_t4, col_t5 = st.columns(5)
+    
+    with col_t1:
+        st.metric("🔄 Tránsito Anterior", formato_venezolano(transito_anterior))
+    with col_t2:
+        st.metric("📈 Total Ingresos", formato_venezolano(total_ingresos))
+    with col_t3:
+        st.metric("💰 Cobranzas Procesadas", formato_venezolano(cobranzas))
+    with col_t4:
+        st.metric("📊 Tránsito Calculado", formato_venezolano(transito_calculado))
+    with col_t5:
+        st.metric("📄 Tránsito Reportado", formato_venezolano(transito_reportado) if transito_reportado is not None else "N/A")
+    
+    # Verificar si hay diferencia
+    diff_transito = safe_number(transito_calculado) - safe_number(transito_reportado) if transito_reportado is not None else 0
+    
+    if abs(diff_transito) < 0.01:
+        st.success("✅ **¡CONCILIACIÓN PERFECTA!** El Tránsito Calculado coincide con el Tránsito Reportado.")
+    else:
+        st.error(f"⚠️ **DIFERENCIA DETECTADA:** {formato_venezolano(abs(diff_transito))} Bs. de diferencia entre Calculado y Reportado")
+        
+        # ============================================================
+        # 🔥 ANÁLISIS PROFUNDO DE TRANSFERENCIAS EN TRÁNSITO
+        # ============================================================
+        st.markdown("---")
+        st.markdown("#### 🔍 Análisis de Transferencias en Tránsito")
+        
+        # Verificar si tenemos los archivos necesarios
+        tiene_cobranzas = 'df_cobranzas' in locals() and df_cobranzas is not None
+        tiene_tb = 'df_tb' in locals() and df_tb is not None
+        tiene_estado_cuenta = 'df_estado_cuenta' in locals() and df_estado_cuenta is not None
+        
+        if not tiene_cobranzas and not tiene_tb:
+            st.warning("⚠️ **Faltan archivos para el análisis profundo.** Sube el archivo de Cobranzas y/o TB (Transferencias en Tránsito) para continuar.")
+        else:
+            try:
+                import re
+                
+                # ============================================================
+                # 1. EXTRAER TRANSFERENCIAS DEL ARCHIVO TB (TRÁNSITO REPORTADO)
+                # ============================================================
+                st.markdown("##### 📄 Transferencias en Tránsito Reportado (TB)")
+                
+                tb_docs = {}
+                if tiene_tb:
+                    df_tb_clean = ProcesadorArchivos._limpiar_columnas(df_tb)
+                    
+                    # Buscar cabecera en TB
+                    idx_tb = None
+                    for idx, row in df_tb_clean.iterrows():
+                        row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                        if any(k in row_str for k in ['total tb', 'tb', 'transferencia']):
+                            idx_tb = idx
+                            break
+                    if idx_tb is None:
+                        idx_tb = ProcesadorArchivos._encontrar_fila_datos(df_tb_clean, ['banco', 'referencia', 'monto'])
+                    
+                    if idx_tb is not None and idx_tb >= 0 and idx_tb < len(df_tb_clean):
+                        df_datos = df_tb_clean.iloc[idx_tb:].reset_index(drop=True)
+                        if len(df_datos) > 0:
+                            header_row = df_datos.iloc[0]
+                            new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
+                            df_datos.columns = new_cols
+                            df_tb_clean = df_datos.iloc[1:].reset_index(drop=True)
+                    
+                    # Buscar columnas
+                    col_ref = ProcesadorArchivos._buscar_columna(df_tb_clean, 'referencia', 'nro', 'deposito', 'documento')
+                    col_monto_tb = ProcesadorArchivos._buscar_columna(df_tb_clean, 'monto', 'total', 'importe', 'saldo')
+                    col_banco = ProcesadorArchivos._buscar_columna(df_tb_clean, 'banco', 'cuenta', 'entidad')
+                    col_fecha_tb = ProcesadorArchivos._buscar_columna(df_tb_clean, 'fecha', 'fec', 'f. contable')
+                    
+                    if col_ref and col_monto_tb:
+                        for idx, row in df_tb_clean.iterrows():
+                            ref = str(row[col_ref]).strip()
+                            monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_tb])
+                            if ref and ref != 'nan' and ref != 'None' and monto:
+                                ref_norm = re.sub(r'[^0-9]', '', ref)
+                                if ref_norm:
+                                    fecha = ''
+                                    if col_fecha_tb:
+                                        try:
+                                            fecha_val = row[col_fecha_tb]
+                                            if pd.notna(fecha_val):
+                                                if isinstance(fecha_val, pd.Timestamp):
+                                                    fecha = fecha_val.strftime('%d/%m/%Y')
+                                                else:
+                                                    fecha = str(fecha_val).strip()
+                                        except:
+                                            pass
+                                    
+                                    banco = ''
+                                    if col_banco:
+                                        try:
+                                            banco_val = str(row[col_banco]).strip()
+                                            if banco_val and banco_val != 'nan' and banco_val != 'None':
+                                                banco = banco_val
+                                        except:
+                                            pass
+                                    
+                                    tb_docs[ref_norm] = {
+                                        'referencia': ref,
+                                        'monto': float(monto),
+                                        'banco': banco,
+                                        'fecha': fecha,
+                                        'tipo': 'TRÁNSITO'
+                                    }
+                
+                st.info(f"📄 **{len(tb_docs)}** transferencias encontradas en TB (Tránsito Reportado)")
+                
+                # ============================================================
+                # 2. EXTRAER COBRANZAS DEL ARCHIVO DE COBRANZAS
+                # ============================================================
+                st.markdown("##### 💰 Cobranzas Procesadas")
+                
+                cobranzas_docs = {}
+                if tiene_cobranzas:
+                    df_cob_clean = ProcesadorArchivos._limpiar_columnas(df_cobranzas)
+                    
+                    # Buscar cabecera en Cobranzas
+                    idx_cob = None
+                    for idx, row in df_cob_clean.iterrows():
+                        row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                        if 'banco' in row_str and 'cuenta' in row_str and 'deposito' in row_str:
+                            idx_cob = idx
+                            break
+                    if idx_cob is None:
+                        idx_cob = ProcesadorArchivos._encontrar_fila_datos(df_cob_clean, ['banco', 'deposito', 'monto'])
+                    
+                    if idx_cob is not None and idx_cob >= 0 and idx_cob < len(df_cob_clean):
+                        df_datos = df_cob_clean.iloc[idx_cob:].reset_index(drop=True)
+                        if len(df_datos) > 0:
+                            header_row = df_datos.iloc[0]
+                            new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
+                            df_datos.columns = new_cols
+                            df_cob_clean = df_datos.iloc[1:].reset_index(drop=True)
+                    
+                    # Buscar columnas
+                    col_ref_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'deposito', 'nro', 'referencia', 'documento')
+                    col_monto_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'monto', 'total', 'importe')
+                    col_banco_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'banco', 'cuenta', 'entidad')
+                    col_fecha_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'fecha', 'fec', 'f. cobranza')
+                    
+                    if col_ref_cob and col_monto_cob:
+                        for idx, row in df_cob_clean.iterrows():
+                            ref = str(row[col_ref_cob]).strip()
+                            monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_cob])
+                            if ref and ref != 'nan' and ref != 'None' and monto:
+                                ref_norm = re.sub(r'[^0-9]', '', ref)
+                                if ref_norm:
+                                    fecha = ''
+                                    if col_fecha_cob:
+                                        try:
+                                            fecha_val = row[col_fecha_cob]
+                                            if pd.notna(fecha_val):
+                                                if isinstance(fecha_val, pd.Timestamp):
+                                                    fecha = fecha_val.strftime('%d/%m/%Y')
+                                                else:
+                                                    fecha = str(fecha_val).strip()
+                                        except:
+                                            pass
+                                    
+                                    banco = ''
+                                    if col_banco_cob:
+                                        try:
+                                            banco_val = str(row[col_banco_cob]).strip()
+                                            if banco_val and banco_val != 'nan' and banco_val != 'None':
+                                                banco = banco_val
+                                        except:
+                                            pass
+                                    
+                                    cobranzas_docs[ref_norm] = {
+                                        'referencia': ref,
+                                        'monto': float(monto),
+                                        'banco': banco,
+                                        'fecha': fecha,
+                                        'tipo': 'COBRANZA'
+                                    }
+                
+                st.info(f"💰 **{len(cobranzas_docs)}** cobranzas encontradas")
+                
+                # ============================================================
+                # 3. EXTRAER INGRESOS DEL ESTADO DE CUENTA
+                # ============================================================
+                st.markdown("##### 🏦 Ingresos del Estado de Cuenta")
+                
+                ingresos_docs = {}
+                if tiene_estado_cuenta:
+                    try:
+                        df_ec_clean = ProcesadorArchivos._limpiar_columnas(df_estado_cuenta)
+                        
+                        # Buscar cabecera en Estado de Cuenta
+                        idx_ec = None
+                        for idx, row in df_ec_clean.iterrows():
+                            row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                            if 'fecha' in row_str and ('credito' in row_str or 'debito' in row_str):
+                                idx_ec = idx
+                                break
+                        if idx_ec is None:
+                            idx_ec = ProcesadorArchivos._encontrar_fila_datos(df_ec_clean, ['fecha', 'credito', 'debito'])
+                        
+                        if idx_ec is not None and idx_ec >= 0 and idx_ec < len(df_ec_clean):
+                            df_datos = df_ec_clean.iloc[idx_ec:].reset_index(drop=True)
+                            if len(df_datos) > 0:
+                                header_row = df_datos.iloc[0]
+                                new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
+                                df_datos.columns = new_cols
+                                df_ec_clean = df_datos.iloc[1:].reset_index(drop=True)
+                        
+                        # Buscar columnas
+                        col_ref_ec = ProcesadorArchivos._buscar_columna(df_ec_clean, 'referencia', 'nro', 'documento', 'descripción')
+                        col_credito = ProcesadorArchivos._buscar_columna(df_ec_clean, 'credito', 'abono', 'ingreso')
+                        col_fecha_ec = ProcesadorArchivos._buscar_columna(df_ec_clean, 'fecha', 'fec', 'f. contable')
+                        
+                        if col_ref_ec and col_credito:
+                            for idx, row in df_ec_clean.iterrows():
+                                ref = str(row[col_ref_ec]).strip()
+                                credito = ProcesadorArchivos._convertir_numero_europeo(row[col_credito])
+                                if ref and ref != 'nan' and ref != 'None' and credito and credito > 0:
+                                    ref_norm = re.sub(r'[^0-9]', '', ref)
+                                    if ref_norm:
+                                        fecha = ''
+                                        if col_fecha_ec:
+                                            try:
+                                                fecha_val = row[col_fecha_ec]
+                                                if pd.notna(fecha_val):
+                                                    if isinstance(fecha_val, pd.Timestamp):
+                                                        fecha = fecha_val.strftime('%d/%m/%Y')
+                                                    else:
+                                                        fecha = str(fecha_val).strip()
+                                            except:
+                                                pass
+                                        
+                                        ingresos_docs[ref_norm] = {
+                                            'referencia': ref,
+                                            'monto': float(credito),
+                                            'banco': 'Estado de Cuenta',
+                                            'fecha': fecha,
+                                            'tipo': 'INGRESO'
+                                        }
+                    except Exception as e:
+                        st.warning(f"⚠️ Error al leer Estado de Cuenta: {str(e)}")
+                
+                st.info(f"🏦 **{len(ingresos_docs)}** ingresos encontrados en Estado de Cuenta")
+                
+                # ============================================================
+                # 4. ANÁLISIS CRUZADO
+                # ============================================================
+                st.markdown("---")
+                st.markdown("#### 📊 Análisis Cruzado de Transferencias")
+                
+                # IDENTIFICAR TRANSFERENCIAS EN TRÁNSITO QUE YA FUERON COBRADAS
+                # Una transferencia en tránsito se "convierte" en cobranza cuando:
+                # - La referencia existe en TB (Tránsito)
+                # - Y la misma referencia existe en Cobranzas Procesadas
+                # - O la misma referencia existe en Ingresos del Estado de Cuenta
+                
+                transito_ya_cobrado = []
+                for ref_norm, info in tb_docs.items():
+                    # Verificar si la referencia está en Cobranzas
+                    if ref_norm in cobranzas_docs:
+                        transito_ya_cobrado.append({
+                            'referencia': info['referencia'],
+                            'monto_transito': info['monto'],
+                            'monto_cobranza': cobranzas_docs[ref_norm]['monto'],
+                            'banco': info.get('banco', 'No identificado'),
+                            'fecha': info.get('fecha', 'No disponible'),
+                            'estado': '✅ YA COBRADO (Coincide con Cobranzas)'
+                        })
+                    # Verificar si la referencia está en Ingresos del Estado de Cuenta
+                    elif ref_norm in ingresos_docs:
+                        transito_ya_cobrado.append({
+                            'referencia': info['referencia'],
+                            'monto_transito': info['monto'],
+                            'monto_ingreso': ingresos_docs[ref_norm]['monto'],
+                            'banco': info.get('banco', 'No identificado'),
+                            'fecha': info.get('fecha', 'No disponible'),
+                            'estado': '✅ YA COBRADO (Coincide con Ingresos E/C)'
+                        })
+                
+                # IDENTIFICAR TRANSFERENCIAS EN TRÁNSITO QUE AÚN NO HAN SIDO COBRADAS
+                transito_pendiente = []
+                for ref_norm, info in tb_docs.items():
+                    if ref_norm not in cobranzas_docs and ref_norm not in ingresos_docs:
+                        transito_pendiente.append({
+                            'referencia': info['referencia'],
+                            'monto': info['monto'],
+                            'banco': info.get('banco', 'No identificado'),
+                            'fecha': info.get('fecha', 'No disponible'),
+                            'estado': '⏳ PENDIENTE DE COBRO (No está en Cobranzas ni en E/C)'
+                        })
+                
+                # IDENTIFICAR COBRANZAS QUE NO ESTÁN EN TRÁNSITO (Ya fueron procesadas)
+                cobranzas_sin_transito = []
+                for ref_norm, info in cobranzas_docs.items():
+                    if ref_norm not in tb_docs:
+                        cobranzas_sin_transito.append({
+                            'referencia': info['referencia'],
+                            'monto': info['monto'],
+                            'banco': info.get('banco', 'No identificado'),
+                            'fecha': info.get('fecha', 'No disponible'),
+                            'estado': '✅ PROCESADA (Ya no está en Tránsito)'
+                        })
+                
+                # Calcular totales
+                total_ya_cobrado = sum([x.get('monto_transito', x.get('monto', 0)) for x in transito_ya_cobrado])
+                total_pendiente = sum([x['monto'] for x in transito_pendiente])
+                total_cobranzas_procesadas = sum([x['monto'] for x in cobranzas_sin_transito])
+                
+                # Mostrar resultados
+                col_r1, col_r2, col_r3 = st.columns(3)
+                
+                with col_r1:
+                    st.metric("✅ Ya Cobradas", len(transito_ya_cobrado), delta=f"{formato_venezolano(total_ya_cobrado)}")
+                    if transito_ya_cobrado:
+                        st.success(f"✅ {len(transito_ya_cobrado)} transferencias ya fueron cobradas")
+                        for item in transito_ya_cobrado[:3]:
+                            st.write(f"- 📄 {item['referencia']}: {formato_venezolano(item['monto_transito'])}")
+                        if len(transito_ya_cobrado) > 3:
+                            st.write(f"... y {len(transito_ya_cobrado) - 3} más")
+                    else:
+                        st.info("ℹ️ No hay transferencias ya cobradas")
+                
+                with col_r2:
+                    st.metric("⏳ Pendientes de Cobro", len(transito_pendiente), delta=f"{formato_venezolano(total_pendiente)}")
+                    if transito_pendiente:
+                        st.warning(f"⏳ {len(transito_pendiente)} transferencias pendientes de cobro")
+                        for item in transito_pendiente[:3]:
+                            st.write(f"- 📄 {item['referencia']}: {formato_venezolano(item['monto'])}")
+                        if len(transito_pendiente) > 3:
+                            st.write(f"... y {len(transito_pendiente) - 3} más")
+                    else:
+                        st.success("✅ No hay transferencias pendientes")
+                
+                with col_r3:
+                    st.metric("✅ Cobranzas Procesadas", len(cobranzas_sin_transito), delta=f"{formato_venezolano(total_cobranzas_procesadas)}")
+                    if cobranzas_sin_transito:
+                        st.info(f"ℹ️ {len(cobranzas_sin_transito)} cobranzas ya procesadas (salieron de Tránsito)")
+                        for item in cobranzas_sin_transito[:3]:
+                            st.write(f"- 📄 {item['referencia']}: {formato_venezolano(item['monto'])}")
+                        if len(cobranzas_sin_transito) > 3:
+                            st.write(f"... y {len(cobranzas_sin_transito) - 3} más")
+                    else:
+                        st.success("✅ No hay cobranzas procesadas")
+                
+                # ============================================================
+                # 5. DIAGNÓSTICO FINAL
+                # ============================================================
+                st.markdown("---")
+                st.markdown("#### 🎯 Diagnóstico de la Diferencia")
+                
+                # La diferencia se explica por: 
+                # - Transferencias pendientes (deben estar en Tránsito)
+                # - Cobranzas procesadas (ya no están en Tránsito)
+                diferencia_explicada_transito = total_pendiente + total_cobranzas_procesadas
+                diferencia_no_explicada_transito = abs(diff_transito) - diferencia_explicada_transito
+                
+                st.markdown(f"""
+                | Concepto | Monto | Explicación |
+                |----------|-------|-------------|
+                | **Diferencia Total** | {formato_venezolano(abs(diff_transito))} | Diferencia en Tránsito Calculado vs Reportado |
+                | ⏳ **Transferencias Pendientes** | {formato_venezolano(total_pendiente)} | Transferencias en TB que NO están en Cobranzas |
+                | ✅ **Cobranzas Procesadas** | {formato_venezolano(total_cobranzas_procesadas)} | Cobranzas que ya no están en Tránsito |
+                | ✅ **Transferencias Ya Cobradas** | {formato_venezolano(total_ya_cobrado)} | Transferencias que coinciden con Cobranzas |
+                | **Diferencia Explicada** | {formato_venezolano(diferencia_explicada_transito)} | Suma de Pendientes + Cobranzas Procesadas |
+                | **Diferencia NO Explicada** | {formato_venezolano(diferencia_no_explicada_transito)} | ⚠️ Requiere revisión manual |
+                """)
+                
+                if abs(diferencia_no_explicada_transito) < 0.01:
+                    st.success("✅ **¡DIFERENCIA EXPLICADA COMPLETAMENTE!** Todas las transferencias coinciden con la variación en Tránsito.")
+                    
+                    # Mostrar resumen de la conciliación
+                    st.markdown("#### 📋 Resumen de Conciliación de Tránsito")
+                    
+                    resumen_parts = []
+                    if len(transito_pendiente) > 0:
+                        resumen_parts.append(f"⏳ **{len(transito_pendiente)} Transferencias Pendientes**: {formato_venezolano(total_pendiente)}")
+                    if len(cobranzas_sin_transito) > 0:
+                        resumen_parts.append(f"✅ **{len(cobranzas_sin_transito)} Cobranzas Procesadas**: {formato_venezolano(total_cobranzas_procesadas)}")
+                    if len(transito_ya_cobrado) > 0:
+                        resumen_parts.append(f"✅ **{len(transito_ya_cobrado)} Transferencias Ya Cobradas**: {formato_venezolano(total_ya_cobrado)}")
+                    
+                    if resumen_parts:
+                        st.markdown(f"""
+                        **La diferencia de {formato_venezolano(abs(diff_transito))} en Transferencias en Tránsito se explica por:**
+                        
+                        {chr(10).join(['- ' + p for p in resumen_parts])}
+                        
+                        ✅ **Todas las diferencias están justificadas.**
+                        """)
+                    else:
+                        st.success("✅ No hay diferencias que explicar.")
+                else:
+                    st.error(f"❌ **DIFERENCIA NO EXPLICADA:** {formato_venezolano(diferencia_no_explicada_transito)} Bs. no identificados.")
+                    st.markdown("""
+                    **Posibles causas:**
+                    - Transferencias en Tránsito sin referencia clara
+                    - Cobranzas que no están registradas en el archivo TB
+                    - Errores de digitación en montos o referencias
+                    - Transferencias de días anteriores que no fueron conciliadas
+                    - Depósitos que aún no han sido procesados por el banco
+                    """)
+                    
+                    # Mostrar referencias no coincidentes
+                    referencias_tb = set(tb_docs.keys())
+                    referencias_cob = set(cobranzas_docs.keys())
+                    referencias_ing = set(ingresos_docs.keys())
+                    
+                    referencias_no_encontradas = referencias_tb - referencias_cob - referencias_ing
+                    if referencias_no_encontradas:
+                        st.warning(f"⚠️ **{len(referencias_no_encontradas)} referencias en TB que no coinciden con Cobranzas ni Ingresos:**")
+                        for ref in list(referencias_no_encontradas)[:10]:
+                            info = tb_docs.get(ref, {})
+                            st.write(f"- {info.get('referencia', ref)}: {formato_venezolano(info.get('monto', 0))}")
+                        if len(referencias_no_encontradas) > 10:
+                            st.write(f"... y {len(referencias_no_encontradas) - 10} más")
+                
+                # ============================================================
+                # 6. TABLA DETALLADA DE TRANSFERENCIAS
+                # ============================================================
+                with st.expander("📋 Ver detalle completo de transferencias", expanded=False):
+                    st.markdown("##### ✅ Transferencias Ya Cobradas")
+                    if transito_ya_cobrado:
+                        df_ya_cobrado = pd.DataFrame(transito_ya_cobrado)
+                        st.dataframe(df_ya_cobrado, width='stretch')
+                    else:
+                        st.info("No hay transferencias ya cobradas")
+                    
+                    st.markdown("##### ⏳ Transferencias Pendientes")
+                    if transito_pendiente:
+                        df_pendiente = pd.DataFrame(transito_pendiente)
+                        st.dataframe(df_pendiente, width='stretch')
+                    else:
+                        st.info("No hay transferencias pendientes")
+                    
+                    st.markdown("##### ✅ Cobranzas Procesadas (Ya no están en Tránsito)")
+                    if cobranzas_sin_transito:
+                        df_procesadas = pd.DataFrame(cobranzas_sin_transito)
+                        st.dataframe(df_procesadas, width='stretch')
+                    else:
+                        st.info("No hay cobranzas procesadas")
+                
+            except Exception as e:
+                st.error(f"❌ Error en el análisis de transferencias: {str(e)}")
+                import traceback
+                st.code(traceback.format_exc())
+    
+    st.markdown("---")
     # ============================================================
     # BOTONES PARA VER ARCHIVOS ORIGINALES
     # ============================================================
