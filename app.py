@@ -4775,6 +4775,479 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 st.code(traceback.format_exc())
     
     st.markdown("---")
+        st.markdown("---")
+    
+    # ============================================================
+    # 🔥 TRAZABILIDAD DE CUENTAS POR COBRAR
+    # ============================================================
+    st.markdown("### 🔍 Trazabilidad de Cuentas por Cobrar")
+    st.caption("Análisis detallado: CxC Anterior + Facturación - Cobranzas = CxC Calculado vs CxC Reportado")
+    
+    # Mostrar el cálculo paso a paso
+    st.markdown("#### 📊 Paso a paso del cálculo")
+    
+    col_c1, col_c2, col_c3, col_c4, col_c5 = st.columns(5)
+    
+    with col_c1:
+        st.metric("💰 CxC Anterior", formato_venezolano(cx_c_anterior))
+    with col_c2:
+        st.metric("📊 Facturación", formato_venezolano(facturacion))
+    with col_c3:
+        st.metric("💰 Cobranzas Procesadas", formato_venezolano(cobranzas))
+    with col_c4:
+        st.metric("📊 CxC Calculado", formato_venezolano(cx_c_calculado))
+    with col_c5:
+        st.metric("📄 CxC Reportado", formato_venezolano(cx_c_reportado) if cx_c_reportado is not None else "N/A")
+    
+    # Verificar si hay diferencia
+    diff_cxc = safe_number(cx_c_calculado) - safe_number(cx_c_reportado) if cx_c_reportado is not None else 0
+    
+    if abs(diff_cxc) < 0.01:
+        st.success("✅ **¡CONCILIACIÓN PERFECTA!** El CxC Calculado coincide con el CxC Reportado.")
+    else:
+        st.error(f"⚠️ **DIFERENCIA DETECTADA:** {formato_venezolano(abs(diff_cxc))} Bs. de diferencia entre Calculado y Reportado")
+        
+        # ============================================================
+        # 🔥 ANÁLISIS PROFUNDO DE CUENTAS POR COBRAR
+        # ============================================================
+        st.markdown("---")
+        st.markdown("#### 🔍 Análisis de Cobranzas Duplicadas o Rezagadas")
+        st.caption("Verificación de cobranzas que se repiten entre días o que están rezagadas")
+        
+        # Verificar si tenemos los archivos necesarios
+        tiene_cobranzas = 'df_cobranzas' in locals() and df_cobranzas is not None
+        tiene_cxc_reportado = 'df_cxc_rep' in locals() and df_cxc_rep is not None
+        tiene_facturacion = 'df_facturacion' in locals() and df_facturacion is not None
+        
+        if not tiene_cobranzas and not tiene_cxc_reportado:
+            st.warning("⚠️ **Faltan archivos para el análisis profundo.** Sube el archivo de Cobranzas y/o CxC Reportado para continuar.")
+        else:
+            try:
+                import re
+                import os
+                from datetime import timedelta
+                from config import RUTA_ARCHIVOS
+                
+                # ============================================================
+                # 1. EXTRAER COBRANZAS DEL ARCHIVO DE COBRANZAS PROCESADAS (DÍA ACTUAL)
+                # ============================================================
+                st.markdown("##### 💰 Cobranzas Procesadas del Día Actual")
+                
+                cobranzas_actual_docs = {}
+                if tiene_cobranzas:
+                    df_cob_clean = ProcesadorArchivos._limpiar_columnas(df_cobranzas)
+                    
+                    # Buscar cabecera en Cobranzas
+                    idx_cob = None
+                    for idx, row in df_cob_clean.iterrows():
+                        row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                        if 'banco' in row_str and 'cuenta' in row_str and 'deposito' in row_str:
+                            idx_cob = idx
+                            break
+                    if idx_cob is None:
+                        idx_cob = ProcesadorArchivos._encontrar_fila_datos(df_cob_clean, ['banco', 'deposito', 'monto'])
+                    
+                    if idx_cob is not None and idx_cob >= 0 and idx_cob < len(df_cob_clean):
+                        df_datos = df_cob_clean.iloc[idx_cob:].reset_index(drop=True)
+                        if len(df_datos) > 0:
+                            header_row = df_datos.iloc[0]
+                            new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
+                            df_datos.columns = new_cols
+                            df_cob_clean = df_datos.iloc[1:].reset_index(drop=True)
+                    
+                    # Buscar columnas
+                    col_ref_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'deposito', 'nro', 'referencia', 'documento')
+                    col_monto_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'monto', 'total', 'importe')
+                    col_banco_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'banco', 'cuenta', 'entidad')
+                    col_fecha_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'fecha', 'fec', 'f. cobranza')
+                    col_cliente_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'cliente', 'nombre', 'rif', 'cedula')
+                    
+                    if col_ref_cob and col_monto_cob:
+                        for idx, row in df_cob_clean.iterrows():
+                            ref = str(row[col_ref_cob]).strip()
+                            monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_cob])
+                            if ref and ref != 'nan' and ref != 'None' and monto:
+                                ref_norm = re.sub(r'[^0-9]', '', ref)
+                                if ref_norm:
+                                    fecha = ''
+                                    if col_fecha_cob:
+                                        try:
+                                            fecha_val = row[col_fecha_cob]
+                                            if pd.notna(fecha_val):
+                                                if isinstance(fecha_val, pd.Timestamp):
+                                                    fecha = fecha_val.strftime('%d/%m/%Y')
+                                                else:
+                                                    fecha = str(fecha_val).strip()
+                                        except:
+                                            pass
+                                    
+                                    banco = ''
+                                    if col_banco_cob:
+                                        try:
+                                            banco_val = str(row[col_banco_cob]).strip()
+                                            if banco_val and banco_val != 'nan' and banco_val != 'None':
+                                                banco = banco_val
+                                        except:
+                                            pass
+                                    
+                                    cliente = ''
+                                    if col_cliente_cob:
+                                        try:
+                                            cliente_val = str(row[col_cliente_cob]).strip()
+                                            if cliente_val and cliente_val != 'nan' and cliente_val != 'None':
+                                                cliente = cliente_val
+                                        except:
+                                            pass
+                                    
+                                    cobranzas_actual_docs[ref_norm] = {
+                                        'referencia': ref,
+                                        'monto': float(monto),
+                                        'banco': banco,
+                                        'fecha': fecha,
+                                        'cliente': cliente,
+                                        'tipo': 'COBRANZA_ACTUAL'
+                                    }
+                
+                st.info(f"💰 **{len(cobranzas_actual_docs)}** cobranzas encontradas en el día actual")
+                
+                # ============================================================
+                # 2. EXTRAER COBRANZAS DEL DÍA ANTERIOR (DESDE ARCHIVO GUARDADO)
+                # ============================================================
+                st.markdown("##### 📂 Cobranzas del Día Anterior (para detectar duplicados)")
+                
+                cobranzas_anterior_docs = {}
+                try:
+                    from config import RUTA_ARCHIVOS
+                    empresa_clean = re.sub(r'[^\w\-_]', '_', st.session_state.empresa_activa)
+                    fecha_ant_str = (pd.Timestamp(fecha_procesar) - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+                    filename_ant = f"cobranzas_{empresa_clean}_{fecha_ant_str}.xlsx"
+                    filepath_ant = os.path.join(RUTA_ARCHIVOS, filename_ant)
+                    
+                    if os.path.exists(filepath_ant):
+                        df_cob_ant = pd.read_excel(filepath_ant)
+                        df_cob_ant_clean = ProcesadorArchivos._limpiar_columnas(df_cob_ant)
+                        
+                        # Buscar cabecera en Cobranzas Anterior
+                        idx_cob_ant = None
+                        for idx, row in df_cob_ant_clean.iterrows():
+                            row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                            if 'banco' in row_str and 'cuenta' in row_str and 'deposito' in row_str:
+                                idx_cob_ant = idx
+                                break
+                        if idx_cob_ant is None:
+                            idx_cob_ant = ProcesadorArchivos._encontrar_fila_datos(df_cob_ant_clean, ['banco', 'deposito', 'monto'])
+                        
+                        if idx_cob_ant is not None and idx_cob_ant >= 0 and idx_cob_ant < len(df_cob_ant_clean):
+                            df_datos = df_cob_ant_clean.iloc[idx_cob_ant:].reset_index(drop=True)
+                            if len(df_datos) > 0:
+                                header_row = df_datos.iloc[0]
+                                new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
+                                df_datos.columns = new_cols
+                                df_cob_ant_clean = df_datos.iloc[1:].reset_index(drop=True)
+                        
+                        # Buscar columnas
+                        col_ref_cob_ant = ProcesadorArchivos._buscar_columna(df_cob_ant_clean, 'deposito', 'nro', 'referencia', 'documento')
+                        col_monto_cob_ant = ProcesadorArchivos._buscar_columna(df_cob_ant_clean, 'monto', 'total', 'importe')
+                        col_banco_cob_ant = ProcesadorArchivos._buscar_columna(df_cob_ant_clean, 'banco', 'cuenta', 'entidad')
+                        col_fecha_cob_ant = ProcesadorArchivos._buscar_columna(df_cob_ant_clean, 'fecha', 'fec', 'f. cobranza')
+                        
+                        if col_ref_cob_ant and col_monto_cob_ant:
+                            for idx, row in df_cob_ant_clean.iterrows():
+                                ref = str(row[col_ref_cob_ant]).strip()
+                                monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_cob_ant])
+                                if ref and ref != 'nan' and ref != 'None' and monto:
+                                    ref_norm = re.sub(r'[^0-9]', '', ref)
+                                    if ref_norm:
+                                        fecha = ''
+                                        if col_fecha_cob_ant:
+                                            try:
+                                                fecha_val = row[col_fecha_cob_ant]
+                                                if pd.notna(fecha_val):
+                                                    if isinstance(fecha_val, pd.Timestamp):
+                                                        fecha = fecha_val.strftime('%d/%m/%Y')
+                                                    else:
+                                                        fecha = str(fecha_val).strip()
+                                            except:
+                                                pass
+                                        
+                                        banco = ''
+                                        if col_banco_cob_ant:
+                                            try:
+                                                banco_val = str(row[col_banco_cob_ant]).strip()
+                                                if banco_val and banco_val != 'nan' and banco_val != 'None':
+                                                    banco = banco_val
+                                            except:
+                                                pass
+                                        
+                                        cobranzas_anterior_docs[ref_norm] = {
+                                            'referencia': ref,
+                                            'monto': float(monto),
+                                            'banco': banco,
+                                            'fecha': fecha,
+                                            'tipo': 'COBRANZA_ANTERIOR'
+                                        }
+                        
+                        st.info(f"📂 **{len(cobranzas_anterior_docs)}** cobranzas encontradas en el día anterior ({fecha_ant_str})")
+                    else:
+                        st.info(f"ℹ️ No se encontró archivo de cobranzas del día anterior ({fecha_ant_str})")
+                except Exception as e:
+                    st.warning(f"⚠️ Error al leer cobranzas del día anterior: {str(e)}")
+                
+                # ============================================================
+                # 3. ANÁLISIS CRUZADO - DETECTAR COBRANZAS DUPLICADAS
+                # ============================================================
+                st.markdown("---")
+                st.markdown("#### 📊 Análisis Cruzado de Cobranzas")
+                
+                # 🔥 IDENTIFICAR COBRANZAS DUPLICADAS (Están en día actual y también en día anterior)
+                cobranzas_duplicadas = []
+                for ref_norm, info in cobranzas_actual_docs.items():
+                    if ref_norm in cobranzas_anterior_docs:
+                        cobranzas_duplicadas.append({
+                            'referencia': info['referencia'],
+                            'monto_actual': info['monto'],
+                            'monto_anterior': cobranzas_anterior_docs[ref_norm]['monto'],
+                            'banco': info.get('banco', 'No identificado'),
+                            'fecha_actual': info.get('fecha', 'No disponible'),
+                            'fecha_anterior': cobranzas_anterior_docs[ref_norm].get('fecha', 'No disponible'),
+                            'cliente': info.get('cliente', 'No identificado'),
+                            'estado': '🔴 DUPLICADA (Ya estaba en día anterior)'
+                        })
+                
+                # 🔥 IDENTIFICAR COBRANZAS REZAGADAS (Están en día anterior pero NO en día actual - ya fueron procesadas)
+                cobranzas_rezagadas = []
+                for ref_norm, info in cobranzas_anterior_docs.items():
+                    if ref_norm not in cobranzas_actual_docs:
+                        cobranzas_rezagadas.append({
+                            'referencia': info['referencia'],
+                            'monto': info['monto'],
+                            'banco': info.get('banco', 'No identificado'),
+                            'fecha': info.get('fecha', 'No disponible'),
+                            'estado': '✅ YA PROCESADA (No está en el día actual)'
+                        })
+                
+                # 🔥 IDENTIFICAR COBRANZAS NUEVAS (Están en día actual pero NO en día anterior)
+                cobranzas_nuevas = []
+                for ref_norm, info in cobranzas_actual_docs.items():
+                    if ref_norm not in cobranzas_anterior_docs:
+                        cobranzas_nuevas.append({
+                            'referencia': info['referencia'],
+                            'monto': info['monto'],
+                            'banco': info.get('banco', 'No identificado'),
+                            'fecha': info.get('fecha', 'No disponible'),
+                            'cliente': info.get('cliente', 'No identificado'),
+                            'estado': '🆕 NUEVA (No estaba en día anterior)'
+                        })
+                
+                # Calcular totales
+                total_duplicadas = sum([x['monto_actual'] for x in cobranzas_duplicadas])
+                total_rezagadas = sum([x['monto'] for x in cobranzas_rezagadas])
+                total_nuevas = sum([x['monto'] for x in cobranzas_nuevas])
+                
+                # Mostrar resultados
+                col_dup1, col_dup2, col_dup3 = st.columns(3)
+                
+                with col_dup1:
+                    st.metric("🔴 Cobranzas Duplicadas", len(cobranzas_duplicadas), delta=f"{formato_venezolano(total_duplicadas)}")
+                    if cobranzas_duplicadas:
+                        st.error(f"❌ **{len(cobranzas_duplicadas)} cobranzas DUPLICADAS** (ya estaban en el día anterior)")
+                        for item in cobranzas_duplicadas[:5]:
+                            st.write(f"- 🔴 {item['referencia']}: {formato_venezolano(item['monto_actual'])} ({item['cliente']})")
+                            st.caption(f"  Día anterior: {formato_venezolano(item['monto_anterior'])} | Fecha: {item['fecha_actual']}")
+                        if len(cobranzas_duplicadas) > 5:
+                            st.write(f"... y {len(cobranzas_duplicadas) - 5} más")
+                    else:
+                        st.success("✅ No hay cobranzas duplicadas")
+                
+                with col_dup2:
+                    st.metric("✅ Cobranzas Rezagadas", len(cobranzas_rezagadas), delta=f"{formato_venezolano(total_rezagadas)}")
+                    if cobranzas_rezagadas:
+                        st.info(f"ℹ️ {len(cobranzas_rezagadas)} cobranzas ya estaban en el día anterior (ya procesadas)")
+                        for item in cobranzas_rezagadas[:5]:
+                            st.write(f"- ✅ {item['referencia']}: {formato_venezolano(item['monto'])}")
+                            st.caption(f"  Fecha: {item['fecha']}")
+                        if len(cobranzas_rezagadas) > 5:
+                            st.write(f"... y {len(cobranzas_rezagadas) - 5} más")
+                    else:
+                        st.success("✅ No hay cobranzas rezagadas")
+                
+                with col_dup3:
+                    st.metric("🆕 Cobranzas Nuevas", len(cobranzas_nuevas), delta=f"{formato_venezolano(total_nuevas)}")
+                    if cobranzas_nuevas:
+                        st.success(f"✅ {len(cobranzas_nuevas)} cobranzas nuevas (no estaban en el día anterior)")
+                        for item in cobranzas_nuevas[:5]:
+                            st.write(f"- 🆕 {item['referencia']}: {formato_venezolano(item['monto'])} ({item['cliente']})")
+                        if len(cobranzas_nuevas) > 5:
+                            st.write(f"... y {len(cobranzas_nuevas) - 5} más")
+                    else:
+                        st.info("ℹ️ No hay cobranzas nuevas")
+                
+                # ============================================================
+                # 4. ANÁLISIS DE FACTURACIÓN VS CxC REPORTADO
+                # ============================================================
+                st.markdown("---")
+                st.markdown("#### 📊 Análisis de Facturación vs CxC Reportado")
+                
+                if tiene_facturacion and tiene_cxc_reportado:
+                    try:
+                        # Extraer facturas del archivo de facturación
+                        df_fact_clean = ProcesadorArchivos._limpiar_columnas(df_facturacion)
+                        
+                        # Buscar cabecera en Facturación
+                        idx_fact = None
+                        for idx, row in df_fact_clean.iterrows():
+                            row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                            if 'factura' in row_str and 'total' in row_str:
+                                idx_fact = idx
+                                break
+                        if idx_fact is None:
+                            idx_fact = ProcesadorArchivos._encontrar_fila_datos(df_fact_clean, ['factura', 'total', 'cliente'])
+                        
+                        if idx_fact is not None and idx_fact >= 0 and idx_fact < len(df_fact_clean):
+                            df_datos = df_fact_clean.iloc[idx_fact:].reset_index(drop=True)
+                            if len(df_datos) > 0:
+                                header_row = df_datos.iloc[0]
+                                new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
+                                df_datos.columns = new_cols
+                                df_fact_clean = df_datos.iloc[1:].reset_index(drop=True)
+                        
+                        # Buscar columnas
+                        col_fact_num = ProcesadorArchivos._buscar_columna(df_fact_clean, 'factura', 'nro', 'documento')
+                        col_fact_monto = ProcesadorArchivos._buscar_columna(df_fact_clean, 'total', 'monto', 'importe')
+                        col_fact_cliente = ProcesadorArchivos._buscar_columna(df_fact_clean, 'cliente', 'nombre', 'rif')
+                        
+                        if col_fact_num and col_fact_monto:
+                            facturas = []
+                            for idx, row in df_fact_clean.iterrows():
+                                factura = str(row[col_fact_num]).strip()
+                                monto = ProcesadorArchivos._convertir_numero_europeo(row[col_fact_monto])
+                                if factura and factura != 'nan' and factura != 'None' and monto:
+                                    cliente = ''
+                                    if col_fact_cliente:
+                                        try:
+                                            cliente_val = str(row[col_fact_cliente]).strip()
+                                            if cliente_val and cliente_val != 'nan' and cliente_val != 'None':
+                                                cliente = cliente_val
+                                        except:
+                                            pass
+                                    
+                                    facturas.append({
+                                        'factura': factura,
+                                        'monto': float(monto),
+                                        'cliente': cliente
+                                    })
+                            
+                            if facturas:
+                                st.info(f"📊 **{len(facturas)}** facturas encontradas en el archivo de facturación")
+                                
+                                # Mostrar resumen de facturación
+                                df_facturas = pd.DataFrame(facturas)
+                                st.dataframe(df_facturas, width='stretch')
+                            else:
+                                st.info("ℹ️ No se encontraron facturas para analizar")
+                    except Exception as e:
+                        st.warning(f"⚠️ Error al analizar facturación: {str(e)}")
+                
+                # ============================================================
+                # 5. DIAGNÓSTICO FINAL
+                # ============================================================
+                st.markdown("---")
+                st.markdown("#### 🎯 Diagnóstico de la Diferencia")
+                
+                # La diferencia se explica por: Cobranzas Duplicadas + Cobranzas Rezagadas
+                diferencia_explicada_cxc = total_duplicadas + total_rezagadas
+                diferencia_no_explicada_cxc = abs(diff_cxc) - diferencia_explicada_cxc
+                
+                st.markdown(f"""
+                | Concepto | Monto | Explicación |
+                |----------|-------|-------------|
+                | **Diferencia Total** | {formato_venezolano(abs(diff_cxc))} | Diferencia en CxC Calculado vs Reportado |
+                | 🔴 **Cobranzas Duplicadas** | {formato_venezolano(total_duplicadas)} | Cobranzas que ya estaban en el día anterior |
+                | ✅ **Cobranzas Rezagadas** | {formato_venezolano(total_rezagadas)} | Cobranzas que ya no están en el día actual |
+                | 🆕 **Cobranzas Nuevas** | {formato_venezolano(total_nuevas)} | Cobranzas que no estaban en el día anterior |
+                | **Diferencia Explicada** | {formato_venezolano(diferencia_explicada_cxc)} | Suma de Duplicadas + Rezagadas |
+                | **Diferencia NO Explicada** | {formato_venezolano(diferencia_no_explicada_cxc)} | ⚠️ Requiere revisión manual |
+                """)
+                
+                if abs(diferencia_no_explicada_cxc) < 0.01:
+                    st.success("✅ **¡DIFERENCIA EXPLICADA COMPLETAMENTE!** Todas las cobranzas coinciden con la variación en CxC.")
+                    
+                    st.markdown("#### 📋 Resumen de Conciliación de CxC")
+                    
+                    resumen_parts = []
+                    if len(cobranzas_duplicadas) > 0:
+                        resumen_parts.append(f"🔴 **{len(cobranzas_duplicadas)} Cobranzas Duplicadas**: {formato_venezolano(total_duplicadas)}")
+                    if len(cobranzas_rezagadas) > 0:
+                        resumen_parts.append(f"✅ **{len(cobranzas_rezagadas)} Cobranzas Rezagadas**: {formato_venezolano(total_rezagadas)}")
+                    if len(cobranzas_nuevas) > 0:
+                        resumen_parts.append(f"🆕 **{len(cobranzas_nuevas)} Cobranzas Nuevas**: {formato_venezolano(total_nuevas)}")
+                    
+                    if resumen_parts:
+                        st.markdown(f"""
+                        **La diferencia de {formato_venezolano(abs(diff_cxc))} en Cuentas por Cobrar se explica por:**
+                        
+                        {chr(10).join(['- ' + p for p in resumen_parts])}
+                        
+                        ✅ **Todas las diferencias están justificadas.**
+                        """)
+                    else:
+                        st.success("✅ No hay diferencias que explicar.")
+                else:
+                    st.error(f"❌ **DIFERENCIA NO EXPLICADA:** {formato_venezolano(diferencia_no_explicada_cxc)} Bs. no identificados.")
+                    st.markdown("""
+                    **Posibles causas:**
+                    - Cobranzas que no tienen referencia clara
+                    - Facturas que no están registradas en el sistema
+                    - Errores de digitación en montos o referencias
+                    - Notas de crédito que afectan CxC
+                    - Ajustes manuales no registrados
+                    """)
+                    
+                    # Mostrar referencias no coincidentes
+                    if cobranzas_actual_docs and cobranzas_anterior_docs:
+                        referencias_actual = set(cobranzas_actual_docs.keys())
+                        referencias_anterior = set(cobranzas_anterior_docs.keys())
+                        
+                        referencias_no_coincidentes = referencias_actual - referencias_anterior
+                        if referencias_no_coincidentes:
+                            st.warning(f"⚠️ **{len(referencias_no_coincidentes)} referencias en cobranzas actuales que no coinciden con el día anterior:**")
+                            for ref in list(referencias_no_coincidentes)[:10]:
+                                info = cobranzas_actual_docs.get(ref, {})
+                                st.write(f"- {info.get('referencia', ref)}: {formato_venezolano(info.get('monto', 0))} ({info.get('cliente', 'N/A')})")
+                            if len(referencias_no_coincidentes) > 10:
+                                st.write(f"... y {len(referencias_no_coincidentes) - 10} más")
+                
+                # ============================================================
+                # 6. TABLA DETALLADA DE COBRANZAS
+                # ============================================================
+                with st.expander("📋 Ver detalle completo de cobranzas", expanded=False):
+                    st.markdown("##### 🔴 Cobranzas Duplicadas")
+                    if cobranzas_duplicadas:
+                        df_duplicadas = pd.DataFrame(cobranzas_duplicadas)
+                        st.dataframe(df_duplicadas, width='stretch')
+                    else:
+                        st.success("✅ No hay cobranzas duplicadas")
+                    
+                    st.markdown("##### ✅ Cobranzas Rezagadas (Ya procesadas en día anterior)")
+                    if cobranzas_rezagadas:
+                        df_rezagadas = pd.DataFrame(cobranzas_rezagadas)
+                        st.dataframe(df_rezagadas, width='stretch')
+                    else:
+                        st.success("✅ No hay cobranzas rezagadas")
+                    
+                    st.markdown("##### 🆕 Cobranzas Nuevas")
+                    if cobranzas_nuevas:
+                        df_nuevas = pd.DataFrame(cobranzas_nuevas)
+                        st.dataframe(df_nuevas, width='stretch')
+                    else:
+                        st.info("ℹ️ No hay cobranzas nuevas")
+                
+            except Exception as e:
+                st.error(f"❌ Error en el análisis de cobranzas: {str(e)}")
+                import traceback
+                st.code(traceback.format_exc())
+    
+    st.markdown("---")
     # ============================================================
     # BOTONES PARA VER ARCHIVOS ORIGINALES
     # ============================================================
