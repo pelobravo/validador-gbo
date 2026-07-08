@@ -1,5 +1,6 @@
 # app.py - Con campos para saldos iniciales manuales - VERSIÓN COMPLETA CON CIERRE DIARIO Y VISUALIZACIÓN DE ARCHIVOS
 # 🔥 MODIFICADO: Identificación y visualización de OT Nuevas en Cuentas por Pagar
+# 🤖 INTEGRACIÓN CON DEEPSEEK API
 
 import streamlit as st
 import pandas as pd
@@ -12,6 +13,7 @@ import numpy as np
 import re
 import matplotlib.pyplot as plt
 import sqlite3
+from openai import OpenAI  # <--- NUEVO: Para DeepSeek API
 
 # Importar módulos del sistema
 from config import USUARIOS, validar_carpetas
@@ -20,6 +22,42 @@ from logger import Logger
 from procesadores import ProcesadorArchivos
 from api_bcv import obtener_tasa_bcv
 from motor_auditoria import ejecutar_auditoria_inteligente, registrar_excepcion, cargar_ultimo_cierre
+
+# ============================================================
+# 🤖 FUNCIÓN PARA CONSULTAR DEEPSEEK API (NUEVO)
+# ============================================================
+def consultar_deepseek(pregunta, contexto=""):
+    """
+    Consulta la API de DeepSeek usando la clave desde Secrets de Streamlit Cloud.
+    """
+    try:
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        
+        if not api_key:
+            return "❌ Error: La clave API no está configurada en Secrets de Streamlit Cloud."
+        
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://api.deepseek.com/v1"
+        )
+        
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role": "system", "content": f"Eres un asistente experto en validación de trazabilidad financiera y contabilidad. Contexto: {contexto}"},
+                {"role": "user", "content": pregunta}
+            ],
+            temperature=0.3
+        )
+        
+        return response.choices[0].message.content
+    
+    except Exception as e:
+        return f"❌ Error al consultar DeepSeek: {str(e)}"
+
+# ============================================================
+# FIN FUNCIÓN DEEPSEEK
+# ============================================================
 
 # Inicializar componentes
 validar_carpetas()
@@ -4508,5 +4546,28 @@ else:
         | **Total General:** | | | | **1.417,00** | |
         """)
 
+# ============================================================
+# 🤖 ASISTENTE IA - DEEPSEEK (NUEVA SECCIÓN)
+# ============================================================
+st.markdown("---")
+st.header("🤖 Asistente IA - DeepSeek")
+
+with st.expander("💬 Haz una consulta al asistente", expanded=False):
+    pregunta_usuario = st.text_area("Escribe tu pregunta sobre el sistema:", 
+                                   "¿Cómo puedo optimizar el proceso de conciliación de saldos?")
+    
+    if st.button("Consultar a DeepSeek", use_container_width=True):
+        if pregunta_usuario:
+            with st.spinner("Consultando a DeepSeek... ⏳"):
+                contexto = f"Sistema de validación de trazabilidad financiera diaria para el Grupo Bodeguita Oriente. Empresa: {st.session_state.empresa_activa}. Fecha: {fecha_procesar.strftime('%Y-%m-%d')}"
+                respuesta = consultar_deepseek(pregunta_usuario, contexto)
+                st.success("✅ Respuesta del asistente:")
+                st.markdown(f"💬 {respuesta}")
+        else:
+            st.warning("⚠️ Por favor escribe una pregunta antes de consultar.")
+
+# ============================================================
+# PIE DE PÁGINA
+# ============================================================
 st.markdown("---")
 st.caption("✨ Validador de Trazabilidad Diaria - Capital de Trabajo Neto Operativo | Grupo Bodeguita Oriente")
