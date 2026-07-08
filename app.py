@@ -3366,7 +3366,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
-    # 🔥 COMPARACIÓN VS VALORES REPORTADOS - SOLO 5 CUENTAS
+    # 🔥 COMPARACIÓN VS VALORES REPORTADOS - SOLO 5 CUENTAS Y COLUMNAS CON DATOS
     # ============================================================
     st.markdown("#### 📋 Comparación vs Valores Reportados")
 
@@ -3382,15 +3382,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     bancos_anterior = safe_number(st.session_state.saldos.get('bancos', 0))
     cx_p_anterior = safe_number(st.session_state.saldos.get('cx_p', 0))
     transito_anterior = safe_number(st.session_state.saldos.get('transito', 0))
-
-    # Inicializar ajustes si no existen
-    if 'ajustes' not in st.session_state:
-        st.session_state.ajustes = {
-            'inventario': {'monto': 0.0, 'justificacion': ''},
-            'cx_c': {'monto': 0.0, 'justificacion': ''},
-            'cx_p': {'monto': 0.0, 'justificacion': ''},
-            'transito': {'monto': 0.0, 'justificacion': ''}
-        }
 
     # Calcular diferencias
     diff_inv_real = safe_number(inventario_calculado) - safe_number(inventario_reportado) if inventario_reportado is not None else 0
@@ -3421,9 +3412,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         "Día Anterior": formato_venezolano(inventario_anterior) if inventario_anterior > 0 else "-",
         "Calculado": formato_venezolano(inventario_calculado),
         "Reportado": formato_venezolano(inventario_reportado) if inventario_reportado is not None and inventario_reportado > 0 else "-",
-        "Diferencia": diff_inv_display,
-        "Ajuste": "0,00",
-        "Diferencia Ajustada": diff_inv_display
+        "Diferencia": diff_inv_display
     })
 
     # 2. CUENTAS POR COBRAR
@@ -3434,9 +3423,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         "Día Anterior": formato_venezolano(cx_c_anterior) if cx_c_anterior > 0 else "-",
         "Calculado": formato_venezolano(cx_c_calculado),
         "Reportado": formato_venezolano(cx_c_reportado) if cx_c_reportado is not None and cx_c_reportado > 0 else "-",
-        "Diferencia": diff_cxc_display,
-        "Ajuste": "0,00",
-        "Diferencia Ajustada": diff_cxc_display
+        "Diferencia": diff_cxc_display
     })
 
     # 3. BANCOS
@@ -3449,9 +3436,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         "Día Anterior": formato_venezolano(saldo_bancos_anterior) if saldo_bancos_anterior > 0 else "-",
         "Calculado": formato_venezolano(bancos_calculado),
         "Reportado": formato_venezolano(saldo_final) if saldo_final > 0 else "-",
-        "Diferencia": diff_bancos_display,
-        "Ajuste": "-",
-        "Diferencia Ajustada": "-"
+        "Diferencia": diff_bancos_display
     })
 
     # 4. CUENTAS POR PAGAR
@@ -3462,9 +3447,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         "Día Anterior": formato_venezolano(cx_p_anterior) if cx_p_anterior > 0 else "-",
         "Calculado": formato_venezolano(cx_p_calculado),
         "Reportado": formato_venezolano(cx_p_reportado) if cx_p_reportado is not None and cx_p_reportado > 0 else "-",
-        "Diferencia": diff_cxp_display,
-        "Ajuste": "0,00",
-        "Diferencia Ajustada": diff_cxp_display
+        "Diferencia": diff_cxp_display
     })
 
     # 5. TRANSFERENCIAS EN TRÁNSITO
@@ -3475,13 +3458,14 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         "Día Anterior": formato_venezolano(transito_anterior) if transito_anterior > 0 else "-",
         "Calculado": formato_venezolano(transito_calculado),
         "Reportado": formato_venezolano(transito_reportado) if transito_reportado is not None and transito_reportado > 0 else "-",
-        "Diferencia": diff_transito_display,
-        "Ajuste": "0,00",
-        "Diferencia Ajustada": diff_transito_display
+        "Diferencia": diff_transito_display
     })
 
-    # Crear DataFrame y mostrar tabla
+    # Crear DataFrame y mostrar tabla - SOLO LAS COLUMNAS QUE NECESITAS
     df_comparacion = pd.DataFrame(comparacion_data)
+    
+    # Columnas a mostrar (las que tienen información)
+    columnas_mostrar = ['Cuenta', 'Fórmula', 'Día Anterior', 'Calculado', 'Reportado', 'Diferencia']
     
     # Aplicar estilos a la tabla (colores según diferencia)
     def colorear_filas(row):
@@ -3493,14 +3477,14 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 return ['background-color: #f8d7da;'] * len(row)  # Rojo claro
         return [''] * len(row)
     
-    # Mostrar tabla con estilos
+    # Mostrar tabla con estilos - SOLO LAS COLUMNAS CON INFORMACIÓN
     st.dataframe(
-        df_comparacion.style.apply(colorear_filas, axis=1).hide(axis='index'),
+        df_comparacion[columnas_mostrar].style.apply(colorear_filas, axis=1).hide(axis='index'),
         width='stretch',
         height=400
     )
     
-    # Resumen de diferencias (opcional)
+    # Resumen de diferencias
     st.markdown("#### 📊 Resumen de Diferencias")
     
     col_res1, col_res2, col_res3 = st.columns(3)
@@ -3523,7 +3507,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             st.success("✅ Todas las cuentas concilian")
         else:
             st.warning(f"⚠️ {cuentas_con_diff} cuenta(s) requieren revisión")
-
     # ============================================================
     # 📦 TRAZABILIDAD DE INVENTARIO - PRODUCTO POR PRODUCTO
     # ============================================================
