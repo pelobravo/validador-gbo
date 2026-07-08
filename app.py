@@ -3820,6 +3820,505 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             
     st.markdown("---")
     # ============================================================
+    # 🔥 TRAZABILIDAD DE CUENTAS POR PAGAR - RUTA DE AUDITORÍA
+    # ============================================================
+    st.markdown("### 🔍 Trazabilidad de Cuentas por Pagar")
+    st.caption("Análisis detallado: CxP Anterior + Recepciones - Pagos Proveedores = CxP Calculado vs CxP Reportado")
+    
+    # Mostrar el cálculo paso a paso
+    st.markdown("#### 📊 Paso a paso del cálculo")
+    
+    col_p1, col_p2, col_p3, col_p4, col_p5 = st.columns(5)
+    
+    with col_p1:
+        st.metric("📋 CxP Anterior", formato_venezolano(cx_p_anterior))
+    with col_p2:
+        st.metric("📦 Recepciones", formato_venezolano(recepcion_total))
+    with col_p3:
+        st.metric("💰 Pagos Proveedores", formato_venezolano(pagos_proveedores))
+    with col_p4:
+        st.metric("📊 CxP Calculado", formato_venezolano(cx_p_calculado))
+    with col_p5:
+        st.metric("📄 CxP Reportado", formato_venezolano(cx_p_reportado) if cx_p_reportado is not None else "N/A")
+    
+    # Verificar si hay diferencia
+    diff_cxp = safe_number(cx_p_calculado) - safe_number(cx_p_reportado) if cx_p_reportado is not None else 0
+    
+    if abs(diff_cxp) < 0.01:
+        st.success("✅ **¡CONCILIACIÓN PERFECTA!** El CxP Calculado coincide con el CxP Reportado.")
+    else:
+        st.error(f"⚠️ **DIFERENCIA DETECTADA:** {formato_venezolano(abs(diff_cxp))} Bs. de diferencia entre Calculado y Reportado")
+        
+        # ============================================================
+        # 🔥 ANÁLISIS PROFUNDO DE DOCUMENTOS (NE / OT / FA)
+        # ============================================================
+        st.markdown("---")
+        st.markdown("#### 🔍 Análisis de Documentos (NE / OT / FA)")
+        
+        # Verificar si tenemos los archivos necesarios
+        tiene_recepciones = 'df_recepciones' in locals() and df_recepciones is not None
+        tiene_cxp_rep = 'df_cxp_rep' in locals() and df_cxp_rep is not None
+        tiene_cxp_ant = 'archivo_cxp_anterior' in globals() and archivo_cxp_anterior is not None
+        
+        if not tiene_recepciones and not tiene_cxp_rep:
+            st.warning("⚠️ **Faltan archivos para el análisis profundo.** Sube el archivo de Recepciones y/o CxP Reportado para continuar.")
+        else:
+            try:
+                import re
+                import os
+                from datetime import timedelta
+                
+                # ============================================================
+                # 1. EXTRAER DOCUMENTOS DEL CxP ACTUAL
+                # ============================================================
+                st.markdown("##### 📋 Documentos en CxP Reportado (Día Actual)")
+                
+                cxp_actual_docs = {}
+                if tiene_cxp_rep:
+                    df_cxp_clean = ProcesadorArchivos._limpiar_columnas(df_cxp_rep)
+                    # Buscar cabecera
+                    idx_cxp = None
+                    for idx, row in df_cxp_clean.iterrows():
+                        row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                        if 'documento' in row_str and any(k in row_str for k in ['saldo', 'pendt', 'pendiente']):
+                            idx_cxp = idx
+                            break
+                    if idx_cxp is None:
+                        idx_cxp = ProcesadorArchivos._encontrar_fila_datos(df_cxp_clean, ['proveedor', 'documento', 'saldo'])
+                    
+                    if idx_cxp is not None and idx_cxp >= 0 and idx_cxp < len(df_cxp_clean):
+                        df_datos = df_cxp_clean.iloc[idx_cxp:].reset_index(drop=True)
+                        if len(df_datos) > 0:
+                            header_row = df_datos.iloc[0]
+                            new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
+                            df_datos.columns = new_cols
+                            df_cxp_clean = df_datos.iloc[1:].reset_index(drop=True)
+                    
+                    # Buscar columnas
+                    col_doc = ProcesadorArchivos._buscar_columna(df_cxp_clean, 'documento', 'doc', 'factura', 'nro_doc', 'referencia')
+                    col_monto = None
+                    if len(df_cxp_clean.columns) > 2:
+                        col_monto = df_cxp_clean.columns[2]
+                    else:
+                        col_monto = ProcesadorArchivos._buscar_columna(df_cxp_clean, 'saldo', 'saldo pendt', 'pendiente', 'monto')
+                    
+                    # Buscar columna de proveedor
+                    col_proveedor = ProcesadorArchivos._buscar_columna(df_cxp_clean, 'proveedor', 'rif', 'nombre', 'razon social')
+                    
+                    if col_doc and col_monto:
+                        for idx, row in df_cxp_clean.iterrows():
+                            doc = str(row[col_doc]).strip()
+                            monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto])
+                            if doc and doc != 'nan' and doc != 'None' and monto:
+                                doc_norm = re.sub(r'[^0-9]', '', doc)
+                                doc_norm = re.sub(r'^0+', '', doc_norm)
+                                if doc_norm:
+                                    doc_upper = doc.upper()
+                                    # 🔥 CLASIFICACIÓN CORRECTA DE DOCUMENTOS
+                                    if 'NE' in doc_upper:
+                                        tipo = 'NE'
+                                    elif 'OT' in doc_upper:
+                                        tipo = 'OT'
+                                    elif 'FA' in doc_upper or 'FACT' in doc_upper:
+                                        tipo = 'FA'
+                                    else:
+                                        tipo = 'DESCONOCIDO'
+                                    
+                                    # Obtener proveedor
+                                    proveedor = 'No identificado'
+                                    if col_proveedor:
+                                        try:
+                                            prov_val = str(row[col_proveedor]).strip()
+                                            if prov_val and prov_val != 'nan' and prov_val != 'None':
+                                                proveedor = prov_val
+                                        except:
+                                            pass
+                                    
+                                    cxp_actual_docs[doc_norm] = {
+                                        'original': doc,
+                                        'monto': float(monto),
+                                        'tipo': tipo,
+                                        'proveedor': proveedor
+                                    }
+                
+                st.info(f"📄 **{len(cxp_actual_docs)}** documentos encontrados en CxP Reportado")
+                
+                # Mostrar resumen por tipo
+                tipos_actual = {}
+                for doc in cxp_actual_docs.values():
+                    tipos_actual[doc['tipo']] = tipos_actual.get(doc['tipo'], 0) + 1
+                if tipos_actual:
+                    st.write("**Clasificación:** " + ", ".join([f"{k}: {v}" for k, v in tipos_actual.items()]))
+                
+                # ============================================================
+                # 2. EXTRAER DOCUMENTOS DEL CxP ANTERIOR
+                # ============================================================
+                st.markdown("##### 📋 Documentos en CxP Día Anterior")
+                
+                cxp_anterior_docs = {}
+                if tiene_cxp_ant:
+                    try:
+                        df_cxp_ant = pd.read_excel(archivo_cxp_anterior)
+                        df_cxp_ant_clean = ProcesadorArchivos._limpiar_columnas(df_cxp_ant)
+                        
+                        idx_ant = None
+                        for idx, row in df_cxp_ant_clean.iterrows():
+                            row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                            if 'documento' in row_str and any(k in row_str for k in ['saldo', 'pendt', 'pendiente']):
+                                idx_ant = idx
+                                break
+                        if idx_ant is None:
+                            idx_ant = ProcesadorArchivos._encontrar_fila_datos(df_cxp_ant_clean, ['proveedor', 'documento', 'saldo'])
+                        
+                        if idx_ant is not None and idx_ant >= 0 and idx_ant < len(df_cxp_ant_clean):
+                            df_datos = df_cxp_ant_clean.iloc[idx_ant:].reset_index(drop=True)
+                            if len(df_datos) > 0:
+                                header_row = df_datos.iloc[0]
+                                new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
+                                df_datos.columns = new_cols
+                                df_cxp_ant_clean = df_datos.iloc[1:].reset_index(drop=True)
+                        
+                        col_doc_ant = ProcesadorArchivos._buscar_columna(df_cxp_ant_clean, 'documento', 'doc', 'factura', 'nro_doc', 'referencia')
+                        col_monto_ant = None
+                        if len(df_cxp_ant_clean.columns) > 2:
+                            col_monto_ant = df_cxp_ant_clean.columns[2]
+                        else:
+                            col_monto_ant = ProcesadorArchivos._buscar_columna(df_cxp_ant_clean, 'saldo', 'saldo pendt', 'pendiente', 'monto')
+                        
+                        if col_doc_ant and col_monto_ant:
+                            for idx, row in df_cxp_ant_clean.iterrows():
+                                doc = str(row[col_doc_ant]).strip()
+                                monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_ant])
+                                if doc and doc != 'nan' and doc != 'None' and monto:
+                                    doc_norm = re.sub(r'[^0-9]', '', doc)
+                                    doc_norm = re.sub(r'^0+', '', doc_norm)
+                                    if doc_norm:
+                                        doc_upper = doc.upper()
+                                        if 'NE' in doc_upper:
+                                            tipo = 'NE'
+                                        elif 'OT' in doc_upper:
+                                            tipo = 'OT'
+                                        elif 'FA' in doc_upper or 'FACT' in doc_upper:
+                                            tipo = 'FA'
+                                        else:
+                                            tipo = 'DESCONOCIDO'
+                                        cxp_anterior_docs[doc_norm] = {
+                                            'original': doc,
+                                            'monto': float(monto),
+                                            'tipo': tipo
+                                        }
+                    except Exception as e:
+                        st.warning(f"⚠️ Error al leer CxP Anterior: {str(e)}")
+                
+                st.info(f"📄 **{len(cxp_anterior_docs)}** documentos encontrados en CxP Anterior")
+                
+                # ============================================================
+                # 3. EXTRAER DOCUMENTOS DE RECEPCIONES
+                # ============================================================
+                st.markdown("##### 📦 Documentos en Recepciones")
+                
+                recepciones_docs = {}
+                if tiene_recepciones:
+                    df_rec_clean = ProcesadorArchivos._limpiar_columnas(df_recepciones)
+                    
+                    idx_rec = None
+                    for idx, row in df_rec_clean.iterrows():
+                        row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                        if 'compra' in row_str and 'proveedor' in row_str and 'recep' in row_str:
+                            idx_rec = idx
+                            break
+                    if idx_rec is None:
+                        idx_rec = ProcesadorArchivos._encontrar_fila_datos(df_rec_clean, ['compra', 'proveedor', 'recep'])
+                    
+                    if idx_rec is not None and idx_rec >= 0 and idx_rec < len(df_rec_clean):
+                        df_datos = df_rec_clean.iloc[idx_rec:].reset_index(drop=True)
+                        if len(df_datos) > 0:
+                            header_row = df_datos.iloc[0]
+                            new_cols = [str(col).strip() if pd.notna(col) else f'col_{i}' for i, col in enumerate(header_row)]
+                            df_datos.columns = new_cols
+                            df_rec_clean = df_datos.iloc[1:].reset_index(drop=True)
+                    
+                    # Buscar columnas
+                    cols_doc_rec = []
+                    for col in df_rec_clean.columns:
+                        col_l = str(col).lower()
+                        if 'fact' in col_l or 'compra' in col_l or 'documento' in col_l:
+                            cols_doc_rec.append(col)
+                    
+                    col_rec_monto = None
+                    for col in df_rec_clean.columns:
+                        clean_col = re.sub(r'[^a-z0-9]', '', str(col).lower())
+                        if 'neto' in clean_col and 'iva' in clean_col:
+                            col_rec_monto = col
+                            break
+                    if col_rec_monto is None:
+                        for col in df_rec_clean.columns:
+                            clean_col = re.sub(r'[^a-z0-9]', '', str(col).lower())
+                            if 'neto' in clean_col or 'total' in clean_col:
+                                col_rec_monto = col
+                                break
+                    
+                    if cols_doc_rec and col_rec_monto:
+                        for idx, row in df_rec_clean.iterrows():
+                            monto = ProcesadorArchivos._convertir_numero_europeo(row[col_rec_monto])
+                            if not monto:
+                                continue
+                            for col_doc in cols_doc_rec:
+                                doc = str(row[col_doc]).strip()
+                                if doc and doc != 'nan' and doc != 'None':
+                                    doc_norm = re.sub(r'[^0-9]', '', doc)
+                                    doc_norm = re.sub(r'^0+', '', doc_norm)
+                                    if doc_norm:
+                                        doc_upper = doc.upper()
+                                        if 'NE' in doc_upper:
+                                            tipo = 'NE'
+                                        elif 'OT' in doc_upper:
+                                            tipo = 'OT'
+                                        elif 'FA' in doc_upper or 'FACT' in doc_upper:
+                                            tipo = 'FA'
+                                        else:
+                                            tipo = 'DESCONOCIDO'
+                                        recepciones_docs[doc_norm] = {
+                                            'original': doc,
+                                            'monto': float(monto),
+                                            'tipo': tipo
+                                        }
+                
+                st.info(f"📦 **{len(recepciones_docs)}** documentos encontrados en Recepciones")
+                
+                # ============================================================
+                # 4. ANÁLISIS CRUZADO DE DOCUMENTOS
+                # ============================================================
+                st.markdown("---")
+                st.markdown("#### 📊 Análisis Cruzado de Documentos")
+                
+                # 🔥 CLASIFICACIÓN CORRECTA DE CADA TIPO DE DOCUMENTO
+                
+                # 1. OT NUEVAS: Están en CxP Actual pero NO en CxP Anterior
+                ot_nuevas = []
+                for doc_norm, info in cxp_actual_docs.items():
+                    if info['tipo'] == 'OT' and doc_norm not in cxp_anterior_docs:
+                        ot_nuevas.append({
+                            'documento': info['original'],
+                            'monto': info['monto'],
+                            'proveedor': info.get('proveedor', 'No identificado'),
+                            'tipo': 'OT NUEVA (Carga Manual)'
+                        })
+                
+                # 2. OT ELIMINADAS: Están en CxP Anterior pero NO en CxP Actual
+                ot_eliminadas = []
+                for doc_norm, info in cxp_anterior_docs.items():
+                    if info['tipo'] == 'OT' and doc_norm not in cxp_actual_docs:
+                        ot_eliminadas.append({
+                            'documento': info['original'],
+                            'monto': info['monto'],
+                            'tipo': 'OT ELIMINADA'
+                        })
+                
+                # 3. NE en Recepciones pero NO en CxP (Pago al Contado)
+                ne_pago_contado = []
+                for doc_norm, info in recepciones_docs.items():
+                    if info['tipo'] == 'NE' and doc_norm not in cxp_actual_docs:
+                        ne_pago_contado.append({
+                            'documento': info['original'],
+                            'monto': info['monto'],
+                            'tipo': 'NE (Pago al Contado)'
+                        })
+                
+                # 4. 🔥 FA en CxP pero NO en Recepciones (Facturas sin Recepción)
+                fa_en_cxp_no_recepcion = []
+                for doc_norm, info in cxp_actual_docs.items():
+                    if info['tipo'] == 'FA' and doc_norm not in recepciones_docs:
+                        fa_en_cxp_no_recepcion.append({
+                            'documento': info['original'],
+                            'monto': info['monto'],
+                            'proveedor': info.get('proveedor', 'No identificado'),
+                            'tipo': 'FA en CxP sin Recepción'
+                        })
+                
+                # 5. NE en CxP pero NO en Recepciones (Notas de Entrega sin Recepción)
+                ne_en_cxp_no_recepcion = []
+                for doc_norm, info in cxp_actual_docs.items():
+                    if info['tipo'] == 'NE' and doc_norm not in recepciones_docs:
+                        ne_en_cxp_no_recepcion.append({
+                            'documento': info['original'],
+                            'monto': info['monto'],
+                            'proveedor': info.get('proveedor', 'No identificado'),
+                            'tipo': 'NE en CxP sin Recepción'
+                        })
+                
+                # 6. FA en Recepciones pero NO en CxP (Facturas no registradas en CxP)
+                fa_en_recepcion_no_cxp = []
+                for doc_norm, info in recepciones_docs.items():
+                    if info['tipo'] == 'FA' and doc_norm not in cxp_actual_docs:
+                        fa_en_recepcion_no_cxp.append({
+                            'documento': info['original'],
+                            'monto': info['monto'],
+                            'tipo': 'FA en Recepción sin CxP'
+                        })
+                
+                # Calcular totales
+                total_ot_nuevas = sum([x['monto'] for x in ot_nuevas])
+                total_ot_eliminadas = sum([x['monto'] for x in ot_eliminadas])
+                total_ne_pago_contado = sum([x['monto'] for x in ne_pago_contado])
+                total_fa_en_cxp_no_recepcion = sum([x['monto'] for x in fa_en_cxp_no_recepcion])
+                total_ne_en_cxp_no_recepcion = sum([x['monto'] for x in ne_en_cxp_no_recepcion])
+                total_fa_en_recepcion_no_cxp = sum([x['monto'] for x in fa_en_recepcion_no_cxp])
+                
+                # Mostrar resultados en columnas
+                st.markdown("##### 📊 Resultados del Análisis")
+                
+                col_a1, col_a2, col_a3 = st.columns(3)
+                
+                with col_a1:
+                    st.metric("🆕 OT Nuevas (Carga Manual)", len(ot_nuevas), delta=f"{formato_venezolano(total_ot_nuevas)}")
+                    if ot_nuevas:
+                        st.warning(f"⚠️ {len(ot_nuevas)} OT nuevas detectadas")
+                        for item in ot_nuevas[:3]:
+                            st.write(f"- 📄 {item['documento']}: {formato_venezolano(item['monto'])}")
+                        if len(ot_nuevas) > 3:
+                            st.write(f"... y {len(ot_nuevas) - 3} más")
+                    else:
+                        st.success("✅ No hay OT nuevas")
+                
+                with col_a2:
+                    st.metric("🗑️ OT Eliminadas", len(ot_eliminadas), delta=f"{formato_venezolano(total_ot_eliminadas)}")
+                    if ot_eliminadas:
+                        st.info(f"ℹ️ {len(ot_eliminadas)} OT eliminadas")
+                        for item in ot_eliminadas[:3]:
+                            st.write(f"- 📄 {item['documento']}: {formato_venezolano(item['monto'])}")
+                        if len(ot_eliminadas) > 3:
+                            st.write(f"... y {len(ot_eliminadas) - 3} más")
+                    else:
+                        st.success("✅ No hay OT eliminadas")
+                
+                with col_a3:
+                    st.metric("⚠️ NE Pago al Contado", len(ne_pago_contado), delta=f"{formato_venezolano(total_ne_pago_contado)}")
+                    if ne_pago_contado:
+                        st.info(f"ℹ️ {len(ne_pago_contado)} NE pagadas al contado")
+                        for item in ne_pago_contado[:3]:
+                            st.write(f"- 📄 {item['documento']}: {formato_venezolano(item['monto'])}")
+                        if len(ne_pago_contado) > 3:
+                            st.write(f"... y {len(ne_pago_contado) - 3} más")
+                    else:
+                        st.success("✅ No hay NE pagadas al contado")
+                
+                # Segunda fila de columnas
+                col_b1, col_b2, col_b3 = st.columns(3)
+                
+                with col_b1:
+                    st.metric("📄 FA en CxP sin Recepción", len(fa_en_cxp_no_recepcion), delta=f"{formato_venezolano(total_fa_en_cxp_no_recepcion)}")
+                    if fa_en_cxp_no_recepcion:
+                        st.error(f"❌ {len(fa_en_cxp_no_recepcion)} FA en CxP sin Recepción")
+                        for item in fa_en_cxp_no_recepcion[:3]:
+                            st.write(f"- 📄 {item['documento']}: {formato_venezolano(item['monto'])} ({item['proveedor']})")
+                        if len(fa_en_cxp_no_recepcion) > 3:
+                            st.write(f"... y {len(fa_en_cxp_no_recepcion) - 3} más")
+                    else:
+                        st.success("✅ No hay FA sin Recepción")
+                
+                with col_b2:
+                    st.metric("📄 NE en CxP sin Recepción", len(ne_en_cxp_no_recepcion), delta=f"{formato_venezolano(total_ne_en_cxp_no_recepcion)}")
+                    if ne_en_cxp_no_recepcion:
+                        st.warning(f"⚠️ {len(ne_en_cxp_no_recepcion)} NE en CxP sin Recepción")
+                        for item in ne_en_cxp_no_recepcion[:3]:
+                            st.write(f"- 📄 {item['documento']}: {formato_venezolano(item['monto'])} ({item['proveedor']})")
+                        if len(ne_en_cxp_no_recepcion) > 3:
+                            st.write(f"... y {len(ne_en_cxp_no_recepcion) - 3} más")
+                    else:
+                        st.success("✅ No hay NE sin Recepción")
+                
+                with col_b3:
+                    st.metric("📄 FA en Recepción sin CxP", len(fa_en_recepcion_no_cxp), delta=f"{formato_venezolano(total_fa_en_recepcion_no_cxp)}")
+                    if fa_en_recepcion_no_cxp:
+                        st.warning(f"⚠️ {len(fa_en_recepcion_no_cxp)} FA en Recepción sin CxP")
+                        for item in fa_en_recepcion_no_cxp[:3]:
+                            st.write(f"- 📄 {item['documento']}: {formato_venezolano(item['monto'])}")
+                        if len(fa_en_recepcion_no_cxp) > 3:
+                            st.write(f"... y {len(fa_en_recepcion_no_cxp) - 3} más")
+                    else:
+                        st.success("✅ No hay FA sin CxP")
+                
+                # ============================================================
+                # 5. RESULTADO DEL ANÁLISIS - DIAGNÓSTICO FINAL
+                # ============================================================
+                st.markdown("---")
+                st.markdown("#### 🎯 Diagnóstico de la Diferencia")
+                
+                # Calcular diferencia explicada
+                # La diferencia se explica por: OT Nuevas + NE Pago al Contado + FA en Recepción sin CxP
+                diferencia_explicada = total_ot_nuevas + total_ne_pago_contado + total_fa_en_recepcion_no_cxp
+                diferencia_no_explicada = abs(diff_cxp) - diferencia_explicada
+                
+                st.markdown(f"""
+                | Concepto | Monto | Explicación |
+                |----------|-------|-------------|
+                | **Diferencia Total** | {formato_venezolano(abs(diff_cxp))} | Diferencia en CxP Calculado vs Reportado |
+                | 🆕 **OT Nuevas (Carga Manual)** | {formato_venezolano(total_ot_nuevas)} | Documentos OT que no estaban en CxP Anterior |
+                | ⚠️ **NE (Pago al Contado)** | {formato_venezolano(total_ne_pago_contado)} | NE en Recepciones pero NO en CxP |
+                | 📄 **FA en Recepción sin CxP** | {formato_venezolano(total_fa_en_recepcion_no_cxp)} | Facturas en Recepción pero NO en CxP |
+                | 🗑️ **OT Eliminadas** | {formato_venezolano(total_ot_eliminadas)} | Documentos que salieron del CxP |
+                | 📄 **FA en CxP sin Recepción** | {formato_venezolano(total_fa_en_cxp_no_recepcion)} | Facturas en CxP pero NO en Recepciones |
+                | 📄 **NE en CxP sin Recepción** | {formato_venezolano(total_ne_en_cxp_no_recepcion)} | NE en CxP pero NO en Recepciones |
+                | **Diferencia Explicada** | {formato_venezolano(diferencia_explicada)} | Suma de OT Nuevas + NE Pago al Contado + FA en Recepción sin CxP |
+                | **Diferencia NO Explicada** | {formato_venezolano(diferencia_no_explicada)} | ⚠️ Requiere revisión manual |
+                """)
+                
+                if abs(diferencia_no_explicada) < 0.01:
+                    st.success("✅ **¡DIFERENCIA EXPLICADA COMPLETAMENTE!** Todos los documentos coinciden con la variación en CxP.")
+                    
+                    # Mostrar resumen de la conciliación
+                    st.markdown("#### 📋 Resumen de Conciliación")
+                    
+                    resumen_parts = []
+                    if len(ot_nuevas) > 0:
+                        resumen_parts.append(f"🆕 **{len(ot_nuevas)} OT Nuevas** (Carga Manual): {formato_venezolano(total_ot_nuevas)}")
+                    if len(ne_pago_contado) > 0:
+                        resumen_parts.append(f"⚠️ **{len(ne_pago_contado)} NE (Pago al Contado)**: {formato_venezolano(total_ne_pago_contado)}")
+                    if len(fa_en_recepcion_no_cxp) > 0:
+                        resumen_parts.append(f"📄 **{len(fa_en_recepcion_no_cxp)} FA en Recepción sin CxP**: {formato_venezolano(total_fa_en_recepcion_no_cxp)}")
+                    
+                    if resumen_parts:
+                        st.markdown(f"""
+                        **La diferencia de {formato_venezolano(abs(diff_cxp))} en CxP se explica por:**
+                        
+                        {chr(10).join(['- ' + p for p in resumen_parts])}
+                        
+                        ✅ **Todas las diferencias están justificadas.**
+                        """)
+                    else:
+                        st.success("✅ No hay diferencias que explicar.")
+                else:
+                    st.error(f"❌ **DIFERENCIA NO EXPLICADA:** {formato_venezolano(diferencia_no_explicada)} Bs. no identificados.")
+                    st.markdown("""
+                    **Posibles causas:**
+                    - Documentos con formato diferente (no reconocidos como NE/OT/FA)
+                    - Errores de digitación en montos
+                    - Documentos duplicados o faltantes en los archivos
+                    - Recepciones sin documento asociado
+                    - Ajustes manuales no registrados
+                    """)
+                    
+                    # Mostrar documentos no clasificados
+                    docs_no_clasificados = []
+                    for doc_norm, info in cxp_actual_docs.items():
+                        if info['tipo'] == 'DESCONOCIDO':
+                            docs_no_clasificados.append({
+                                'documento': info['original'],
+                                'monto': info['monto'],
+                                'proveedor': info.get('proveedor', 'No identificado')
+                            })
+                    
+                    if docs_no_clasificados:
+                        st.warning(f"⚠️ **{len(docs_no_clasificados)} documentos no clasificados** en CxP (no son NE, OT o FA):")
+                        df_no_clas = pd.DataFrame(docs_no_clasificados)
+                        st.dataframe(df_no_clas, width='stretch')
+                
+            except Exception as e:
+                st.error(f"❌ Error en el análisis de documentos: {str(e)}")
+                import traceback
+                st.code(traceback.format_exc())
+    # ============================================================
     # BOTONES PARA VER ARCHIVOS ORIGINALES
     # ============================================================
     st.markdown("---")
