@@ -4775,26 +4775,30 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 st.code(traceback.format_exc())
     
     st.markdown("---")
+        st.markdown("---")
+    
     # ============================================================
-    # 🔥 TRAZABILIDAD DE CUENTAS POR COBRAR
+    # 🔥 TRAZABILIDAD DE CUENTAS POR COBRAR (CON NOTAS DE CRÉDITO)
     # ============================================================
     st.markdown("### 🔍 Trazabilidad de Cuentas por Cobrar")
-    st.caption("Análisis detallado: CxC Anterior + Facturación - Cobranzas = CxC Calculado vs CxC Reportado")
+    st.caption("Análisis detallado: CxC Anterior + Facturación - Cobranzas - NC Clientes = CxC Calculado vs CxC Reportado")
     
     # Mostrar el cálculo paso a paso
     st.markdown("#### 📊 Paso a paso del cálculo")
     
-    col_c1, col_c2, col_c3, col_c4, col_c5 = st.columns(5)
+    col_c1, col_c2, col_c3, col_c4, col_c5, col_c6 = st.columns(6)
     
     with col_c1:
         st.metric("💰 CxC Anterior", formato_venezolano(cx_c_anterior))
     with col_c2:
         st.metric("📊 Facturación", formato_venezolano(facturacion))
     with col_c3:
-        st.metric("💰 Cobranzas Procesadas", formato_venezolano(cobranzas))
+        st.metric("💰 Cobranzas", formato_venezolano(cobranzas))
     with col_c4:
-        st.metric("📊 CxC Calculado", formato_venezolano(cx_c_calculado))
+        st.metric("📝 NC Clientes", formato_venezolano(notas_credito_cliente))
     with col_c5:
+        st.metric("📊 CxC Calculado", formato_venezolano(cx_c_calculado))
+    with col_c6:
         st.metric("📄 CxC Reportado", formato_venezolano(cx_c_reportado) if cx_c_reportado is not None else "N/A")
     
     # Verificar si hay diferencia
@@ -4809,11 +4813,12 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         # 🔥 ANÁLISIS PROFUNDO DE CUENTAS POR COBRAR
         # ============================================================
         st.markdown("---")
-        st.markdown("#### 🔍 Análisis de Cobranzas Duplicadas o Rezagadas")
-        st.caption("Verificación de cobranzas que se repiten entre días o que están rezagadas")
+        st.markdown("#### 🔍 Análisis de Cobranzas y Notas de Crédito")
+        st.caption("Verificación de cobranzas duplicadas, rezagadas y notas de crédito aplicadas")
         
         # Verificar si tenemos los archivos necesarios
         tiene_cobranzas = 'df_cobranzas' in locals() and df_cobranzas is not None
+        tiene_notas_cliente = 'df_notas_cliente' in locals() and df_notas_cliente is not None
         tiene_cxc_reportado = 'df_cxc_rep' in locals() and df_cxc_rep is not None
         tiene_facturacion = 'df_facturacion' in locals() and df_facturacion is not None
         
@@ -4992,10 +4997,86 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     st.warning(f"⚠️ Error al leer cobranzas del día anterior: {str(e)}")
                 
                 # ============================================================
-                # 3. ANÁLISIS CRUZADO - DETECTAR COBRANZAS DUPLICADAS
+                # 3. EXTRAER NOTAS DE CRÉDITO DE CLIENTES
+                # ============================================================
+                st.markdown("##### 📝 Notas de Crédito de Clientes")
+                
+                notas_credito_docs = {}
+                if tiene_notas_cliente:
+                    try:
+                        df_nc_clean = ProcesadorArchivos._limpiar_columnas(df_notas_cliente)
+                        
+                        # Buscar cabecera en Notas de Crédito
+                        idx_nc = None
+                        for idx, row in df_nc_clean.iterrows():
+                            row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                            if 'nota' in row_str and 'credito' in row_str:
+                                idx_nc = idx
+                                break
+                        if idx_nc is None:
+                            idx_nc = ProcesadorArchivos._encontrar_fila_datos(df_nc_clean, ['nota', 'credito', 'monto'])
+                        
+                        if idx_nc is not None and idx_nc >= 0 and idx_nc < len(df_nc_clean):
+                            df_datos = df_nc_clean.iloc[idx_nc:].reset_index(drop=True)
+                            if len(df_datos) > 0:
+                                header_row = df_datos.iloc[0]
+                                new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
+                                df_datos.columns = new_cols
+                                df_nc_clean = df_datos.iloc[1:].reset_index(drop=True)
+                        
+                        # Buscar columnas
+                        col_ref_nc = ProcesadorArchivos._buscar_columna(df_nc_clean, 'documento', 'nota', 'nro', 'referencia')
+                        col_monto_nc = ProcesadorArchivos._buscar_columna(df_nc_clean, 'monto', 'total', 'importe')
+                        col_cliente_nc = ProcesadorArchivos._buscar_columna(df_nc_clean, 'cliente', 'nombre', 'rif')
+                        col_fecha_nc = ProcesadorArchivos._buscar_columna(df_nc_clean, 'fecha', 'fec', 'f. contable')
+                        
+                        if col_ref_nc and col_monto_nc:
+                            for idx, row in df_nc_clean.iterrows():
+                                ref = str(row[col_ref_nc]).strip()
+                                monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_nc])
+                                if ref and ref != 'nan' and ref != 'None' and monto:
+                                    ref_norm = re.sub(r'[^0-9]', '', ref)
+                                    if ref_norm:
+                                        fecha = ''
+                                        if col_fecha_nc:
+                                            try:
+                                                fecha_val = row[col_fecha_nc]
+                                                if pd.notna(fecha_val):
+                                                    if isinstance(fecha_val, pd.Timestamp):
+                                                        fecha = fecha_val.strftime('%d/%m/%Y')
+                                                    else:
+                                                        fecha = str(fecha_val).strip()
+                                            except:
+                                                pass
+                                        
+                                        cliente = ''
+                                        if col_cliente_nc:
+                                            try:
+                                                cliente_val = str(row[col_cliente_nc]).strip()
+                                                if cliente_val and cliente_val != 'nan' and cliente_val != 'None':
+                                                    cliente = cliente_val
+                                            except:
+                                                pass
+                                        
+                                        notas_credito_docs[ref_norm] = {
+                                            'referencia': ref,
+                                            'monto': float(monto),
+                                            'cliente': cliente,
+                                            'fecha': fecha,
+                                            'tipo': 'NOTA_CREDITO'
+                                        }
+                        
+                        st.info(f"📝 **{len(notas_credito_docs)}** notas de crédito encontradas")
+                    except Exception as e:
+                        st.warning(f"⚠️ Error al leer notas de crédito: {str(e)}")
+                else:
+                    st.info("ℹ️ No se cargó archivo de Notas de Crédito de Clientes")
+                
+                # ============================================================
+                # 4. ANÁLISIS CRUZADO - DETECTAR COBRANZAS DUPLICADAS
                 # ============================================================
                 st.markdown("---")
-                st.markdown("#### 📊 Análisis Cruzado de Cobranzas")
+                st.markdown("#### 📊 Análisis Cruzado de Cobranzas y Notas de Crédito")
                 
                 # 🔥 IDENTIFICAR COBRANZAS DUPLICADAS (Están en día actual y también en día anterior)
                 cobranzas_duplicadas = []
@@ -5037,12 +5118,36 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                             'estado': '🆕 NUEVA (No estaba en día anterior)'
                         })
                 
+                # 🔥 IDENTIFICAR NOTAS DE CRÉDITO QUE AFECTAN CxC
+                notas_credito_aplicadas = []
+                for ref_norm, info in notas_credito_docs.items():
+                    # Verificar si la nota de crédito está en CxC Reportado
+                    if ref_norm in cobranzas_actual_docs:
+                        notas_credito_aplicadas.append({
+                            'referencia': info['referencia'],
+                            'monto_nc': info['monto'],
+                            'monto_cobranza': cobranzas_actual_docs[ref_norm]['monto'],
+                            'cliente': info.get('cliente', 'No identificado'),
+                            'fecha': info.get('fecha', 'No disponible'),
+                            'estado': '📝 NOTA DE CRÉDITO APLICADA'
+                        })
+                    else:
+                        notas_credito_aplicadas.append({
+                            'referencia': info['referencia'],
+                            'monto_nc': info['monto'],
+                            'monto_cobranza': 0,
+                            'cliente': info.get('cliente', 'No identificado'),
+                            'fecha': info.get('fecha', 'No disponible'),
+                            'estado': '⚠️ NOTA DE CRÉDITO SIN COBRANZA ASOCIADA'
+                        })
+                
                 # Calcular totales
                 total_duplicadas = sum([x['monto_actual'] for x in cobranzas_duplicadas])
                 total_rezagadas = sum([x['monto'] for x in cobranzas_rezagadas])
                 total_nuevas = sum([x['monto'] for x in cobranzas_nuevas])
+                total_notas_credito = sum([x['monto_nc'] for x in notas_credito_aplicadas])
                 
-                # Mostrar resultados
+                # Mostrar resultados - Primera fila
                 col_dup1, col_dup2, col_dup3 = st.columns(3)
                 
                 with col_dup1:
@@ -5080,8 +5185,41 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     else:
                         st.info("ℹ️ No hay cobranzas nuevas")
                 
+                # Segunda fila - Notas de Crédito
+                st.markdown("---")
+                st.markdown("##### 📝 Notas de Crédito Aplicadas")
+                
+                col_nc1, col_nc2 = st.columns(2)
+                
+                with col_nc1:
+                    st.metric("📝 Total Notas de Crédito", len(notas_credito_aplicadas), delta=f"{formato_venezolano(total_notas_credito)}")
+                    if notas_credito_aplicadas:
+                        st.info(f"📝 {len(notas_credito_aplicadas)} notas de crédito procesadas")
+                        for item in notas_credito_aplicadas[:5]:
+                            if "SIN COBRANZA" in item['estado']:
+                                st.warning(f"- ⚠️ {item['referencia']}: {formato_venezolano(item['monto_nc'])} ({item['cliente']}) - {item['estado']}")
+                            else:
+                                st.write(f"- 📝 {item['referencia']}: {formato_venezolano(item['monto_nc'])} ({item['cliente']})")
+                        if len(notas_credito_aplicadas) > 5:
+                            st.write(f"... y {len(notas_credito_aplicadas) - 5} más")
+                    else:
+                        st.info("ℹ️ No hay notas de crédito aplicadas")
+                
+                with col_nc2:
+                    # Notas de crédito sin cobranza asociada
+                    nc_sin_cobranza = [x for x in notas_credito_aplicadas if "SIN COBRANZA" in x['estado']]
+                    total_nc_sin_cobranza = sum([x['monto_nc'] for x in nc_sin_cobranza])
+                    if nc_sin_cobranza:
+                        st.warning(f"⚠️ **{len(nc_sin_cobranza)} notas de crédito SIN COBRANZA ASOCIADA**: {formato_venezolano(total_nc_sin_cobranza)}")
+                        for item in nc_sin_cobranza[:5]:
+                            st.write(f"- ⚠️ {item['referencia']}: {formato_venezolano(item['monto_nc'])} ({item['cliente']})")
+                        if len(nc_sin_cobranza) > 5:
+                            st.write(f"... y {len(nc_sin_cobranza) - 5} más")
+                    else:
+                        st.success("✅ Todas las notas de crédito tienen cobranza asociada")
+                
                 # ============================================================
-                # 4. ANÁLISIS DE FACTURACIÓN VS CxC REPORTADO
+                # 5. ANÁLISIS DE FACTURACIÓN VS CxC REPORTADO
                 # ============================================================
                 st.markdown("---")
                 st.markdown("#### 📊 Análisis de Facturación vs CxC Reportado")
@@ -5147,13 +5285,13 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         st.warning(f"⚠️ Error al analizar facturación: {str(e)}")
                 
                 # ============================================================
-                # 5. DIAGNÓSTICO FINAL
+                # 6. DIAGNÓSTICO FINAL
                 # ============================================================
                 st.markdown("---")
                 st.markdown("#### 🎯 Diagnóstico de la Diferencia")
                 
-                # La diferencia se explica por: Cobranzas Duplicadas + Cobranzas Rezagadas
-                diferencia_explicada_cxc = total_duplicadas + total_rezagadas
+                # La diferencia se explica por: Cobranzas Duplicadas + Cobranzas Rezagadas + Notas de Crédito
+                diferencia_explicada_cxc = total_duplicadas + total_rezagadas + total_notas_credito
                 diferencia_no_explicada_cxc = abs(diff_cxc) - diferencia_explicada_cxc
                 
                 st.markdown(f"""
@@ -5162,13 +5300,14 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 | **Diferencia Total** | {formato_venezolano(abs(diff_cxc))} | Diferencia en CxC Calculado vs Reportado |
                 | 🔴 **Cobranzas Duplicadas** | {formato_venezolano(total_duplicadas)} | Cobranzas que ya estaban en el día anterior |
                 | ✅ **Cobranzas Rezagadas** | {formato_venezolano(total_rezagadas)} | Cobranzas que ya no están en el día actual |
+                | 📝 **Notas de Crédito** | {formato_venezolano(total_notas_credito)} | Notas de crédito aplicadas que afectan CxC |
                 | 🆕 **Cobranzas Nuevas** | {formato_venezolano(total_nuevas)} | Cobranzas que no estaban en el día anterior |
-                | **Diferencia Explicada** | {formato_venezolano(diferencia_explicada_cxc)} | Suma de Duplicadas + Rezagadas |
+                | **Diferencia Explicada** | {formato_venezolano(diferencia_explicada_cxc)} | Suma de Duplicadas + Rezagadas + NC |
                 | **Diferencia NO Explicada** | {formato_venezolano(diferencia_no_explicada_cxc)} | ⚠️ Requiere revisión manual |
                 """)
                 
                 if abs(diferencia_no_explicada_cxc) < 0.01:
-                    st.success("✅ **¡DIFERENCIA EXPLICADA COMPLETAMENTE!** Todas las cobranzas coinciden con la variación en CxC.")
+                    st.success("✅ **¡DIFERENCIA EXPLICADA COMPLETAMENTE!** Todas las cobranzas y notas de crédito coinciden con la variación en CxC.")
                     
                     st.markdown("#### 📋 Resumen de Conciliación de CxC")
                     
@@ -5177,6 +5316,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         resumen_parts.append(f"🔴 **{len(cobranzas_duplicadas)} Cobranzas Duplicadas**: {formato_venezolano(total_duplicadas)}")
                     if len(cobranzas_rezagadas) > 0:
                         resumen_parts.append(f"✅ **{len(cobranzas_rezagadas)} Cobranzas Rezagadas**: {formato_venezolano(total_rezagadas)}")
+                    if len(notas_credito_aplicadas) > 0:
+                        resumen_parts.append(f"📝 **{len(notas_credito_aplicadas)} Notas de Crédito**: {formato_venezolano(total_notas_credito)}")
                     if len(cobranzas_nuevas) > 0:
                         resumen_parts.append(f"🆕 **{len(cobranzas_nuevas)} Cobranzas Nuevas**: {formato_venezolano(total_nuevas)}")
                     
@@ -5197,8 +5338,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     - Cobranzas que no tienen referencia clara
                     - Facturas que no están registradas en el sistema
                     - Errores de digitación en montos o referencias
-                    - Notas de crédito que afectan CxC
+                    - Notas de crédito no registradas correctamente
                     - Ajustes manuales no registrados
+                    - Cobranzas que no están en el archivo de cobranzas
                     """)
                     
                     # Mostrar referencias no coincidentes
@@ -5216,9 +5358,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 st.write(f"... y {len(referencias_no_coincidentes) - 10} más")
                 
                 # ============================================================
-                # 6. TABLA DETALLADA DE COBRANZAS
+                # 7. TABLA DETALLADA DE COBRANZAS Y NOTAS DE CRÉDITO
                 # ============================================================
-                with st.expander("📋 Ver detalle completo de cobranzas", expanded=False):
+                with st.expander("📋 Ver detalle completo de cobranzas y notas de crédito", expanded=False):
                     st.markdown("##### 🔴 Cobranzas Duplicadas")
                     if cobranzas_duplicadas:
                         df_duplicadas = pd.DataFrame(cobranzas_duplicadas)
@@ -5239,6 +5381,13 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         st.dataframe(df_nuevas, width='stretch')
                     else:
                         st.info("ℹ️ No hay cobranzas nuevas")
+                    
+                    st.markdown("##### 📝 Notas de Crédito Aplicadas")
+                    if notas_credito_aplicadas:
+                        df_nc = pd.DataFrame(notas_credito_aplicadas)
+                        st.dataframe(df_nc, width='stretch')
+                    else:
+                        st.info("ℹ️ No hay notas de crédito aplicadas")
                 
             except Exception as e:
                 st.error(f"❌ Error en el análisis de cobranzas: {str(e)}")
