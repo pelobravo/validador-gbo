@@ -4775,8 +4775,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 st.code(traceback.format_exc())
     
     st.markdown("---")
-        st.markdown("---")
-    
     # ============================================================
     # 🔥 TRAZABILIDAD DE CUENTAS POR COBRAR (CON NOTAS DE CRÉDITO)
     # ============================================================
