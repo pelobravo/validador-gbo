@@ -4547,27 +4547,37 @@ else:
         """)
 
 # ============================================================
-# 🤖 ASISTENTE IA - DEEPSEEK (NUEVA SECCIÓN)
+# 🤖 ASISTENTE IA - DEEPSEEK (SIEMPRE VISIBLE)
 # ============================================================
 st.markdown("---")
 st.header("🤖 Asistente IA - DeepSeek")
 
-with st.expander("💬 Haz una consulta al asistente", expanded=False):
-    pregunta_usuario = st.text_area("Escribe tu pregunta sobre el sistema:", 
-                                   "¿Cómo puedo optimizar el proceso de conciliación de saldos?")
+with st.expander("💬 Haz una consulta al asistente", expanded=True):
+    pregunta_usuario = st.text_area(
+        "Escribe tu pregunta sobre el sistema:", 
+        "¿Cómo puedo optimizar el proceso de conciliación de saldos?",
+        height=100
+    )
     
     if st.button("Consultar a DeepSeek", use_container_width=True):
         if pregunta_usuario:
             with st.spinner("Consultando a DeepSeek... ⏳"):
-                contexto = f"Sistema de validación de trazabilidad financiera diaria para el Grupo Bodeguita Oriente. Empresa: {st.session_state.empresa_activa}. Fecha: {fecha_procesar.strftime('%Y-%m-%d')}"
-                respuesta = consultar_deepseek(pregunta_usuario, contexto)
-                st.success("✅ Respuesta del asistente:")
-                st.markdown(f"💬 {respuesta}")
+                try:
+                    contexto = f"Sistema de validación de trazabilidad financiera diaria para el Grupo Bodeguita Oriente. Empresa: {st.session_state.empresa_activa}. Fecha: {fecha_procesar.strftime('%Y-%m-%d')}"
+                    respuesta = consultar_deepseek(pregunta_usuario, contexto)
+                    st.success("✅ Respuesta del asistente:")
+                    st.markdown(f"💬 {respuesta}")
+                except Exception as e:
+                    st.error(f"❌ Error al consultar DeepSeek: {str(e)}")
         else:
             st.warning("⚠️ Por favor escribe una pregunta antes de consultar.")
+    
+    st.caption("💡 Puedes preguntar sobre: cálculos, errores, optimización, reglas de negocio, etc.")
 
 # ============================================================
 # PIE DE PÁGINA
 # ============================================================
+st.markdown("---")
+st.caption("✨ Validador de Trazabilidad Diaria - Capital de Trabajo Neto Operativo | Grupo Bodeguita Oriente")
 st.markdown("---")
 st.caption("✨ Validador de Trazabilidad Diaria - Capital de Trabajo Neto Operativo | Grupo Bodeguita Oriente")
