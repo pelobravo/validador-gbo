@@ -4319,7 +4319,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 import traceback
                 st.code(traceback.format_exc())
                     st.markdown("---")
-    
     # ============================================================
     # 🔥 TRAZABILIDAD DE TRANSFERENCIAS EN TRÁNSITO
     # ============================================================
