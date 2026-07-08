@@ -1,6 +1,7 @@
 # app.py - Con campos para saldos iniciales manuales - VERSIÓN COMPLETA CON CIERRE DIARIO Y VISUALIZACIÓN DE ARCHIVOS
 # 🔥 MODIFICADO: Identificación y visualización de OT Nuevas en Cuentas por Pagar
 # 🤖 INTEGRACIÓN CON DEEPSEEK API
+# 🎨 MEJORADO: Uploaders en parte superior, KPIs con tarjetas, botón Limpiar al pie
 
 import streamlit as st
 import pandas as pd
@@ -176,11 +177,6 @@ archivo_inventario_reportado = None
 archivo_inventario_anterior = None
 archivo_tb = None
 fecha_procesar = datetime.now()
-
-# 🔥 TEMPORAL: Botón para LIMPIAR TODOS los saldos
-if st.button("🗑️ LIMPIAR SALDOS"):
-    db.limpiar_saldos()
-    st.success("✅ Tabla saldos_diarios limpiada correctamente")
 
 st.set_page_config(
     page_title="Validador de Trazabilidad Diaria",
@@ -524,121 +520,6 @@ st.markdown("""
         box-shadow: 0 8px 25px rgba(201, 168, 76, 0.35);
         background: linear-gradient(135deg, #d4b85a, #f0d878);
     }
-    
-    /* ============================================================
-       🔥 FILE UPLOADER - VISIBILIDAD MEJORADA
-       ============================================================ */
-    
-    /* Forzar color blanco en TODOS los textos del file uploader */
-    .stFileUploader label,
-    .stFileUploader label span,
-    .stFileUploader label div,
-    .stFileUploader label p,
-    .stFileUploader .stMarkdown,
-    .stFileUploader .stMarkdown p,
-    .stFileUploader .stMarkdown small,
-    .stFileUploader .stMarkdown span,
-    .stFileUploader [data-testid="stFileUploaderDropzone"] p,
-    .stFileUploader [data-testid="stFileUploaderDropzone"] span,
-    .stFileUploader [data-testid="stFileUploaderDropzone"] div {
-        color: #ffffff !important;
-        opacity: 1 !important;
-    }
-    
-    /* Contenedor del file uploader */
-    .stFileUploader {
-        background: rgba(255, 255, 255, 0.06) !important;
-        border-radius: 10px !important;
-        padding: 8px 12px !important;
-        margin-bottom: 4px !important;
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
-        transition: all 0.3s ease !important;
-    }
-    
-    .stFileUploader:hover {
-        background: rgba(255, 255, 255, 0.10) !important;
-        border-color: rgba(201, 168, 76, 0.2) !important;
-    }
-    
-    /* Label del file uploader - TEXTO BLANCO VISIBLE */
-    .stFileUploader > label {
-        color: #ffffff !important;
-        font-weight: 600 !important;
-        font-size: 0.85rem !important;
-        opacity: 1 !important;
-        display: block !important;
-        margin-bottom: 4px !important;
-    }
-    
-    .stFileUploader > label .stMarkdown {
-        color: #ffffff !important;
-    }
-    
-    .stFileUploader > label span {
-        color: #ffffff !important;
-    }
-    
-    /* Texto de ayuda del file uploader */
-    .stFileUploader .stMarkdown p {
-        color: rgba(255, 255, 255, 0.6) !important;
-        font-size: 0.7rem !important;
-    }
-    
-    .stFileUploader .stMarkdown small {
-        color: rgba(255, 255, 255, 0.4) !important;
-    }
-    
-    /* Área de drop del file uploader */
-    .stFileUploader [data-testid="stFileUploaderDropzone"] {
-        background: rgba(255, 255, 255, 0.04) !important;
-        border: 1px dashed rgba(255, 255, 255, 0.12) !important;
-        border-radius: 8px !important;
-        padding: 10px !important;
-    }
-    
-    .stFileUploader [data-testid="stFileUploaderDropzone"]:hover {
-        background: rgba(255, 255, 255, 0.08) !important;
-        border-color: rgba(201, 168, 76, 0.25) !important;
-    }
-    
-    /* Texto dentro del área de drop */
-    .stFileUploader [data-testid="stFileUploaderDropzone"] p {
-        color: rgba(255, 255, 255, 0.5) !important;
-        font-size: 0.8rem !important;
-    }
-    
-    .stFileUploader [data-testid="stFileUploaderDropzone"] .stMarkdown {
-        color: rgba(255, 255, 255, 0.5) !important;
-    }
-    
-    /* Badge de archivos cargados */
-    .stFileUploader [data-testid="stFileUploaderFile"] {
-        background: rgba(46, 204, 113, 0.12) !important;
-        border: 1px solid rgba(46, 204, 113, 0.2) !important;
-        border-radius: 6px !important;
-        padding: 6px 10px !important;
-    }
-    
-    .stFileUploader [data-testid="stFileUploaderFile"] .stMarkdown {
-        color: #2ecc71 !important;
-    }
-    
-    .stFileUploader [data-testid="stFileUploaderFile"] button {
-        color: #e74c3c !important;
-    }
-    
-    /* Forzar en todos los elementos del uploader */
-    .stFileUploader * {
-        color: #ffffff !important;
-    }
-    
-    .stFileUploader .stMarkdown * {
-        color: #ffffff !important;
-    }
-    
-    /* ============================================================
-       FIN FILE UPLOADER
-       ============================================================ */
     
     [data-testid="stSidebar"] .stDateInput label {
         color: rgba(255,255,255,0.7) !important;
@@ -990,6 +871,29 @@ st.markdown("""
     .kpi-variant-purple .dashboard-kpi-value {
         color: #85144b;
     }
+
+    /* ============================================================
+       MEJORA DE VISIBILIDAD DE UPLOADERS EN ÁREA PRINCIPAL
+       ============================================================ */
+    /* Forzar color oscuro en los labels de uploaders del área principal */
+    .main .stFileUploader > label {
+        color: #1a3a5c !important;
+        font-weight: 600 !important;
+        font-size: 0.85rem !important;
+        opacity: 1 !important;
+    }
+
+    .main .stFileUploader > label .stMarkdown {
+        color: #1a3a5c !important;
+    }
+
+    .main .stFileUploader > label span {
+        color: #1a3a5c !important;
+    }
+
+    .main .stFileUploader .stMarkdown p {
+        color: #4a6a8c !important;
+    }
     
     /* ============================================================
        CORRECCIÓN DE CONTRASTE EN SIDEBAR (CHAT INPUT Y EXPANDERS)
@@ -1020,16 +924,16 @@ st.markdown("""
     }
     
     [data-testid="stSidebar"] [data-testid="stExpander"] summary {
-        background-color: #0a1628 !important; /* Fondo azul oscuro del sidebar */
+        background-color: #0a1628 !important;
         border: 1px solid rgba(255, 255, 255, 0.08) !important;
         border-radius: 8px !important;
-        justify-content: center !important; /* Centrado */
+        justify-content: center !important;
         display: flex !important;
         padding: 10px !important;
     }
     
     [data-testid="stSidebar"] [data-testid="stExpander"] summary * {
-        color: #e8c86a !important; /* Color dorado */
+        color: #e8c86a !important;
         font-weight: 700 !important;
         text-align: center !important;
     }
@@ -1506,7 +1410,7 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                         new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
                         df_datos.columns = new_cols
                         df_cxp_ant_clean = df_datos.iloc[1:].reset_index(drop=True)
-                fecha_ant_encontrada = "Archivo Subido (23-Jun-2026)"
+                fecha_ant_encontrada = "Archivo Subido"
             except Exception as e:
                 print(f"Error al leer archivo_cxp_anterior subido: {e}")
                 
@@ -2147,7 +2051,7 @@ def mostrar_dashboard_historico_empresa(empresa):
         st.info("Para comenzar, puede cargar los archivos obligatorios del día en el menú de la izquierda para realizar una validación y registrar el primer cierre.")
         return
         
-    # KPIs
+    # 🔥 KPIS CON DISEÑO DE TARJETAS CORPORATIVAS
     capital_trabajo = safe_number(ultimo['capital'])
     inventario = safe_number(ultimo['inventario'])
     cxc = safe_number(ultimo['cx_c'])
@@ -2163,37 +2067,37 @@ def mostrar_dashboard_historico_empresa(empresa):
     with col_e1:
         color_kpi = "kpi-variant-green" if capital_trabajo >= 0 else "kpi-variant-red"
         st.markdown(f"""
-        <div class="dashboard-kpi-card {color_kpi}">
-            <div class="dashboard-kpi-title">🏁 Capital de Trabajo</div>
-            <div class="dashboard-kpi-value">{formato_venezolano(capital_trabajo)} Bs.</div>
-            <div class="dashboard-kpi-desc">Cierre al {ultimo['fecha']}</div>
+        <div class="dashboard-kpi-card {color_kpi}" style="border-radius: 16px; padding: 20px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.08);">
+            <div class="dashboard-kpi-title" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7;">🏁 Capital de Trabajo</div>
+            <div class="dashboard-kpi-value" style="font-size: 1.8rem; font-weight: 800; margin-top: 4px;">{formato_venezolano(capital_trabajo)} Bs.</div>
+            <div class="dashboard-kpi-desc" style="font-size: 0.7rem; opacity: 0.6; margin-top: 4px;">Cierre al {ultimo['fecha']}</div>
         </div>
         """, unsafe_allow_html=True)
         
     with col_e2:
         st.markdown(f"""
-        <div class="dashboard-kpi-card kpi-variant-blue">
-            <div class="dashboard-kpi-title">🏦 Saldo Bancos</div>
-            <div class="dashboard-kpi-value">{formato_venezolano(bancos)} Bs.</div>
-            <div class="dashboard-kpi-desc">Cierre al {ultimo['fecha']}</div>
+        <div class="dashboard-kpi-card kpi-variant-blue" style="border-radius: 16px; padding: 20px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.08);">
+            <div class="dashboard-kpi-title" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7;">🏦 Saldo Bancos</div>
+            <div class="dashboard-kpi-value" style="font-size: 1.8rem; font-weight: 800; margin-top: 4px;">{formato_venezolano(bancos)} Bs.</div>
+            <div class="dashboard-kpi-desc" style="font-size: 0.7rem; opacity: 0.6; margin-top: 4px;">Cierre al {ultimo['fecha']}</div>
         </div>
         """, unsafe_allow_html=True)
         
     with col_e3:
         st.markdown(f"""
-        <div class="dashboard-kpi-card kpi-variant-purple">
-            <div class="dashboard-kpi-title">📦 Activos Operativos</div>
-            <div class="dashboard-kpi-value">{formato_venezolano(activos)} Bs.</div>
-            <div class="dashboard-kpi-desc">Inventario + CxC</div>
+        <div class="dashboard-kpi-card kpi-variant-purple" style="border-radius: 16px; padding: 20px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.08);">
+            <div class="dashboard-kpi-title" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7;">📦 Activos Operativos</div>
+            <div class="dashboard-kpi-value" style="font-size: 1.8rem; font-weight: 800; margin-top: 4px;">{formato_venezolano(activos)} Bs.</div>
+            <div class="dashboard-kpi-desc" style="font-size: 0.7rem; opacity: 0.6; margin-top: 4px;">Inventario + CxC</div>
         </div>
         """, unsafe_allow_html=True)
         
     with col_e4:
         st.markdown(f"""
-        <div class="dashboard-kpi-card kpi-variant-orange">
-            <div class="dashboard-kpi-title">📋 Pasivos Operativos</div>
-            <div class="dashboard-kpi-value">{formato_venezolano(pasivos)} Bs.</div>
-            <div class="dashboard-kpi-desc">CxP + En Tránsito</div>
+        <div class="dashboard-kpi-card kpi-variant-orange" style="border-radius: 16px; padding: 20px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.08);">
+            <div class="dashboard-kpi-title" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7;">📋 Pasivos Operativos</div>
+            <div class="dashboard-kpi-value" style="font-size: 1.8rem; font-weight: 800; margin-top: 4px;">{formato_venezolano(pasivos)} Bs.</div>
+            <div class="dashboard-kpi-desc" style="font-size: 0.7rem; opacity: 0.6; margin-top: 4px;">CxP + En Tránsito</div>
         </div>
         """, unsafe_allow_html=True)
         
@@ -2380,14 +2284,66 @@ else:
 
 # Cambiar automáticamente a Ficha de Validación si todos los archivos obligatorios están presentes
 # Debe hacerse antes de que se dibuje el widget en la barra lateral
-if (st.session_state.get("fact") is not None and 
-    st.session_state.get("cob") is not None and 
-    st.session_state.get("egr") is not None and 
-    st.session_state.get("estado") is not None):
+if (st.session_state.get("fact_top") is not None and 
+    st.session_state.get("cob_top") is not None and 
+    st.session_state.get("egr_top") is not None and 
+    st.session_state.get("estado_top") is not None):
     st.session_state.modo_vista = "🔍 Ficha de Validación"
 
 # ============================================================
-# SIDEBAR CORPORATIVA (SEGÚN ROL)
+# 🔥 UPLOADERS EN LA PARTE SUPERIOR (NUEVA UBICACIÓN)
+# ============================================================
+with st.container():
+    st.markdown("### 📂 Carga de Archivos del Día")
+    st.caption("Sube los archivos obligatorios para comenzar la validación")
+    
+    # Crear 4 columnas para los archivos obligatorios
+    col_u1, col_u2, col_u3, col_u4 = st.columns(4)
+    
+    with col_u1:
+        archivo_facturacion = st.file_uploader("📊 Facturación", type=["xlsx", "xls"], key="fact_top")
+    with col_u2:
+        archivo_cobranzas = st.file_uploader("💰 Cobranzas", type=["xlsx", "xls"], key="cob_top")
+    with col_u3:
+        archivo_egresos = st.file_uploader("💳 Egresos iPago", type=["xlsx", "xls"], key="egr_top")
+    with col_u4:
+        archivo_estado_cuenta = st.file_uploader("🏦 Estado de Cuenta", type=["xlsx", "xls"], key="estado_top")
+    
+    # Segunda fila - Archivos opcionales
+    st.markdown("#### 📎 Archivos Opcionales")
+    col_u5, col_u6, col_u7, col_u8 = st.columns(4)
+    
+    with col_u5:
+        archivo_recepciones = st.file_uploader("📦 Recepciones", type=["xlsx", "xls"], key="rec_top")
+    with col_u6:
+        archivo_notas_credito_cliente = st.file_uploader("📝 NC Clientes", type=["xlsx", "xls"], key="notas_cliente_top")
+    with col_u7:
+        archivo_notas_credito_proveedor = st.file_uploader("📝 NC Proveedores", type=["xlsx", "xls"], key="notas_proveedor_top")
+    with col_u8:
+        archivo_costo_facturacion = st.file_uploader("📈 Costo Facturación", type=["xlsx", "xls"], key="costo_fact_top")
+    
+    # Tercera fila - Archivos de verificación
+    st.markdown("#### 🔍 Archivos de Verificación")
+    col_u9, col_u10, col_u11, col_u12 = st.columns(4)
+    
+    with col_u9:
+        archivo_cxc_reportado = st.file_uploader("📄 CxC Reportado", type=["xlsx", "xls"], key="cxc_rep_top")
+    with col_u10:
+        archivo_cxp_reportado = st.file_uploader("📄 CxP Reportado", type=["xlsx", "xls"], key="cxp_rep_top")
+    with col_u11:
+        archivo_inventario_reportado = st.file_uploader("📄 Inventario Reportado", type=["xlsx", "xls"], key="inv_rep_top")
+    with col_u12:
+        archivo_tb = st.file_uploader("🔄 TB.xlsx", type=["xlsx", "xls"], key="tb_top")
+    
+    # Cuarta fila - Archivo CxP Anterior (opcional)
+    col_u13, col_u14 = st.columns([1, 3])
+    with col_u13:
+        archivo_cxp_anterior = st.file_uploader("📄 CxP Día Anterior", type=["xlsx", "xls"], key="cxp_ant_top")
+    
+    st.markdown("---")
+
+# ============================================================
+# SIDEBAR CORPORATIVA (SEGÚN ROL) - SIN UPLOADERS
 # ============================================================
 with st.sidebar:
     st.markdown("""
@@ -2467,41 +2423,13 @@ with st.sidebar:
                 
             st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
             
-            # Expander de subida opcional de archivos para el gerente
-            with st.expander("📥 Carga Dinámica de Archivos"):
-                archivo_facturacion = st.file_uploader("📊 Facturación", type=["xlsx", "xls"], key="fact")
-                archivo_cobranzas = st.file_uploader("💰 Cobranzas", type=["xlsx", "xls"], key="cob")
-                archivo_egresos = st.file_uploader("💳 Egresos iPago", type=["xlsx", "xls"], key="egr")
-                archivo_estado_cuenta = st.file_uploader("🏦 Estado de Cuenta", type=["xlsx", "xls"], key="estado")
-                
-                st.markdown('<div style="font-size:0.65rem;opacity:0.25;text-transform:uppercase;letter-spacing:1px;margin-top:12px;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.03);padding-bottom:4px;">Opcionales</div>', unsafe_allow_html=True)
-                archivo_recepciones = st.file_uploader("📦 Recepciones", type=["xlsx", "xls"], key="rec")
-                archivo_notas_credito_cliente = st.file_uploader("📝 NC Clientes", type=["xlsx", "xls"], key="notas_cliente")
-                archivo_notas_credito_proveedor = st.file_uploader("📝 NC Proveedores", type=["xlsx", "xls"], key="notas_proveedor")
-                
-                st.markdown('<div style="font-size:0.65rem;opacity:0.25;text-transform:uppercase;letter-spacing:1px;margin-top:12px;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.03);padding-bottom:4px;">Costos</div>', unsafe_allow_html=True)
-                archivo_costo_facturacion = st.file_uploader("📈 Costo Facturación", type=["xlsx", "xls"], key="costo_fact")
-                
-                st.markdown('<div style="font-size:0.65rem;opacity:0.25;text-transform:uppercase;letter-spacing:1px;margin-top:12px;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.03);padding-bottom:4px;">Verificación</div>', unsafe_allow_html=True)
-                archivo_cxc_reportado = st.file_uploader("📄 CxC Reportado", type=["xlsx", "xls"], key="cxc_rep")
-                archivo_cxp_reportado = st.file_uploader("📄 CxP Reportado", type=["xlsx", "xls"], key="cxp_rep")
-                archivo_cxp_anterior = st.file_uploader("📄 CxP Día Anterior (opcional)", type=["xlsx", "xls"], key="cxp_ant")
-                archivo_inventario_reportado = st.file_uploader("📄 Inventario Reportado", type=["xlsx", "xls"], key="inv_rep")
-                archivo_inventario_anterior = st.file_uploader("📄 Inventario Día Anterior (para desglose a profundidad)", type=["xlsx", "xls"], key="inv_ant")
-                archivo_tb = st.file_uploader("🔄 TB.xlsx", type=["xlsx", "xls"], key="tb")
-            
             fecha_procesar = st.date_input("📅 Fecha a procesar", datetime.now(), key="gerente_fecha_proc")
             fecha_str = fecha_procesar.strftime("%Y-%m-%d")
             tasa_guardada = db.obtener_tasa_bcv(fecha_str)
             tasa_bcv = st.number_input("💵 Tasa BCV", value=float(tasa_guardada or 1), step=0.0001, format="%.4f", key="gerente_tasa_bcv")
             db.guardar_tasa_bcv(fecha_str, tasa_bcv)
-        else:
-            archivo_facturacion = None
-            archivo_cobranzas = None
-            archivo_egresos = None
-            archivo_estado_cuenta = None
             
-    # LÓGICA DE BARRA LATERAL PARA EL ANALISTA (EXISTENTE MÁS SELECTOR DE EMPRESA)
+    # LÓGICA DE BARRA LATERAL PARA EL ANALISTA
     else:
         st.markdown('<div class="sidebar-section-title">🏢 Empresa</div>', unsafe_allow_html=True)
         st.session_state.empresa_activa = st.selectbox(
@@ -2600,31 +2528,6 @@ with st.sidebar:
             else:
                 st.info("No hay registros")
                 
-        st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
-        st.markdown('<div class="sidebar-section-title">📂 Archivos del Día</div>', unsafe_allow_html=True)
-        st.markdown('<div style="font-size:0.65rem; color:rgba(255,255,255,0.3); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.03); padding-bottom:4px;">📌 Obligatorios</div>', unsafe_allow_html=True)
-        
-        archivo_facturacion = st.file_uploader("📊 Facturación", type=["xlsx", "xls"], key="fact")
-        archivo_cobranzas = st.file_uploader("💰 Cobranzas", type=["xlsx", "xls"], key="cob")
-        archivo_egresos = st.file_uploader("💳 Egresos iPago", type=["xlsx", "xls"], key="egr")
-        archivo_estado_cuenta = st.file_uploader("🏦 Estado de Cuenta", type=["xlsx", "xls"], key="estado")
-        
-        st.markdown('<div style="font-size:0.65rem; color:rgba(255,255,255,0.25); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.03); padding-bottom:4px;">📎 Opcionales</div>', unsafe_allow_html=True)
-        archivo_recepciones = st.file_uploader("📦 Recepciones", type=["xlsx", "xls"], key="rec")
-        archivo_notas_credito_cliente = st.file_uploader("📝 NC Clientes", type=["xlsx", "xls"], key="notas_cliente")
-        archivo_notas_credito_proveedor = st.file_uploader("📝 NC Proveedores", type=["xlsx", "xls"], key="notas_proveedor")
-        
-        st.markdown('<div style="font-size:0.65rem; color:rgba(255,255,255,0.25); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.03); padding-bottom:4px;">📊 Costos</div>', unsafe_allow_html=True)
-        archivo_costo_facturacion = st.file_uploader("📈 Costo Facturación", type=["xlsx", "xls"], key="costo_fact")
-        
-        st.markdown('<div style="font-size:0.65rem; color:rgba(255,255,255,0.25); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.03); padding-bottom:4px;">🔍 Verificación</div>', unsafe_allow_html=True)
-        archivo_cxc_reportado = st.file_uploader("📄 CxC Reportado", type=["xlsx", "xls"], key="cxc_rep")
-        archivo_cxp_reportado = st.file_uploader("📄 CxP Reportado", type=["xlsx", "xls"], key="cxp_rep")
-        archivo_cxp_anterior = st.file_uploader("📄 CxP Día Anterior (opcional)", type=["xlsx", "xls"], key="cxp_ant")
-        archivo_inventario_reportado = st.file_uploader("📄 Inventario Reportado", type=["xlsx", "xls"], key="inv_rep")
-        archivo_inventario_anterior = st.file_uploader("📄 Inventario Día Anterior (para desglose a profundidad)", type=["xlsx", "xls"], key="inv_ant")
-        archivo_tb = st.file_uploader("🔄 TB.xlsx", type=["xlsx", "xls"], key="tb")
-        
         st.markdown('<hr class="divider-light">', unsafe_allow_html=True)
         st.markdown('<div class="sidebar-section-title">⚡ Acciones Rápidas</div>', unsafe_allow_html=True)
         
@@ -3304,7 +3207,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     capital_calculado = (inventario_calculado + cx_c_calculado + bancos_calculado) - (cx_p_calculado + transito_calculado)
     
     # ============================================================
-    # 🔥 CALCULAR DIFERENCIAS - ¡ESTA ES LA PARTE QUE FALTABA!
+    # 🔥 CALCULAR DIFERENCIAS
     # ============================================================
     inventario_reportado = saldos_reportados.get('Inventario')
     cx_c_reportado = saldos_reportados.get('Cuentas por cobrar')
@@ -3383,7 +3286,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     cx_p_anterior = safe_number(st.session_state.saldos.get('cx_p', 0))
     transito_anterior = safe_number(st.session_state.saldos.get('transito', 0))
     
-    # 💡 CORRECCIÓN MÁGICA: Calcular el capital anterior directo de los saldos base existentes
+    # 💡 CORRECCIÓN: Calcular el capital anterior directo de los saldos base existentes
     capital_anterior = (inventario_anterior + cx_c_anterior + bancos_anterior) - (cx_p_anterior + transito_anterior)
 
     # Calcular diferencias
@@ -3501,12 +3404,12 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 return ['background-color: #1a3a5c; color: white; font-weight: bold;'] * len(row)
         return [''] * len(row)
     
-    # 💡 SOLUCCIÓN MÁGICA: Se remueve el height estático para adaptar la cuadrícula de forma perfecta
     st.dataframe(
         df_comparacion[columnas_mostrar].style.apply(colorear_filas, axis=1).hide(axis='index'),
         use_container_width=True
     )
-       # ============================================================
+
+    # ============================================================
     # 📦 TRAZABILIDAD DE INVENTARIO - PRODUCTO POR PRODUCTO (MEJORADO)
     # ============================================================
     st.markdown("### 📦 Trazabilidad de Inventario - Producto por Producto")
@@ -4805,6 +4708,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 st.code(traceback.format_exc())
     
     st.markdown("---")
+    
     # ============================================================
     # BOTONES PARA VER ARCHIVOS ORIGINALES
     # ============================================================
@@ -5592,6 +5496,17 @@ with st.expander("💬 Haz una consulta al asistente", expanded=True):
             st.warning("⚠️ Por favor escribe una pregunta antes de consultar.")
     
     st.caption("💡 Puedes preguntar sobre: cálculos, errores, optimización, reglas de negocio, etc.")
+
+# ============================================================
+# 🗑️ LIMPIAR SALDOS (AL PIE DE PÁGINA)
+# ============================================================
+st.markdown("---")
+col_clean1, col_clean2, col_clean3 = st.columns([1, 2, 1])
+with col_clean2:
+    if st.button("🗑️ LIMPIAR SALDOS", use_container_width=True):
+        db.limpiar_saldos()
+        st.success("✅ Tabla saldos_diarios limpiada correctamente")
+        st.rerun()
 
 # ============================================================
 # PIE DE PÁGINA
