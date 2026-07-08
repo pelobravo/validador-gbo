@@ -3366,7 +3366,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
-    # 🔥 COMPARACIÓN VS VALORES REPORTADOS - SOLO 5 CUENTAS Y COLUMNAS CON DATOS
+    # 🔥 COMPARACIÓN VS VALORES REPORTADOS - VERSIÓN FINAL
     # ============================================================
     st.markdown("#### 📋 Comparación vs Valores Reportados")
 
@@ -3382,15 +3382,14 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     bancos_anterior = safe_number(st.session_state.saldos.get('bancos', 0))
     cx_p_anterior = safe_number(st.session_state.saldos.get('cx_p', 0))
     transito_anterior = safe_number(st.session_state.saldos.get('transito', 0))
+    capital_anterior = safe_number(st.session_state.saldos.get('capital_anterior', 0))
 
     # Calcular diferencias
     diff_inv_real = safe_number(inventario_calculado) - safe_number(inventario_reportado) if inventario_reportado is not None else 0
     diff_cxc_real = safe_number(cx_c_calculado) - safe_number(cx_c_reportado) if cx_c_reportado is not None else 0
     diff_cxp_real = safe_number(cx_p_calculado) - safe_number(cx_p_reportado) if cx_p_reportado is not None else 0
     diff_transito_real = safe_number(transito_calculado) - safe_number(transito_reportado) if transito_reportado is not None else 0
-
-    # Crear datos para la tabla de comparación - SOLO 5 CUENTAS
-    comparacion_data = []
+    diff_capital = capital_calculado - capital_anterior if capital_anterior > 0 else 0
 
     # Función para formatear diferencia
     def formatear_diff(valor_calculado, valor_reportado):
@@ -3404,14 +3403,17 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         else:
             return f"📉 {formato_venezolano(diff)}"
 
+    # Crear lista para la tabla
+    comparacion_data = []
+
     # 1. INVENTARIO
     diff_inv_display = formatear_diff(inventario_calculado, inventario_reportado)
     comparacion_data.append({
         "Cuenta": "Inventario",
         "Fórmula": "Inv. inicial + Recepción - Costo facturación",
-        "Día Anterior": formato_venezolano(inventario_anterior) if inventario_anterior > 0 else "-",
+        "Día Anterior": formato_venezolano(inventario_anterior) if inventario_anterior > 0 else "0,00",
         "Calculado": formato_venezolano(inventario_calculado),
-        "Reportado": formato_venezolano(inventario_reportado) if inventario_reportado is not None and inventario_reportado > 0 else "-",
+        "Reportado": formato_venezolano(inventario_reportado) if inventario_reportado is not None and inventario_reportado > 0 else "0,00",
         "Diferencia": diff_inv_display
     })
 
@@ -3420,9 +3422,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     comparacion_data.append({
         "Cuenta": "Cuentas por cobrar",
         "Fórmula": "CxC inicial + Facturación - Cobranzas - NC Clientes",
-        "Día Anterior": formato_venezolano(cx_c_anterior) if cx_c_anterior > 0 else "-",
+        "Día Anterior": formato_venezolano(cx_c_anterior) if cx_c_anterior > 0 else "0,00",
         "Calculado": formato_venezolano(cx_c_calculado),
-        "Reportado": formato_venezolano(cx_c_reportado) if cx_c_reportado is not None and cx_c_reportado > 0 else "-",
+        "Reportado": formato_venezolano(cx_c_reportado) if cx_c_reportado is not None and cx_c_reportado > 0 else "0,00",
         "Diferencia": diff_cxc_display
     })
 
@@ -3433,9 +3435,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     comparacion_data.append({
         "Cuenta": "Bancos",
         "Fórmula": "Saldo Inicial (E/C) + Ingresos - Egresos",
-        "Día Anterior": formato_venezolano(saldo_bancos_anterior) if saldo_bancos_anterior > 0 else "-",
+        "Día Anterior": formato_venezolano(saldo_bancos_anterior) if saldo_bancos_anterior > 0 else "0,00",
         "Calculado": formato_venezolano(bancos_calculado),
-        "Reportado": formato_venezolano(saldo_final) if saldo_final > 0 else "-",
+        "Reportado": formato_venezolano(saldo_final) if saldo_final > 0 else "0,00",
         "Diferencia": diff_bancos_display
     })
 
@@ -3444,9 +3446,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     comparacion_data.append({
         "Cuenta": "Cuentas por pagar",
         "Fórmula": "CxP inicial + Recepciones - Pagos proveedores",
-        "Día Anterior": formato_venezolano(cx_p_anterior) if cx_p_anterior > 0 else "-",
+        "Día Anterior": formato_venezolano(cx_p_anterior) if cx_p_anterior > 0 else "0,00",
         "Calculado": formato_venezolano(cx_p_calculado),
-        "Reportado": formato_venezolano(cx_p_reportado) if cx_p_reportado is not None and cx_p_reportado > 0 else "-",
+        "Reportado": formato_venezolano(cx_p_reportado) if cx_p_reportado is not None and cx_p_reportado > 0 else "0,00",
         "Diferencia": diff_cxp_display
     })
 
@@ -3455,16 +3457,36 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     comparacion_data.append({
         "Cuenta": "Transferencias en tránsito",
         "Fórmula": "Tránsito inicial + Ingresos del día - Cobranzas",
-        "Día Anterior": formato_venezolano(transito_anterior) if transito_anterior > 0 else "-",
+        "Día Anterior": formato_venezolano(transito_anterior) if transito_anterior > 0 else "0,00",
         "Calculado": formato_venezolano(transito_calculado),
-        "Reportado": formato_venezolano(transito_reportado) if transito_reportado is not None and transito_reportado > 0 else "-",
+        "Reportado": formato_venezolano(transito_reportado) if transito_reportado is not None and transito_reportado > 0 else "0,00",
         "Diferencia": diff_transito_display
     })
 
-    # Crear DataFrame y mostrar tabla - SOLO LAS COLUMNAS QUE NECESITAS
+    # 6. CAPITAL DE TRABAJO NETO (al final)
+    if capital_anterior > 0:
+        if abs(diff_capital) < 0.01:
+            diff_capital_display = "✅ 0,00"
+        elif diff_capital > 0:
+            diff_capital_display = f"📈 +{formato_venezolano(diff_capital)}"
+        else:
+            diff_capital_display = f"📉 {formato_venezolano(diff_capital)}"
+    else:
+        diff_capital_display = "-"
+    
+    comparacion_data.append({
+        "Cuenta": "Capital de Trabajo Neto",
+        "Fórmula": "(Inv + CxC + Bancos) - (CxP + Tránsito)",
+        "Día Anterior": formato_venezolano(capital_anterior) if capital_anterior > 0 else "0,00",
+        "Calculado": formato_venezolano(capital_calculado),
+        "Reportado": formato_venezolano(capital_calculado),
+        "Diferencia": diff_capital_display
+    })
+
+    # Crear DataFrame
     df_comparacion = pd.DataFrame(comparacion_data)
     
-    # Columnas a mostrar (las que tienen información)
+    # Columnas a mostrar
     columnas_mostrar = ['Cuenta', 'Fórmula', 'Día Anterior', 'Calculado', 'Reportado', 'Diferencia']
     
     # Aplicar estilos a la tabla (colores según diferencia)
@@ -3475,9 +3497,17 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 return ['background-color: #d4edda;'] * len(row)  # Verde claro
             elif "📉" in diff_text:
                 return ['background-color: #f8d7da;'] * len(row)  # Rojo claro
+        # Si es la fila de Capital, darle un estilo especial
+        if row['Cuenta'] == 'Capital de Trabajo Neto':
+            if "📈" in diff_text:
+                return ['background-color: #0f3d2e; color: white; font-weight: bold;'] * len(row)
+            elif "📉" in diff_text:
+                return ['background-color: #3d1a1a; color: white; font-weight: bold;'] * len(row)
+            else:
+                return ['background-color: #1a3a5c; color: white; font-weight: bold;'] * len(row)
         return [''] * len(row)
     
-    # Mostrar tabla con estilos - SOLO LAS COLUMNAS CON INFORMACIÓN
+    # Mostrar tabla con estilos
     st.dataframe(
         df_comparacion[columnas_mostrar].style.apply(colorear_filas, axis=1).hide(axis='index'),
         width='stretch',
