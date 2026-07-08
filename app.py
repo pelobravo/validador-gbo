@@ -4579,5 +4579,3 @@ with st.expander("💬 Haz una consulta al asistente", expanded=True):
 # ============================================================
 st.markdown("---")
 st.caption("✨ Validador de Trazabilidad Diaria - Capital de Trabajo Neto Operativo | Grupo Bodeguita Oriente")
-st.markdown("---")
-st.caption("✨ Validador de Trazabilidad Diaria - Capital de Trabajo Neto Operativo | Grupo Bodeguita Oriente")
