@@ -3380,13 +3380,13 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     df_comparacion = pd.DataFrame(resultados_data)
     st.dataframe(df_comparacion, width='stretch', hide_index=True)
 
-    # ============================================================
+        # ============================================================
     # 📦 TRAZABILIDAD DE INVENTARIO - PRODUCTO POR PRODUCTO
     # ============================================================
     st.markdown("### 📦 Trazabilidad de Inventario - Producto por Producto")
     st.caption("Análisis detallado: Inventario Inicial - Ventas (Costo) = Inventario Esperado vs Inventario Reportado")
     
-    # Verificar que los archivos necesarios estén cargados
+    # --- ANÁLISIS DE INVENTARIO (PRODUCTO POR PRODUCTO) ---
     if 'df_inv_ant' in locals() and df_inv_ant is not None and 'df_inv_rep' in locals() and df_inv_rep is not None:
         try:
             # Cargar detalle de inventario anterior y actual
@@ -3404,7 +3404,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 inv_curr_dict = inv_curr.set_index('Producto').to_dict('index')
                 util_dict = util_df.set_index('Cod_Producto').to_dict('index') if util_df is not None else {}
                 
-                # Obtener todos los productos (unión de ambos inventarios)
+                # Obtener todos los productos
                 all_prods = set(inv_prev_dict.keys()).union(set(inv_curr_dict.keys()))
                 
                 # Listas para almacenar resultados
@@ -3413,26 +3413,24 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 total_ventas = 0
                 total_esperado_valor = 0
                 total_reportado_valor = 0
-                total_esperado_qty = 0
-                total_reportado_qty = 0
                 
                 for p in all_prods:
                     p_prev = inv_prev_dict.get(p, {'Cantidad': 0.0, 'Precio/Unidad': 0.0, 'Total(*)': 0.0, 'Descrip_Clean': 'N/A'})
                     p_curr = inv_curr_dict.get(p, {'Cantidad': 0.0, 'Precio/Unidad': 0.0, 'Total(*)': 0.0, 'Descrip_Clean': 'N/A'})
                     u_row = util_dict.get(p, {'Cantidad': 0.0, 'Costo_Total': 0.0, 'Producto_Original': 'N/A'})
                     
-                    # Datos del inventario anterior (día anterior)
+                    # Datos del inventario anterior
                     qty_prev = p_prev['Cantidad']
                     price_prev = p_prev['Precio/Unidad']
                     val_prev = p_prev['Total(*)']
                     desc = p_curr['Descrip_Clean'] if p_curr['Descrip_Clean'] != 'N/A' else (p_prev['Descrip_Clean'] if p_prev['Descrip_Clean'] != 'N/A' else u_row['Producto_Original'])
                     
-                    # Datos del inventario actual (día actual)
+                    # Datos del inventario actual
                     qty_curr = p_curr['Cantidad']
                     price_curr = p_curr['Precio/Unidad']
                     val_curr = p_curr['Total(*)']
                     
-                    # Datos de ventas (costo de facturación)
+                    # Datos de ventas
                     qty_sold = u_row['Cantidad']
                     cost_sold = u_row['Costo_Total']
                     
@@ -3447,25 +3445,18 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     total_ventas += cost_sold
                     total_esperado_valor += expected_val
                     total_reportado_valor += val_curr
-                    total_esperado_qty += expected_qty
-                    total_reportado_qty += qty_curr
                     
                     # Determinar el estado del producto
                     estado = "✅ OK"
-                    color_estado = "green"
                     if abs(qty_diff) > 0.01 and abs(val_diff) > 0.01:
                         estado = "🔴 FALTANTE" if qty_diff < 0 else "🟢 SOBRANTE"
-                        color_estado = "red" if qty_diff < 0 else "green"
                     elif abs(qty_diff) > 0.01:
                         estado = "🟡 DIF. CANTIDAD"
-                        color_estado = "orange"
                     elif abs(val_diff) > 0.01:
                         estado = "🟠 DIF. PRECIO"
-                        color_estado = "orange"
                     
-                    # Solo mostrar productos con alguna diferencia o que tuvieron movimiento
+                    # Mostrar productos con diferencias o movimientos
                     if abs(qty_sold) > 0.01 or abs(qty_diff) > 0.01 or abs(val_diff) > 0.01 or abs(price_curr - price_prev) > 0.01:
-                        # Calcular efecto de cambio de precio
                         efecto_precio = (price_curr - price_prev) * qty_curr if qty_curr > 0 else 0
                         
                         diferencias.append({
@@ -3480,17 +3471,12 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                             'Precio Ant.': price_prev,
                             'Precio Nuevo': price_curr,
                             'Efecto Precio': efecto_precio,
-                            'Valor Inicial': val_prev,
-                            'Valor Esperado': expected_val,
-                            'Valor Reportado': val_curr,
                             'Dif. Valor': val_diff
                         })
                 
-                # --- MOSTRAR RESULTADOS ---
-                
-                # 1. Resumen de totales
+                # --- MOSTRAR RESULTADOS DE INVENTARIO ---
                 st.info(f"""
-                **📊 RESUMEN DE TOTALES:**
+                **📊 RESUMEN DE TOTALES DE INVENTARIO:**
                 - **Inventario Inicial:** {formato_venezolano(total_inicial)} Bs.
                 - **Costo de Ventas:** {formato_venezolano(total_ventas)} Bs.
                 - **Inventario Esperado:** {formato_venezolano(total_esperado_valor)} Bs.
@@ -3498,7 +3484,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 - **Diferencia Total:** {formato_venezolano(total_reportado_valor - total_esperado_valor)} Bs.
                 """)
                 
-                # 2. KPIs de trazabilidad
+                # KPIs de trazabilidad
                 col_kpi1, col_kpi2, col_kpi3, col_kpi4 = st.columns(4)
                 with col_kpi1:
                     st.metric("📦 Productos Analizados", len(diferencias))
@@ -3509,13 +3495,12 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 with col_kpi4:
                     st.metric("⚠️ Con Diferencias", len([d for d in diferencias if d['Estado'] != '✅ OK']))
                 
-                # 3. Tabla de diferencias
+                # Tabla de diferencias de inventario
                 if diferencias:
                     df_diferencias = pd.DataFrame(diferencias)
                     
                     # Formatear columnas
-                    columnas_formato = ['Precio Ant.', 'Precio Nuevo', 'Efecto Precio', 'Valor Inicial', 'Valor Esperado', 'Valor Reportado', 'Dif. Valor']
-                    for col in columnas_formato:
+                    for col in ['Precio Ant.', 'Precio Nuevo', 'Efecto Precio', 'Dif. Valor']:
                         if col in df_diferencias.columns:
                             df_diferencias[col] = df_diferencias[col].apply(formato_venezolano)
                     
@@ -3525,7 +3510,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     df_diferencias['Q. Esperada'] = df_diferencias['Q. Esperada'].apply(lambda x: f"{x:.2f}")
                     df_diferencias['Q. Reportada'] = df_diferencias['Q. Reportada'].apply(lambda x: f"{x:.2f}")
                     
-                    # Mostrar tabla
+                    # Mostrar tabla con colores
                     columnas_mostrar = ['Código', 'Descripción', 'Estado', 'Q. Anterior', 'Vendido', 'Q. Esperada', 'Q. Reportada', 'Dif. Cantidad', 'Precio Ant.', 'Precio Nuevo', 'Efecto Precio', 'Dif. Valor']
                     st.dataframe(
                         df_diferencias[columnas_mostrar].style.apply(
@@ -3539,19 +3524,19 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         height=400
                     )
                     
-                    # 4. Resumen de diferencias
+                    # Resumen de diferencias de inventario
                     total_faltante = sum([d['Dif. Cantidad'] for d in diferencias if 'FALTANTE' in d['Estado']])
                     total_sobrante = sum([d['Dif. Cantidad'] for d in diferencias if 'SOBRANTE' in d['Estado']])
                     total_efecto_precio = sum([d['Efecto Precio'] for d in diferencias if d['Efecto Precio'] != 0])
                     
                     st.info(f"""
-                    **📊 RESUMEN DE DIFERENCIAS:**
+                    **📊 RESUMEN DE DIFERENCIAS DE INVENTARIO:**
                     - **Faltante de inventario:** {abs(total_faltante):.2f} unidades
                     - **Sobrante de inventario:** {total_sobrante:.2f} unidades
                     - **Efecto total por cambio de precio:** {formato_venezolano(total_efecto_precio)} Bs.
                     """)
                     
-                    # 5. Detalle de cambios de precio
+                    # Detalle de cambios de precio
                     cambios_precio = [d for d in diferencias if abs(d['Efecto Precio']) > 0.01]
                     if cambios_precio:
                         st.markdown("#### 💰 Productos con Cambio de Precio")
@@ -3564,21 +3549,149 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                             width='stretch'
                         )
                 else:
-                    st.success("✅ No se detectaron diferencias en ningún producto.")
+                    st.success("✅ No se detectaron diferencias en ningún producto de inventario.")
             else:
                 st.warning("⚠️ No se pudieron cargar los detalles de inventario. Verifica el formato de los archivos.")
         except Exception as e:
-            st.error(f"❌ Error en el análisis de trazabilidad: {str(e)}")
+            st.error(f"❌ Error en el análisis de trazabilidad de inventario: {str(e)}")
             import traceback
             st.code(traceback.format_exc())
     else:
-        st.info("📄 **Carga los siguientes archivos para ver el análisis detallado:**")
-        st.markdown("""
-        - 📦 **Inventario del día anterior** (archivo de inventario del día previo)
-        - 📦 **Inventario del día actual** (archivo de inventario del día a validar)
-        - 📊 **Costo de Facturación** (Reporte de Utilidad / Costo de Ventas)
-        """)
+        st.info("📄 **Carga los archivos de Inventario (día anterior y actual) y Costo de Facturación para ver el análisis detallado de inventario.**")
     
+    st.markdown("---")
+    
+    # ============================================================
+    # 🔍 ANÁLISIS DE OTRAS CUENTAS (CxC, CxP, TRANSITO)
+    # ============================================================
+    st.markdown("### 🔍 Análisis de Diferencias en Otras Cuentas")
+    
+    # --- CUENTAS POR COBRAR ---
+    if abs(diff_cxc) > 0.01:
+        with st.expander(f"👤 Cuentas por Cobrar (Diferencia: {formatear_diferencia(cx_c_calculado, cx_c_reportado)})", expanded=True):
+            st.markdown(f"**Fórmula**: `CxC Calculado ({formato_venezolano(cx_c_calculado)})` vs `CxC Reportado ({formato_venezolano(cx_c_reportado)})`")
+            st.markdown(f"La diferencia de **{formato_venezolano(diff_cxc)} Bs/USD** en Cuentas por Cobrar puede explicarse por:")
+            
+            # Buscar transacciones coincidentes en los archivos
+            cands_cxc = []
+            if 'df_facturacion' in locals() and df_facturacion is not None:
+                cands_cxc.extend(buscar_candidatos_por_monto(df_facturacion, diff_cxc, "Facturación Semanal"))
+            if 'df_cobranzas' in locals() and df_cobranzas is not None:
+                cands_cxc.extend(buscar_candidatos_por_monto(df_cobranzas, diff_cxc, "Cobranzas Diarias"))
+            if 'df_notas_cliente' in locals() and df_notas_cliente is not None:
+                cands_cxc.extend(buscar_candidatos_por_monto(df_notas_cliente, diff_cxc, "Notas de Crédito Clientes"))
+            if 'df_cxc_rep' in locals() and df_cxc_rep is not None:
+                cands_cxc.extend(buscar_candidatos_por_monto(df_cxc_rep, diff_cxc, "Reporte CxC"))
+                
+            if cands_cxc:
+                st.info("🔍 **Transacciones con importe coincidente encontradas en los archivos:**")
+                for c in cands_cxc[:5]:
+                    st.markdown(f"- {c}")
+            else:
+                st.write("No se encontraron transacciones individuales con este importe exacto.")
+                
+            st.markdown("""
+            **💡 Puntos clave a revisar:**
+            - **Facturación vs Notas de Crédito**: Valide si hay facturas de crédito anuladas en el sistema mediante notas de crédito que no se hayan descontado correctamente en la sumatoria del día.
+            - **Cobranzas Cruzadas**: Revise si se reportaron cobros que no corresponden a facturas de este cliente, afectando el saldo de Cuentas por Cobrar reportado.
+            """)
+    
+    # --- CUENTAS POR PAGAR ---
+    if abs(diff_cxp) > 0.01:
+        with st.expander(f"🤝 Cuentas por Pagar (Diferencia: {formatear_diferencia(cx_p_calculado, cx_p_reportado)})", expanded=True):
+            st.markdown(f"**Fórmula**: `CxP Calculado ({formato_venezolano(cx_p_calculado)})` vs `CxP Reportado ({formato_venezolano(cx_p_reportado)})`")
+            st.markdown(f"La diferencia de **{formato_venezolano(diff_cxp)} Bs/USD** en Cuentas por Pagar puede explicarse por:")
+            
+            # Buscar transacciones coincidentes
+            cands_cxp = []
+            if 'df_recepciones' in locals() and df_recepciones is not None:
+                cands_cxp.extend(buscar_candidatos_por_monto(df_recepciones, diff_cxp, "Recepciones de Mercancía"))
+            if 'df_proveedores' in locals() and df_proveedores is not None:
+                cands_cxp.extend(buscar_candidatos_por_monto(df_proveedores, diff_cxp, "Proveedores de Mercancía"))
+            if 'df_notas_proveedor' in locals() and df_notas_proveedor is not None:
+                cands_cxp.extend(buscar_candidatos_por_monto(df_notas_proveedor, diff_cxp, "Notas de Crédito Proveedores"))
+            if 'df_cxp_rep' in locals() and df_cxp_rep is not None:
+                cands_cxp.extend(buscar_candidatos_por_monto(df_cxp_rep, diff_cxp, "Reporte CxP"))
+                
+            if cands_cxp:
+                st.info("🔍 **Transacciones con importe coincidente encontradas en los archivos:**")
+                for c in cands_cxp[:5]:
+                    st.markdown(f"- {c}")
+            else:
+                st.write("No se encontraron transacciones individuales con este importe exacto.")
+                    
+            # Mostrar cotejo automático de recepciones contra CxP
+            df_recepciones_ok = 'df_recepciones' in locals() and df_recepciones is not None
+            df_cxp_rep_ok = 'df_cxp_rep' in locals() and df_cxp_rep is not None
+            
+            if df_recepciones_ok and df_cxp_rep_ok:
+                mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_procesar, st.session_state.empresa_activa, diff_cxp)
+            else:
+                st.info("ℹ️ *Sube el archivo de **Recepciones** para ver el cotejo automático de documentos (NE / OT) contra Cuentas por Pagar.*")
+                
+            st.markdown("""
+            **💡 Puntos clave a revisar:**
+            - **Pagos a Proveedores**: Valide si hay egresos ejecutados en iPago que no correspondan a facturas de proveedores de mercancía (p.ej., gastos de administración o servicios) que se clasificaron erróneamente.
+            - **Notas de Crédito Recibidas**: Confirme si hay descuentos otorgados por proveedores que no se reflejaron en el balance de compras.
+            """)
+    
+    # --- TRANSFERENCIAS EN TRÁNSITO ---
+    if abs(diff_transito) > 0.01:
+        with st.expander(f"✈️ Transferencias en Tránsito (Diferencia: {formatear_diferencia(transito_calculado, transito_reportado)})", expanded=True):
+            st.markdown(f"**Fórmula**: `Tránsito Calculado ({formato_venezolano(transito_calculado)})` vs `Tránsito Reportado ({formato_venezolano(transito_reportado)})`")
+            st.markdown(f"La diferencia de **{formato_venezolano(diff_transito)} Bs/USD** en Transferencias en Tránsito puede explicarse por:")
+            
+            # Buscar transacciones coincidentes
+            cands_transito = []
+            if 'df_cobranzas' in locals() and df_cobranzas is not None:
+                cands_transito.extend(buscar_candidatos_por_monto(df_cobranzas, diff_transito, "Cobranzas Diarias"))
+            if 'df_estado_cuenta' in locals() and df_estado_cuenta is not None:
+                cands_transito.extend(buscar_candidatos_por_monto(df_estado_cuenta, diff_transito, "Estado de Cuenta Bancario"))
+            if 'df_tb' in locals() and df_tb is not None:
+                cands_transito.extend(buscar_candidatos_por_monto(df_tb, diff_transito, "Balanza / Tránsito"))
+                
+            if cands_transito:
+                st.info("🔍 **Transacciones con importe coincidente encontradas en los archivos:**")
+                for c in cands_transito[:5]:
+                    st.markdown(f"- {c}")
+            else:
+                st.write("No se encontraron transacciones individuales con este importe exacto.")
+                
+            st.markdown("""
+            **💡 Puntos clave a revisar:**
+            - **Depósitos en Tránsito**: Cobranzas que fueron registradas en el sistema administrativo del día pero que ingresaron efectivamente al banco al día siguiente hábil.
+            - **Egresos no debitados**: Pagos emitidos a proveedores mediante transferencia que aún no han sido cobrados o debitados por la entidad bancaria.
+            """)
+    
+    # --- BANCOS ---
+    if abs(diferencia_bancos) > 0.01:
+        with st.expander(f"🏦 Bancos (Diferencia: {formatear_diferencia(bancos_calculado, saldo_final)})", expanded=True):
+            st.markdown(f"**Fórmula**: `Bancos Calculado ({formato_venezolano(bancos_calculado)})` vs `Saldo Final Estado de Cuenta ({formato_venezolano(saldo_final)})`")
+            st.markdown(f"La diferencia de **{formato_venezolano(diferencia_bancos)} Bs/USD** en Bancos puede explicarse por:")
+            
+            # Buscar transacciones coincidentes
+            cands_bancos = []
+            if 'df_estado_cuenta' in locals() and df_estado_cuenta is not None:
+                cands_bancos.extend(buscar_candidatos_por_monto(df_estado_cuenta, diferencia_bancos, "Estado de Cuenta"))
+            if 'df_cobranzas' in locals() and df_cobranzas is not None:
+                cands_bancos.extend(buscar_candidatos_por_monto(df_cobranzas, diferencia_bancos, "Cobranzas Diarias"))
+            if 'df_egresos' in locals() and df_egresos is not None:
+                cands_bancos.extend(buscar_candidatos_por_monto(df_egresos, diferencia_bancos, "Egresos iPago"))
+                
+            if cands_bancos:
+                st.info("🔍 **Transacciones con importe coincidente encontradas en los archivos:**")
+                for c in cands_bancos[:5]:
+                    st.markdown(f"- {c}")
+            else:
+                st.write("No se encontraron transacciones individuales con este importe exacto.")
+                
+            st.markdown("""
+            **💡 Puntos clave a revisar:**
+            - **Comisiones o Impuestos Bancarios (IGTF/IDB)**: Verifique si existen cobros de comisiones o impuestos en el estado de cuenta que no estén registrados en el sistema administrativo.
+            - **Depósitos o Transferencias no identificados**: Revise si hay ingresos en el banco que no tengan soporte o no hayan sido notificados por ventas/cobranzas.
+            - **Cheques o transferencias emitidas no cobradas**: Confirme si hay egresos del sistema que aún no han sido debitados por el banco.
+            """)
+            
     st.markdown("---")
     # ============================================================
     # BOTONES PARA VER ARCHIVOS ORIGINALES
