@@ -3326,18 +3326,27 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'cx_c'
     ))
 
-    # --- 🔥 BANCOS - CORREGIDO (usa saldo_inicial_bancos del archivo) ---
+       # --- 🔥 BANCOS - CORREGIDO (USA EL SALDO DEL DÍA ANTERIOR DESDE LA BD) ---
+    # Obtener el saldo de bancos del día anterior desde la sesión (cargado desde la BD)
+    saldo_bancos_anterior = st.session_state.saldos.get('bancos', 0)
+    
+    # Calcular la diferencia contra el día anterior
+    if saldo_bancos_anterior > 0:
+        diferencia_bancos_anterior = formatear_diferencia(bancos_calculado, saldo_bancos_anterior)
+    else:
+        diferencia_bancos_anterior = "-"
+    
     resultados_data.append({
         "Cuenta": "Bancos",
         "Fórmula": "Saldo Inicial (estado de cuenta) + Ingresos - Egresos",
-        "Información día anterior": formato_venezolano(saldo_inicial_bancos) if saldo_inicial_bancos > 0 else "-",
+        "Información día anterior": formato_venezolano(saldo_bancos_anterior) if saldo_bancos_anterior > 0 else "-",
         "Calculado": formato_venezolano(bancos_calculado),
         "Reportado": formato_venezolano(saldo_final) if saldo_final > 0 else "-",
-        "Diferencia": formatear_diferencia(bancos_calculado, saldo_final) if saldo_final > 0 else "-",
+        "Diferencia": diferencia_bancos_anterior,
         "Ajuste": 0,
         "Diferencia Ajustada": "-",
         "Justificación": "-",
-        "Origen": "Saldo final del estado de cuenta"
+        "Origen": "Saldo de Bancos del día anterior (desde BD)"
     })
 
     # --- Cuentas por pagar ---
@@ -3360,8 +3369,15 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'transito'
     ))
 
-        # --- Capital de Trabajo Neto (CORREGIDO) ---
+            # --- Capital de Trabajo Neto (CORREGIDO) ---
+    # Usar capital_anterior cargado desde la BD
     referencia_capital = capital_anterior if capital_anterior > 0 else None
+
+    # Calcular la diferencia contra el día anterior
+    if referencia_capital is not None:
+        diferencia_capital = formatear_diferencia(capital_calculado, referencia_capital)
+    else:
+        diferencia_capital = "-"
 
     resultados_data.append({
         "Cuenta": "Capital de Trabajo Neto",
@@ -3369,11 +3385,11 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         "Información día anterior": formato_venezolano(capital_anterior) if capital_anterior > 0 else "-",
         "Calculado": formato_venezolano(capital_calculado),
         "Reportado": formato_venezolano(capital_calculado),
-        "Diferencia": formatear_diferencia(capital_calculado, referencia_capital) if referencia_capital is not None else "-",
+        "Diferencia": diferencia_capital,
         "Ajuste": 0,
         "Diferencia Ajustada": "-",
         "Justificación": "-",
-        "Origen": "Calculado automáticamente"
+        "Origen": "Capital de Trabajo Neto del día anterior (desde BD)"
     })
 
     # Mostrar tabla de comparación
