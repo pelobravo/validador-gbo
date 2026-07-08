@@ -3337,11 +3337,11 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'transito'
     ))
 
-# --- Capital de Trabajo Neto (CORREGIDO) ---
-# Determinar el valor de referencia para la diferencia
-referencia_capital = capital_anterior if capital_anterior > 0 else None
+    # --- Capital de Trabajo Neto (CORREGIDO) ---
+    # Determinar el valor de referencia para la diferencia
+    referencia_capital = capital_anterior if capital_anterior > 0 else None
 
-resultados_data.append({
+    resultados_data.append({
     "Cuenta": "Capital de Trabajo Neto",
     "Fórmula": "(Inv + CxC + Bancos) - (CxP + Tránsito)",
     "Información día anterior": formato_venezolano(capital_anterior) if capital_anterior > 0 else "-",
@@ -3352,7 +3352,7 @@ resultados_data.append({
     "Diferencia Ajustada": "-",
     "Justificación": "-",
     "Origen": "Calculado automáticamente"
-})
+    })
 
     # Mostrar tabla de comparación
     df_comparacion = pd.DataFrame(resultados_data)
