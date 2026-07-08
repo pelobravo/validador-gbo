@@ -3381,32 +3381,36 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'transito'
     ))
 
-    # --- Capital de Trabajo Neto ---
-    # Usar capital_anterior cargado desde la BD
-    referencia_capital = capital_anterior if capital_anterior > 0 else None
-
-    # Calcular la diferencia contra el día anterior
-    if referencia_capital is not None:
-        diferencia_capital = formatear_diferencia(capital_calculado, referencia_capital)
+    # --- Capital de Trabajo Neto (VERSIÓN SIMPLE) ---
+    # Obtener el capital del día anterior desde la sesión
+    capital_anterior = st.session_state.saldos.get('capital_anterior', 0)
+    
+    # Calcular diferencia
+    if capital_anterior > 0:
+        diff_capital = capital_calculado - capital_anterior
+        if abs(diff_capital) < 0.01:
+            diferencia_texto = "✅ 0,00"
+        elif diff_capital > 0:
+            diferencia_texto = f"📈 +{formato_venezolano(diff_capital)}"
+        else:
+            diferencia_texto = f"📉 {formato_venezolano(diff_capital)}"
+        info_anterior_texto = formato_venezolano(capital_anterior)
     else:
-        diferencia_capital = "-"
-
+        diferencia_texto = "-"
+        info_anterior_texto = "-"
+    
     resultados_data.append({
         "Cuenta": "Capital de Trabajo Neto",
         "Fórmula": "(Inv + CxC + Bancos) - (CxP + Tránsito)",
-        "Información día anterior": formato_venezolano(capital_anterior) if capital_anterior > 0 else "-",
+        "Información día anterior": info_anterior_texto,
         "Calculado": formato_venezolano(capital_calculado),
         "Reportado": formato_venezolano(capital_calculado),
-        "Diferencia": diferencia_capital,
+        "Diferencia": diferencia_texto,
         "Ajuste": 0,
         "Diferencia Ajustada": "-",
         "Justificación": "-",
-        "Origen": "Capital de Trabajo Neto del día anterior (desde BD)"
+        "Origen": "Calculado automáticamente"
     })
-
-    # Mostrar tabla de comparación
-    df_comparacion = pd.DataFrame(resultados_data)
-    st.dataframe(df_comparacion, width='stretch', hide_index=True)
 
         # ============================================================
     # 📦 TRAZABILIDAD DE INVENTARIO - PRODUCTO POR PRODUCTO
