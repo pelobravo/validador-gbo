@@ -4318,7 +4318,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 st.error(f"❌ Error en el análisis de documentos: {str(e)}")
                 import traceback
                 st.code(traceback.format_exc())
-                    st.markdown("---")
+    st.markdown("---")
     # ============================================================
     # 🔥 TRAZABILIDAD DE TRANSFERENCIAS EN TRÁNSITO
     # ============================================================
