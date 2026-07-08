@@ -53,3 +53,4 @@ matplotlib>=3.5.0
 lxml
 html5lib
 beautifulsoup4
+openai>=1.0.0
