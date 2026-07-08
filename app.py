@@ -3366,7 +3366,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
-    # 🔥 COMPARACIÓN VS VALORES REPORTADOS - CORREGIDO
+    # 🔥 COMPARACIÓN VS VALORES REPORTADOS - SOLO 5 CUENTAS
     # ============================================================
     st.markdown("#### 📋 Comparación vs Valores Reportados")
 
@@ -3382,7 +3382,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     bancos_anterior = safe_number(st.session_state.saldos.get('bancos', 0))
     cx_p_anterior = safe_number(st.session_state.saldos.get('cx_p', 0))
     transito_anterior = safe_number(st.session_state.saldos.get('transito', 0))
-    capital_anterior = safe_number(st.session_state.saldos.get('capital_anterior', 0))
 
     # Inicializar ajustes si no existen
     if 'ajustes' not in st.session_state:
@@ -3399,104 +3398,50 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     diff_cxp_real = safe_number(cx_p_calculado) - safe_number(cx_p_reportado) if cx_p_reportado is not None else 0
     diff_transito_real = safe_number(transito_calculado) - safe_number(transito_reportado) if transito_reportado is not None else 0
 
-    # Crear datos para la tabla de comparación
+    # Crear datos para la tabla de comparación - SOLO 5 CUENTAS
     comparacion_data = []
 
-    # Función para agregar fila de comparación
-    def agregar_fila_comparacion(cuenta, formula, valor_anterior, valor_calculado, valor_reportado, diff, key_ajuste):
-        # Obtener ajuste
-        ajuste_actual = st.session_state.ajustes.get(key_ajuste, {'monto': 0.0, 'justificacion': ''})
-        monto_ajuste = ajuste_actual.get('monto', 0.0)
-        justificacion = ajuste_actual.get('justificacion', '')
-        
-        # Calcular diferencia ajustada
-        diff_ajustada = diff - monto_ajuste
-        
-        # Formatear valores
-        valor_anterior_str = formato_venezolano(valor_anterior) if valor_anterior > 0 else "-"
-        valor_calculado_str = formato_venezolano(valor_calculado)
-        valor_reportado_str = formato_venezolano(valor_reportado) if valor_reportado is not None and valor_reportado > 0 else "-"
-        
-        # Formatear diferencia
-        if valor_reportado is not None and valor_reportado > 0:
-            if abs(diff) < 0.01:
-                diff_str = "✅ 0,00"
-            elif diff > 0:
-                diff_str = f"📈 +{formato_venezolano(diff)}"
-            else:
-                diff_str = f"📉 {formato_venezolano(diff)}"
-        else:
-            diff_str = "-"
-        
-        # Formatear diferencia ajustada
-        if abs(diff_ajustada) < 0.01:
-            diff_ajustada_str = "✅ 0,00"
-        elif diff_ajustada > 0:
-            diff_ajustada_str = f"📈 +{formato_venezolano(diff_ajustada)}"
-        else:
-            diff_ajustada_str = f"📉 {formato_venezolano(diff_ajustada)}"
-        
-        # Explicación de la diferencia
+    # Función para formatear diferencia
+    def formatear_diff(valor_calculado, valor_reportado):
+        if valor_reportado is None or valor_reportado == 0:
+            return "-"
+        diff = safe_number(valor_calculado) - safe_number(valor_reportado)
         if abs(diff) < 0.01:
-            explicacion = "✅ Sin diferencia"
-        elif cuenta == "Inventario":
-            explicacion = f"Salida de inventario no explicada por {formato_venezolano(abs(diff))}"
-        elif cuenta == "Cuentas por cobrar":
-            explicacion = f"CxC adicional pendiente por {formato_venezolano(abs(diff))}"
-        elif cuenta == "Cuentas por pagar":
-            explicacion = f"Ajuste / NC proveedor pendiente por {formato_venezolano(abs(diff))}"
-        elif cuenta == "Transferencias en tránsito":
-            explicacion = f"Transferencias pendientes por {formato_venezolano(abs(diff))}"
+            return "✅ 0,00"
+        elif diff > 0:
+            return f"📈 +{formato_venezolano(diff)}"
         else:
-            explicacion = ""
-        
-        return {
-            "Cuenta": cuenta,
-            "Fórmula": formula,
-            "Día Anterior": valor_anterior_str,
-            "Calculado": valor_calculado_str,
-            "Reportado": valor_reportado_str,
-            "Diferencia": diff_str,
-            "Ajuste": formato_venezolano(monto_ajuste),
-            "Diferencia Ajustada": diff_ajustada_str,
-            "Justificación": justificacion if justificacion else "-",
-            "Explicación": explicacion
-        }
+            return f"📉 {formato_venezolano(diff)}"
 
-    # Agregar filas de comparación
-    comparacion_data.append(agregar_fila_comparacion(
-        "Inventario",
-        "Inv. inicial + Recepción - Costo facturación",
-        inventario_anterior,
-        inventario_calculado,
-        inventario_reportado,
-        diff_inv_real,
-        'inventario'
-    ))
+    # 1. INVENTARIO
+    diff_inv_display = formatear_diff(inventario_calculado, inventario_reportado)
+    comparacion_data.append({
+        "Cuenta": "Inventario",
+        "Fórmula": "Inv. inicial + Recepción - Costo facturación",
+        "Día Anterior": formato_venezolano(inventario_anterior) if inventario_anterior > 0 else "-",
+        "Calculado": formato_venezolano(inventario_calculado),
+        "Reportado": formato_venezolano(inventario_reportado) if inventario_reportado is not None and inventario_reportado > 0 else "-",
+        "Diferencia": diff_inv_display,
+        "Ajuste": "0,00",
+        "Diferencia Ajustada": diff_inv_display
+    })
 
-    comparacion_data.append(agregar_fila_comparacion(
-        "Cuentas por cobrar",
-        "CxC inicial + Facturación - Cobranzas - NC Clientes",
-        cx_c_anterior,
-        cx_c_calculado,
-        cx_c_reportado,
-        diff_cxc_real,
-        'cx_c'
-    ))
+    # 2. CUENTAS POR COBRAR
+    diff_cxc_display = formatear_diff(cx_c_calculado, cx_c_reportado)
+    comparacion_data.append({
+        "Cuenta": "Cuentas por cobrar",
+        "Fórmula": "CxC inicial + Facturación - Cobranzas - NC Clientes",
+        "Día Anterior": formato_venezolano(cx_c_anterior) if cx_c_anterior > 0 else "-",
+        "Calculado": formato_venezolano(cx_c_calculado),
+        "Reportado": formato_venezolano(cx_c_reportado) if cx_c_reportado is not None and cx_c_reportado > 0 else "-",
+        "Diferencia": diff_cxc_display,
+        "Ajuste": "0,00",
+        "Diferencia Ajustada": diff_cxc_display
+    })
 
-    # Bancos - comparación con el día anterior
+    # 3. BANCOS
     saldo_bancos_anterior = st.session_state.saldos.get('bancos', 0)
-    diff_bancos_anterior = bancos_calculado - saldo_bancos_anterior if saldo_bancos_anterior > 0 else 0
-    
-    if saldo_bancos_anterior > 0:
-        if abs(diff_bancos_anterior) < 0.01:
-            diff_bancos_str = "✅ 0,00"
-        elif diff_bancos_anterior > 0:
-            diff_bancos_str = f"📈 +{formato_venezolano(diff_bancos_anterior)}"
-        else:
-            diff_bancos_str = f"📉 {formato_venezolano(diff_bancos_anterior)}"
-    else:
-        diff_bancos_str = "-"
+    diff_bancos_display = formatear_diff(bancos_calculado, saldo_bancos_anterior) if saldo_bancos_anterior > 0 else "-"
     
     comparacion_data.append({
         "Cuenta": "Bancos",
@@ -3504,83 +3449,58 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         "Día Anterior": formato_venezolano(saldo_bancos_anterior) if saldo_bancos_anterior > 0 else "-",
         "Calculado": formato_venezolano(bancos_calculado),
         "Reportado": formato_venezolano(saldo_final) if saldo_final > 0 else "-",
-        "Diferencia": diff_bancos_str,
+        "Diferencia": diff_bancos_display,
         "Ajuste": "-",
-        "Diferencia Ajustada": "-",
-        "Justificación": "-",
-        "Explicación": "Saldo de Bancos del día anterior (desde BD)"
+        "Diferencia Ajustada": "-"
     })
 
-    comparacion_data.append(agregar_fila_comparacion(
-        "Cuentas por pagar",
-        "CxP inicial + Recepciones - Pagos proveedores",
-        cx_p_anterior,
-        cx_p_calculado,
-        cx_p_reportado,
-        diff_cxp_real,
-        'cx_p'
-    ))
-
-    comparacion_data.append(agregar_fila_comparacion(
-        "Transferencias en tránsito",
-        "Tránsito inicial + Ingresos del día - Cobranzas",
-        transito_anterior,
-        transito_calculado,
-        transito_reportado,
-        diff_transito_real,
-        'transito'
-    ))
-
-    # Capital de Trabajo Neto
-    capital_anterior_val = st.session_state.saldos.get('capital_anterior', 0)
-    diff_capital = capital_calculado - capital_anterior_val if capital_anterior_val > 0 else 0
-    
-    if capital_anterior_val > 0:
-        if abs(diff_capital) < 0.01:
-            diff_capital_str = "✅ 0,00"
-        elif diff_capital > 0:
-            diff_capital_str = f"📈 +{formato_venezolano(diff_capital)}"
-        else:
-            diff_capital_str = f"📉 {formato_venezolano(diff_capital)}"
-        info_anterior_texto = formato_venezolano(capital_anterior_val)
-    else:
-        diff_capital_str = "-"
-        info_anterior_texto = "-"
-    
+    # 4. CUENTAS POR PAGAR
+    diff_cxp_display = formatear_diff(cx_p_calculado, cx_p_reportado)
     comparacion_data.append({
-        "Cuenta": "Capital de Trabajo Neto",
-        "Fórmula": "(Inv + CxC + Bancos) - (CxP + Tránsito)",
-        "Día Anterior": info_anterior_texto,
-        "Calculado": formato_venezolano(capital_calculado),
-        "Reportado": formato_venezolano(capital_calculado),
-        "Diferencia": diff_capital_str,
-        "Ajuste": "-",
-        "Diferencia Ajustada": "-",
-        "Justificación": "-",
-        "Explicación": "Calculado automáticamente"
+        "Cuenta": "Cuentas por pagar",
+        "Fórmula": "CxP inicial + Recepciones - Pagos proveedores",
+        "Día Anterior": formato_venezolano(cx_p_anterior) if cx_p_anterior > 0 else "-",
+        "Calculado": formato_venezolano(cx_p_calculado),
+        "Reportado": formato_venezolano(cx_p_reportado) if cx_p_reportado is not None and cx_p_reportado > 0 else "-",
+        "Diferencia": diff_cxp_display,
+        "Ajuste": "0,00",
+        "Diferencia Ajustada": diff_cxp_display
     })
 
-    # Mostrar la tabla de comparación
+    # 5. TRANSFERENCIAS EN TRÁNSITO
+    diff_transito_display = formatear_diff(transito_calculado, transito_reportado)
+    comparacion_data.append({
+        "Cuenta": "Transferencias en tránsito",
+        "Fórmula": "Tránsito inicial + Ingresos del día - Cobranzas",
+        "Día Anterior": formato_venezolano(transito_anterior) if transito_anterior > 0 else "-",
+        "Calculado": formato_venezolano(transito_calculado),
+        "Reportado": formato_venezolano(transito_reportado) if transito_reportado is not None and transito_reportado > 0 else "-",
+        "Diferencia": diff_transito_display,
+        "Ajuste": "0,00",
+        "Diferencia Ajustada": diff_transito_display
+    })
+
+    # Crear DataFrame y mostrar tabla
     df_comparacion = pd.DataFrame(comparacion_data)
     
-    # Aplicar estilos a la tabla
-    def colorear_comparacion(row):
-        # Colorear según la diferencia
-        if row['Diferencia'] != "-" and "✅" not in row['Diferencia']:
-            if "📈" in row['Diferencia']:
-                return ['background-color: #d4edda;'] * len(row)  # Verde claro para positivo
-            elif "📉" in row['Diferencia']:
-                return ['background-color: #f8d7da;'] * len(row)  # Rojo claro para negativo
+    # Aplicar estilos a la tabla (colores según diferencia)
+    def colorear_filas(row):
+        diff_text = str(row['Diferencia'])
+        if diff_text != "-" and "✅" not in diff_text:
+            if "📈" in diff_text:
+                return ['background-color: #d4edda;'] * len(row)  # Verde claro
+            elif "📉" in diff_text:
+                return ['background-color: #f8d7da;'] * len(row)  # Rojo claro
         return [''] * len(row)
     
     # Mostrar tabla con estilos
     st.dataframe(
-        df_comparacion.style.apply(colorear_comparacion, axis=1).hide(axis='index'),
+        df_comparacion.style.apply(colorear_filas, axis=1).hide(axis='index'),
         width='stretch',
         height=400
     )
     
-    # Resumen de diferencias
+    # Resumen de diferencias (opcional)
     st.markdown("#### 📊 Resumen de Diferencias")
     
     col_res1, col_res2, col_res3 = st.columns(3)
@@ -3590,7 +3510,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         st.metric("📌 Total Diferencias", formato_venezolano(total_diff))
     
     with col_res2:
-        # Contar cuántas cuentas tienen diferencias significativas
         cuentas_con_diff = sum([
             1 if abs(diff_inv_real) > 0.01 else 0,
             1 if abs(diff_cxc_real) > 0.01 else 0,
