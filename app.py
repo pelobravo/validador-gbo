@@ -3369,7 +3369,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'transito'
     ))
 
-            # --- Capital de Trabajo Neto (CORREGIDO) ---
+    # --- Capital de Trabajo Neto ---
     # Usar capital_anterior cargado desde la BD
     referencia_capital = capital_anterior if capital_anterior > 0 else None
 
