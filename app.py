@@ -954,8 +954,14 @@ if 'empresa_activa' not in st.session_state:
 
 # Función para inicializar saldos y ajustes de una empresa y fecha
 def inicializar_saldos_empresa(empresa, fecha_str):
+    """
+    Inicializa los saldos para una empresa y fecha específica.
+    Si existe un saldo guardado del día anterior, lo carga automáticamente.
+    """
     ultimo = db.obtener_ultimo_saldo(empresa)
+    
     if ultimo:
+        # ✅ Hay saldo guardado → lo cargamos automáticamente
         st.session_state.saldos = {
             'fecha_actual': ultimo['fecha'],
             'inventario': safe_number(ultimo['inventario']),
@@ -963,10 +969,13 @@ def inicializar_saldos_empresa(empresa, fecha_str):
             'bancos': safe_number(ultimo['bancos']),
             'cx_p': safe_number(ultimo['cx_p']),
             'transito': safe_number(ultimo['transito']),
-            'capital_anterior': safe_number(ultimo['capital']),
+            'capital_anterior': safe_number(ultimo['capital']),  # 🔥 CLAVE
             'historico': []
         }
+        # Mostrar mensaje de éxito (opcional)
+        st.success(f"✅ Saldos del día anterior ({ultimo['fecha']}) cargados automáticamente para {empresa}.")
     else:
+        # ❌ No hay saldo guardado → inicializar en 0
         st.session_state.saldos = {
             'fecha_actual': None,
             'inventario': 0.0,
@@ -977,6 +986,9 @@ def inicializar_saldos_empresa(empresa, fecha_str):
             'capital_anterior': 0.0,
             'historico': []
         }
+        st.info(f"ℹ️ No hay saldos previos para {empresa}. Comenzando desde 0.")
+    
+    # Cargar ajustes guardados para esta fecha/empresa
     st.session_state.ajustes = db.obtener_ajustes(fecha_str, empresa)
 
 if 'saldos' not in st.session_state:
