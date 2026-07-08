@@ -3366,7 +3366,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
-    # 🔥 COMPARACIÓN VS VALORES REPORTADOS - VERSIÓN FINAL
+    # 🔥 COMPARACIÓN VS VALORES REPORTADOS - VERSIÓN FINAL CORREGIDA
     # ============================================================
     st.markdown("#### 📋 Comparación vs Valores Reportados")
 
@@ -3382,14 +3382,16 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     bancos_anterior = safe_number(st.session_state.saldos.get('bancos', 0))
     cx_p_anterior = safe_number(st.session_state.saldos.get('cx_p', 0))
     transito_anterior = safe_number(st.session_state.saldos.get('transito', 0))
-    capital_anterior = safe_number(st.session_state.saldos.get('capital_anterior', 0))
+    
+    # 💡 CORRECCIÓN MÁGICA: Calcular el capital anterior directo de los saldos base existentes
+    capital_anterior = (inventario_anterior + cx_c_anterior + bancos_anterior) - (cx_p_anterior + transito_anterior)
 
     # Calcular diferencias
     diff_inv_real = safe_number(inventario_calculado) - safe_number(inventario_reportado) if inventario_reportado is not None else 0
     diff_cxc_real = safe_number(cx_c_calculado) - safe_number(cx_c_reportado) if cx_c_reportado is not None else 0
     diff_cxp_real = safe_number(cx_p_calculado) - safe_number(cx_p_reportado) if cx_p_reportado is not None else 0
     diff_transito_real = safe_number(transito_calculado) - safe_number(transito_reportado) if transito_reportado is not None else 0
-    diff_capital = capital_calculado - capital_anterior if capital_anterior > 0 else 0
+    diff_capital = capital_calculado - capital_anterior
 
     # Función para formatear diferencia
     def formatear_diff(valor_calculado, valor_reportado):
@@ -3411,7 +3413,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     comparacion_data.append({
         "Cuenta": "Inventario",
         "Fórmula": "Inv. inicial + Recepción - Costo facturación",
-        "Día Anterior": formato_venezolano(inventario_anterior) if inventario_anterior > 0 else "0,00",
+        "Día Anterior": formato_venezolano(inventario_anterior),
         "Calculado": formato_venezolano(inventario_calculado),
         "Reportado": formato_venezolano(inventario_reportado) if inventario_reportado is not None and inventario_reportado > 0 else "0,00",
         "Diferencia": diff_inv_display
@@ -3422,20 +3424,18 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     comparacion_data.append({
         "Cuenta": "Cuentas por cobrar",
         "Fórmula": "CxC inicial + Facturación - Cobranzas - NC Clientes",
-        "Día Anterior": formato_venezolano(cx_c_anterior) if cx_c_anterior > 0 else "0,00",
+        "Día Anterior": formato_venezolano(cx_c_anterior),
         "Calculado": formato_venezolano(cx_c_calculado),
         "Reportado": formato_venezolano(cx_c_reportado) if cx_c_reportado is not None and cx_c_reportado > 0 else "0,00",
         "Diferencia": diff_cxc_display
     })
 
     # 3. BANCOS
-    saldo_bancos_anterior = st.session_state.saldos.get('bancos', 0)
-    diff_bancos_display = formatear_diff(bancos_calculado, saldo_bancos_anterior) if saldo_bancos_anterior > 0 else "-"
-    
+    diff_bancos_display = formatear_diff(bancos_calculado, bancos_anterior) if bancos_anterior != 0 else "-"
     comparacion_data.append({
         "Cuenta": "Bancos",
         "Fórmula": "Saldo Inicial (E/C) + Ingresos - Egresos",
-        "Día Anterior": formato_venezolano(saldo_bancos_anterior) if saldo_bancos_anterior > 0 else "0,00",
+        "Día Anterior": formato_venezolano(bancos_anterior),
         "Calculado": formato_venezolano(bancos_calculado),
         "Reportado": formato_venezolano(saldo_final) if saldo_final > 0 else "0,00",
         "Diferencia": diff_bancos_display
@@ -3446,7 +3446,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     comparacion_data.append({
         "Cuenta": "Cuentas por pagar",
         "Fórmula": "CxP inicial + Recepciones - Pagos proveedores",
-        "Día Anterior": formato_venezolano(cx_p_anterior) if cx_p_anterior > 0 else "0,00",
+        "Día Anterior": formato_venezolano(cx_p_anterior),
         "Calculado": formato_venezolano(cx_p_calculado),
         "Reportado": formato_venezolano(cx_p_reportado) if cx_p_reportado is not None and cx_p_reportado > 0 else "0,00",
         "Diferencia": diff_cxp_display
@@ -3457,27 +3457,24 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     comparacion_data.append({
         "Cuenta": "Transferencias en tránsito",
         "Fórmula": "Tránsito inicial + Ingresos del día - Cobranzas",
-        "Día Anterior": formato_venezolano(transito_anterior) if transito_anterior > 0 else "0,00",
+        "Día Anterior": formato_venezolano(transito_anterior),
         "Calculado": formato_venezolano(transito_calculado),
         "Reportado": formato_venezolano(transito_reportado) if transito_reportado is not None and transito_reportado > 0 else "0,00",
         "Diferencia": diff_transito_display
     })
 
-    # 6. CAPITAL DE TRABAJO NETO (al final)
-    if capital_anterior > 0:
-        if abs(diff_capital) < 0.01:
-            diff_capital_display = "✅ 0,00"
-        elif diff_capital > 0:
-            diff_capital_display = f"📈 +{formato_venezolano(diff_capital)}"
-        else:
-            diff_capital_display = f"📉 {formato_venezolano(diff_capital)}"
+    # 6. CAPITAL DE TRABAJO NETO
+    if abs(diff_capital) < 0.01:
+        diff_capital_display = "✅ 0,00"
+    elif diff_capital > 0:
+        diff_capital_display = f"📈 +{formato_venezolano(diff_capital)}"
     else:
-        diff_capital_display = "-"
+        diff_capital_display = f"📉 {formato_venezolano(diff_capital)}"
     
     comparacion_data.append({
         "Cuenta": "Capital de Trabajo Neto",
         "Fórmula": "(Inv + CxC + Bancos) - (CxP + Tránsito)",
-        "Día Anterior": formato_venezolano(capital_anterior) if capital_anterior > 0 else "0,00",
+        "Día Anterior": formato_venezolano(capital_anterior),
         "Calculado": formato_venezolano(capital_calculado),
         "Reportado": formato_venezolano(capital_calculado),
         "Diferencia": diff_capital_display
@@ -3485,19 +3482,16 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
 
     # Crear DataFrame
     df_comparacion = pd.DataFrame(comparacion_data)
-    
-    # Columnas a mostrar
     columnas_mostrar = ['Cuenta', 'Fórmula', 'Día Anterior', 'Calculado', 'Reportado', 'Diferencia']
     
-    # Aplicar estilos a la tabla (colores según diferencia)
+    # Aplicar estilos a la tabla
     def colorear_filas(row):
         diff_text = str(row['Diferencia'])
         if diff_text != "-" and "✅" not in diff_text:
             if "📈" in diff_text:
-                return ['background-color: #d4edda;'] * len(row)  # Verde claro
+                return ['background-color: #d4edda;'] * len(row)
             elif "📉" in diff_text:
-                return ['background-color: #f8d7da;'] * len(row)  # Rojo claro
-        # Si es la fila de Capital, darle un estilo especial
+                return ['background-color: #f8d7da;'] * len(row)
         if row['Cuenta'] == 'Capital de Trabajo Neto':
             if "📈" in diff_text:
                 return ['background-color: #0f3d2e; color: white; font-weight: bold;'] * len(row)
@@ -3507,36 +3501,11 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 return ['background-color: #1a3a5c; color: white; font-weight: bold;'] * len(row)
         return [''] * len(row)
     
-    # Mostrar tabla con estilos
+    # 💡 SOLUCCIÓN MÁGICA: Se remueve el height estático para adaptar la cuadrícula de forma perfecta
     st.dataframe(
         df_comparacion[columnas_mostrar].style.apply(colorear_filas, axis=1).hide(axis='index'),
-        width='stretch',
-        height=400
+        use_container_width=True
     )
-    
-    # Resumen de diferencias
-    st.markdown("#### 📊 Resumen de Diferencias")
-    
-    col_res1, col_res2, col_res3 = st.columns(3)
-    
-    with col_res1:
-        total_diff = abs(diff_inv_real) + abs(diff_cxc_real) + abs(diff_cxp_real) + abs(diff_transito_real)
-        st.metric("📌 Total Diferencias", formato_venezolano(total_diff))
-    
-    with col_res2:
-        cuentas_con_diff = sum([
-            1 if abs(diff_inv_real) > 0.01 else 0,
-            1 if abs(diff_cxc_real) > 0.01 else 0,
-            1 if abs(diff_cxp_real) > 0.01 else 0,
-            1 if abs(diff_transito_real) > 0.01 else 0
-        ])
-        st.metric("⚠️ Cuentas con Diferencia", cuentas_con_diff)
-    
-    with col_res3:
-        if cuentas_con_diff == 0:
-            st.success("✅ Todas las cuentas concilian")
-        else:
-            st.warning(f"⚠️ {cuentas_con_diff} cuenta(s) requieren revisión")
     # ============================================================
     # 📦 TRAZABILIDAD DE INVENTARIO - PRODUCTO POR PRODUCTO
     # ============================================================
