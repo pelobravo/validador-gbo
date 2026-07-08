@@ -3209,7 +3209,24 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     transito_calculado = safe_number(st.session_state.saldos['transito']) + ingresos_totales - cobranzas
     capital_calculado = (inventario_calculado + cx_c_calculado + bancos_calculado) - (cx_p_calculado + transito_calculado)
     
+    # ============================================================
+    # 🔥 CALCULAR DIFERENCIAS - ¡ESTA ES LA PARTE QUE FALTABA!
+    # ============================================================
+    inventario_reportado = saldos_reportados.get('Inventario')
+    cx_c_reportado = saldos_reportados.get('Cuentas por cobrar')
+    cx_p_reportado = saldos_reportados.get('Cuentas por pagar')
+    transito_reportado = saldos_reportados.get('Transferencias en tránsito')
+    
+    # Calcular diferencias
+    diff_inv = safe_number(inventario_calculado) - safe_number(inventario_reportado) if inventario_reportado is not None else 0
+    diff_cxc = safe_number(cx_c_calculado) - safe_number(cx_c_reportado) if cx_c_reportado is not None else 0
+    diff_cxp = safe_number(cx_p_calculado) - safe_number(cx_p_reportado) if cx_p_reportado is not None else 0
+    diff_transito = safe_number(transito_calculado) - safe_number(transito_reportado) if transito_reportado is not None else 0
+    diferencia_bancos = bancos_calculado - saldo_final
+    
+    # ============================================================
     # Mostrar información detallada del cálculo de Bancos
+    # ============================================================
     st.markdown("#### 📊 Detalle del cálculo de Bancos")
     
     col_b1, col_b2, col_b3, col_b4 = st.columns(4)
@@ -3338,7 +3355,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         'cx_c'
     ))
 
-       # --- 🔥 BANCOS - CORREGIDO (USA EL SALDO DEL DÍA ANTERIOR DESDE LA BD) ---
+    # --- 🔥 BANCOS - CORREGIDO (USA EL SALDO DEL DÍA ANTERIOR DESDE LA BD) ---
     # Obtener el saldo de bancos del día anterior desde la sesión (cargado desde la BD)
     saldo_bancos_anterior = st.session_state.saldos.get('bancos', 0)
     
@@ -3412,7 +3429,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         "Origen": "Calculado automáticamente"
     })
 
-        # ============================================================
+    # ============================================================
     # 📦 TRAZABILIDAD DE INVENTARIO - PRODUCTO POR PRODUCTO
     # ============================================================
     st.markdown("### 📦 Trazabilidad de Inventario - Producto por Producto")
@@ -3594,7 +3611,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
-    # 🔍 ANÁLISIS DE OTRAS CUENTAS (CxC, CxP, TRANSITO)
+    # 🔍 ANÁLISIS DE OTRAS CUENTAS (CxC, CxP, TRANSITO) - CORREGIDO
     # ============================================================
     st.markdown("### 🔍 Análisis de Diferencias en Otras Cuentas")
     
