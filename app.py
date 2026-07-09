@@ -2423,8 +2423,12 @@ with st.container():
     with col_u13:
         archivo_costo_facturacion = st.file_uploader("📈 Costo Facturación", type=["xlsx", "xls"], key="costo_fact_top")
     with col_u14:
+        archivo_inventario_anterior = st.file_uploader("📦 Inventario Anterior", type=["xlsx", "xls"], key="inv_ant_top")  # <--- NUEVO
+    with col_u15:
         archivo_cxp_anterior = st.file_uploader("📄 CxP Día Anterior", type=["xlsx", "xls"], key="cxp_ant_top")
-    # col_u15 y col_u16 quedan disponibles para futuros archivos
+    with col_u16:
+        # Espacio disponible para futuros archivos
+        st.write("")
     
     st.markdown("---")
 # ============================================================
