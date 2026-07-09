@@ -1371,125 +1371,96 @@ class ProcesadorArchivos:
             return None
 
     # ============================================================
-    # 🔥 NUEVO: PROCESAR RECEPCIÓN TRAZABILIDAD (CORREGIDO Y ACUMULATIVO)
+    # 🔥 PROCESAR RECEPCIÓN TRAZABILIDAD (VERSIÓN ULTRA-ROBUSTA MULTIFILA)
     # ============================================================
     @staticmethod
     def procesar_recepcion_trazabilidad(df):
         """
         Procesa el archivo de Recepción Trazabilidad para extraer productos y cantidades.
-        Busca columnas: Documento/Código (código), Producto/Descripción (descripción), Cantidad.
-        Suma y acumula de manera correcta si hay múltiples filas o productos idénticos.
-        
-        Args:
-            df: DataFrame de pandas del archivo de Recepción Trazabilidad
-            
-        Returns:
-            dict: Diccionario con código de producto como clave y {'cantidad': float, 'producto': str}
+        Soporta formatos donde el nombre del producto está en una fila superior y los datos 
+        numéricos (Cantidad, Documento) se encuentran en la fila inmediatamente inferior.
         """
         if df is None or df.empty:
             return {}
         
         try:
-            # Limpiar columnas eliminando espacios extremos
-            df_clean = ProcesadorArchivos._limpiar_columnas(df)
+            # 1. Encontrar la fila donde está la cabecera real de datos
+            idx_cabecera = None
+            for idx, row in df.iterrows():
+                row_str = [str(x).lower().strip() for x in row.values if pd.notna(x)]
+                if any('producto' in x for x in row_str) and any('cant' in x for x in row_str):
+                    idx_cabecera = idx
+                    break
             
-            # DEBUG: Mostrar columnas detectadas en consola
-            print(f"📊 Columnas detectadas en Recepción Trazabilidad: {df_clean.columns.tolist()}")
-            
-            # ============================================================
-            # 1. IDENTIFICAR COLUMNAS MEDIANTE BÚSQUEDA INTELIGENTE
-            # ============================================================
-            col_codigo = None
-            col_producto = None
-            col_cantidad = None
-            
-            for col in df_clean.columns:
-                col_lower = str(col).lower().strip()
-                
-                # Buscar columna de código (Documento, Compra, Código, Cod, SKU, ID, etc.)
-                if col_codigo is None:
-                    if any(p in col_lower for p in ['documento', 'compra', 'código', 'codigo', 'cod', 'sku', 'id', 'item']):
-                        col_codigo = col
-                        print(f"✅ Columna de código asociada: '{col_codigo}'")
-                
-                # Buscar columna de producto/descripción
-                if col_producto is None:
-                    if any(p in col_lower for p in ['producto', 'descrip', 'nombre', 'desc', 'articulo', 'artículo']):
-                        col_producto = col
-                        print(f"✅ Columna de descripción asociada: '{col_producto}'")
-                
-                # Buscar columna de cantidad (Cantidad, Qty, Unidades, Cant, etc.)
-                if col_cantidad is None:
-                    if any(p in col_lower for p in ['cantidad', 'qty', 'unidades', 'cant', 'und']):
-                        col_cantidad = col
-                        print(f"✅ Columna de cantidad asociada: '{col_cantidad}'")
-            
-            # Fallbacks posicionales estrictos en caso de que las cabeceras varíen
-            if col_codigo is None and len(df_clean.columns) >= 1:
-                col_codigo = df_clean.columns[0]
-                print(f"⚠️ Usando primera columna como código: '{col_codigo}'")
-            if col_producto is None and len(df_clean.columns) >= 2:
-                col_producto = df_clean.columns[1]
-                print(f"⚠️ Usando segunda columna como producto: '{col_producto}'")
-            if col_cantidad is None and len(df_clean.columns) >= 3:
-                col_cantidad = df_clean.columns[2]
-                print(f"⚠️ Usando tercera columna como cantidad: '{col_cantidad}'")
-            
-            if col_codigo is None or col_cantidad is None:
-                print("❌ Error crítico: Imposible mapear columnas de Identificación y Cantidad.")
+            if idx_cabecera is None:
+                # Fallback: buscar filas con 'cantidad' y 'costo'
+                for idx in range(min(20, len(df))):
+                    row_str = [str(x).lower().strip() for x in df.iloc[idx].values if pd.notna(x)]
+                    if any('cant' in x for x in row_str):
+                        idx_cabecera = idx
+                        break
+                        
+            if idx_cabecera is None:
+                print("❌ No se encontró la estructura de cabecera de trazabilidad.")
                 return {}
+                
+            # Extraer las filas de datos puros debajo de la cabecera
+            df_datos = df.iloc[idx_cabecera+1:].reset_index(drop=True)
             
-            # ============================================================
-            # 2. EXTRACCIÓN Y ACUMULACIÓN DE UNIDADES
-            # ============================================================
             resultado = {}
-            for idx, row in df_clean.iterrows():
-                val_cod = row[col_codigo]
-                val_cant = row[col_cantidad]
-                
-                # Saltar registros nulos o cabeceras repetidas
-                if pd.isna(val_cod) or str(val_cod).strip() == '' or str(val_cod).lower() in ['nan', 'none', 'total', 'total general']:
+            codigo_actual = None
+            nombre_actual = "Producto Desconocido"
+            
+            # 2. Recorrer las filas con lógica de persistencia multifila
+            for idx, row in df_datos.iterrows():
+                # Combinar toda la fila en un string de control
+                row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).strip()
+                if not row_str or any(k in row_str.lower() for k in ['total general', 'total por producto']):
                     continue
                 
-                # Normalizar código quitando el residuo flotante de Excel (ej: '102.0' -> '102')
-                codigo_raw = str(val_cod).strip()
-                if codigo_raw.endswith('.0'):
-                    codigo_raw = codigo_raw[:-2]
+                # --- PASO A: IDENTIFICAR SI ES FILA DE TITULO DE PRODUCTO ---
+                # Si la primera celda contiene el nombre del producto largo (ej: 0000050-AREQUIPE...)
+                primera_celda = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ""
                 
-                codigo_limpio = codigo_raw.lstrip('0').strip()
-                if codigo_limpio == '':
-                    codigo_limpio = codigo_raw
+                if '-' in primera_celda and len(primera_celda) > 10 and not primera_celda.replace('.','',1).isdigit():
+                    try:
+                        partes = primera_celda.split('-', 1)
+                        codigo_actual = partes[0].strip().lstrip('0')
+                        nombre_actual = partes[1].strip()
+                        if codigo_actual == '':
+                            codigo_actual = partes[0].strip()
+                        continue # Saltamos a la siguiente fila donde vienen los números
+                    except:
+                        pass
                 
-                # Procesar la cantidad usando el convertidor de números europeo/venezolano
-                cantidad = ProcesadorArchivos._convertir_numero_europeo(val_cant)
-                if pd.isna(cantidad) or cantidad <= 0:
-                    continue
+                # --- PASO B: IDENTIFICAR CANTIDADES EN LA FILA DE DATOS ---
+                # Buscar números en la fila que correspondan a la columna 'Cantidad'
+                # En el formato estándar, Cantidad suele estar en la columna H (índice 7) o I (índice 8)
+                cantidad_encontrada = 0.0
                 
-                # Extraer descripción del producto
-                producto = ''
-                if col_producto and pd.notna(row[col_producto]):
-                    producto = str(row[col_producto]).strip()
+                # Buscamos de manera dinámica algún valor convertible en las columnas intermedias (índices 5 a 9)
+                indices_busqueda = [7, 8, 6, 5, 9]
+                for ind in indices_busqueda:
+                    if ind < len(row) and pd.notna(row.iloc[ind]):
+                        val_num = ProcesadorArchivos._convertir_numero_europeo(row.iloc[ind])
+                        # El número 35 suele ser menor que el costo de adquisición (1001), evitamos el costo
+                        if not pd.isna(val_num) and 0 < val_num < 5000:
+                            cantidad_encontrada = float(val_num)
+                            break
                 
-                # 💡 LA CORRECCIÓN MÁGICA: Si el producto ya existe en el diccionario, se SUMA
-                if codigo_limpio in resultado:
-                    resultado[codigo_limpio]['cantidad'] += float(cantidad)
-                    # Mantener el nombre del producto si el anterior vino vacío
-                    if not resultado[codigo_limpio]['producto'] and producto:
-                        resultado[codigo_limpio]['producto'] = producto
-                else:
-                    # Si es la primera vez que aparece, se registra la estructura base
-                    resultado[codigo_limpio] = {
-                        'cantidad': float(cantidad),
-                        'producto': producto
-                    }
+                # 3. Guardar y acumular de forma segura si tenemos un código activo
+                if codigo_actual and cantidad_encontrada > 0:
+                    if codigo_actual in resultado:
+                        resultado[codigo_actual]['cantidad'] += cantidad_encontrada
+                    else:
+                        resultado[codigo_actual] = {
+                            'cantidad': cantidad_encontrada,
+                            'producto': nombre_actual
+                        }
+                    # Limpiamos el acumulador para esperar el próximo producto
+                    codigo_actual = None 
                     
-                print(f"📥 Registro procesado en memoria: {codigo_limpio} | {producto} | Cantidad parcial: {cantidad}")
-            
-            print(f"📊 Extracción finalizada. {len(resultado)} productos consolidados en el diccionario de trazabilidad.")
-            return resultado
-            
         except Exception as e:
-            print(f"❌ Error crítico en procesar_recepcion_trazabilidad: {e}")
-            import traceback
-            traceback.print_exc()
-            return {}
+            print(f"❌ Error en procesar_recepcion_trazabilidad: {e}")
+            
+        return resultado
