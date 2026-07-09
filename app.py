@@ -5542,90 +5542,89 @@ else:
 st.markdown("---")
     
     # ============================================================
-    # PESTAÑA 3: ARCHIVOS FUENTE DEL DÍA
+# PESTAÑA 3: ARCHIVOS FUENTE DEL DÍA
+# ============================================================
+with tab_auditoria_archivos:
+    st.markdown("### 📄 Archivos Fuente del Día")
+    st.caption("Visualización de los archivos Excel cargados, con sus estructuras y estadísticas.")
+    
     # ============================================================
-    with tab_auditoria_archivos:
-        st.markdown("### 📄 Archivos Fuente del Día")
-        st.caption("Visualización de los archivos Excel cargados, con sus estructuras y estadísticas.")
-        
-        # ============================================================
-        # BOTÓN PARA EJECUTAR AUDITORÍA
-        # ============================================================
-        st.markdown("#### 🔍 Motor de Auditoría y Trazabilidad de Errores")
-        if st.button("🔍 Ejecutar Auditoría de Trazabilidad Manual", width='stretch', key="btn_auditoria_manual_tab3"):
-            hay_err_m, fallas_m, df_c_m = ejecutar_auditoria_inteligente(
-                archivo_facturacion, archivo_cobranzas, archivo_egresos, archivo_estado_cuenta
-            )
-            st.session_state['fallas_detectadas'] = fallas_m
-            st.session_state['df_consolidado'] = df_c_m
-            st.session_state['hay_errores'] = hay_err_m
-            st.session_state['fecha_ultimo_cierre'] = "Manual (En tiempo real)"
-        
-        if 'fallas_detectadas' in st.session_state and st.session_state.get('fecha_ultimo_cierre') == "Manual (En tiempo real)":
-            renderizar_modulo_auditoria(
-                st.session_state['fallas_detectadas'],
-                st.session_state['df_consolidado'],
-                st.session_state['hay_errores'],
-                "Manual (En tiempo real)",
-                usuario_info.get('nombre', 'Analista')
-            )
-        
-        st.markdown("---")
-        
-        # ============================================================
-        # VISUALIZACIÓN DE ARCHIVOS
-        # ============================================================
-        st.markdown("#### 📋 Archivos Cargados")
-        
-        # Crear tabs para cada archivo
-        archivos_tabs = list(archivos_data.keys())
-        if archivos_tabs:
-            tabs = st.tabs(archivos_tabs)
-            for tab, nombre in zip(tabs, archivos_tabs):
-                with tab:
-                    info = archivos_data[nombre]
-                    df = info['df']
-                    nombre_archivo = info['nombre']
-                    
-                    # Procesar el archivo para mostrar
-                    df_proc, stats, col_numericas = mostrar_archivo_con_formato(df, nombre_archivo, nombre)
-                    if df_proc is not None and stats is not None:
-                        renderizar_archivo_en_tab(df_proc, nombre_archivo, nombre, stats, col_numericas)
-                    else:
-                        st.warning(f"⚠️ No se pudo procesar el archivo {nombre}")
-        else:
-            st.info("ℹ️ No hay archivos cargados para visualizar.")
-        
-        # ============================================================
-        # BOTONES DE VERIFICACIÓN DE ARCHIVOS
-        # ============================================================
-        st.markdown("---")
-        st.markdown("#### 📂 Ver archivos de verificación")
-
-        archivos_verificacion = [
-            ("CxC", archivo_cxc_reportado, "Cuentas por cobrar"),
-            ("Inventario", archivo_inventario_reportado, "Inventario"),
-            ("CxP", archivo_cxp_reportado, "Cuentas por pagar"),
-            ("Tránsito", archivo_tb, "Transferencias en tránsito")
-        ]
-
-        cols = st.columns(4)
-        for col, (nombre, archivo, titulo) in zip(cols, archivos_verificacion):
-            with col:
-                if archivo and archivos_cargados.get(titulo) is not None:
-                    if st.button(f"📄 Ver {nombre}", key=f"btn_{nombre}_tab3", width='stretch'):
-                        df_verif, stats_verif, col_num_verif = mostrar_archivo_con_formato(
-                            archivos_cargados[titulo], 
-                            archivo.name, 
-                            f"Archivo {titulo}"
-                        )
-                        if df_verif is not None and stats_verif is not None:
-                            renderizar_archivo_en_tab(df_verif, archivo.name, f"Archivo {titulo}", stats_verif, col_num_verif)
-                        else:
-                            st.warning("⚠️ No se pudo procesar el archivo")
+    # BOTÓN PARA EJECUTAR AUDITORÍA
+    # ============================================================
+    st.markdown("#### 🔍 Motor de Auditoría y Trazabilidad de Errores")
+    if st.button("🔍 Ejecutar Auditoría de Trazabilidad Manual", width='stretch', key="btn_auditoria_manual_tab3"):
+        hay_err_m, fallas_m, df_c_m = ejecutar_auditoria_inteligente(
+            archivo_facturacion, archivo_cobranzas, archivo_egresos, archivo_estado_cuenta
+        )
+        st.session_state['fallas_detectadas'] = fallas_m
+        st.session_state['df_consolidado'] = df_c_m
+        st.session_state['hay_errores'] = hay_err_m
+        st.session_state['fecha_ultimo_cierre'] = "Manual (En tiempo real)"
+    
+    if 'fallas_detectadas' in st.session_state and st.session_state.get('fecha_ultimo_cierre') == "Manual (En tiempo real)":
+        renderizar_modulo_auditoria(
+            st.session_state['fallas_detectadas'],
+            st.session_state['df_consolidado'],
+            st.session_state['hay_errores'],
+            "Manual (En tiempo real)",
+            usuario_info.get('nombre', 'Analista')
+        )
+    
+    st.markdown("---")
+    
+    # ============================================================
+    # VISUALIZACIÓN DE ARCHIVOS
+    # ============================================================
+    st.markdown("#### 📋 Archivos Cargados")
+    
+    # Crear tabs para cada archivo
+    archivos_tabs = list(archivos_data.keys())
+    if archivos_tabs:
+        tabs = st.tabs(archivos_tabs)
+        for tab, nombre in zip(tabs, archivos_tabs):
+            with tab:
+                info = archivos_data[nombre]
+                df = info['df']
+                nombre_archivo = info['nombre']
+                
+                # Procesar el archivo para mostrar
+                df_proc, stats, col_numericas = mostrar_archivo_con_formato(df, nombre_archivo, nombre)
+                if df_proc is not None and stats is not None:
+                    renderizar_archivo_en_tab(df_proc, nombre_archivo, nombre, stats, col_numericas)
                 else:
-                    st.button(f"❌ {nombre} no cargado", disabled=True, width='stretch')
+                    st.warning(f"⚠️ No se pudo procesar el archivo {nombre}")
+    else:
+        st.info("ℹ️ No hay archivos cargados para visualizar.")
+    
+    # ============================================================
+    # BOTONES DE VERIFICACIÓN DE ARCHIVOS
+    # ============================================================
+    st.markdown("---")
+    st.markdown("#### 📂 Ver archivos de verificación")
 
+    archivos_verificacion = [
+        ("CxC", archivo_cxc_reportado, "Cuentas por cobrar"),
+        ("Inventario", archivo_inventario_reportado, "Inventario"),
+        ("CxP", archivo_cxp_reportado, "Cuentas por pagar"),
+        ("Tránsito", archivo_tb, "Transferencias en tránsito")
+    ]
+
+    cols = st.columns(4)
+    for col, (nombre, archivo, titulo) in zip(cols, archivos_verificacion):
+        with col:
+            if archivo and archivos_cargados.get(titulo) is not None:
+                if st.button(f"📄 Ver {nombre}", key=f"btn_{nombre}_tab3", width='stretch'):
+                    df_verif, stats_verif, col_num_verif = mostrar_archivo_con_formato(
+                        archivos_cargados[titulo], 
+                        archivo.name, 
+                        f"Archivo {titulo}"
+                    )
+                    if df_verif is not None and stats_verif is not None:
+                        renderizar_archivo_en_tab(df_verif, archivo.name, f"Archivo {titulo}", stats_verif, col_num_verif)
+                    else:
+                        st.warning("⚠️ No se pudo procesar el archivo")
+            else:
+                st.button(f"❌ {nombre} no cargado", disabled=True, width='stretch')
     # ============================================================
     # REGLAS DE NEGOCIO (FUERA DE LAS PESTAÑAS)
     # ============================================================
