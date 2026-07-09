@@ -5253,7 +5253,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         
         st.markdown("---")
         
-        # ============================================================
+                # ============================================================
         # 📦 TRAZABILIDAD DE INVENTARIO - PRODUCTO POR PRODUCTO
         # ============================================================
         st.markdown("### 📦 Trazabilidad de Inventario - Producto por Producto")
@@ -5263,7 +5263,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         tiene_inv_ant = 'df_inv_ant' in locals() and df_inv_ant is not None
         tiene_inv_rep = 'df_inv_rep' in locals() and df_inv_rep is not None
         tiene_costo = 'df_costo' in locals() and df_costo is not None
-        tiene_rec_traz = 'df_recepciones_traz' in locals() and df_recepciones_traz is not None
+        tiene_rec_traz = 'df_recepciones_traz' in locals() and df_recepciones_traz is not None and recepcion_traz_data
 
         if tiene_inv_ant and tiene_inv_rep:
             try:
@@ -5282,12 +5282,19 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         util_df = ProcesadorArchivos.cargar_detalle_utilidad(df_costo)
                     
                     # ============================================================
-                    # 3. CARGAR RECEPCIÓN TRAZABILIDAD (COMPRAS DEL DÍA)
+                    # 3. CARGAR RECEPCIÓN TRAZABILIDAD (COMPRAS DEL DÍA) - CORREGIDO
                     # ============================================================
                     recepciones_traz = {}
+                    total_recepcion_cantidad = 0.0
+                    
                     if tiene_rec_traz:
-                        recepciones_traz = ProcesadorArchivos.procesar_recepcion_trazabilidad(df_recepciones_traz)
-                        st.success(f"✅ Recepción Trazabilidad cargada: {len(recepciones_traz)} productos")
+                        # Usar los datos ya procesados de recepcion_traz_data
+                        recepciones_traz = recepcion_traz_data
+                        # Calcular el total de unidades recibidas
+                        for codigo, info in recepciones_traz.items():
+                            total_recepcion_cantidad += info.get('cantidad', 0)
+                        st.success(f"✅ Recepción Trazabilidad cargada: {len(recepciones_traz)} productos, {total_recepcion_cantidad:.2f} unidades totales")
+                        st.info(f"📦 Productos recibidos: {', '.join([info.get('producto', codigo) for codigo, info in list(recepciones_traz.items())[:5]])}")
                     else:
                         st.info("ℹ️ No se cargó archivo de Recepción Trazabilidad. Solo se usarán ventas para el cálculo.")
                     
@@ -5332,10 +5339,12 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         # Obtener datos de ventas (costo de facturación)
                         u_row = util_dict.get(p, {'Cantidad': 0.0, 'Costo_Total': 0.0, 'Producto_Original': 'N/A'})
                         
-                        # Obtener datos de recepción trazabilidad
+                        # 🔥 CORREGIDO: Obtener datos de recepción trazabilidad
                         qty_recepcion_traz = 0.0
                         if p in recepciones_traz:
-                            qty_recepcion_traz = recepciones_traz[p]['cantidad']
+                            qty_recepcion_traz = recepciones_traz[p].get('cantidad', 0)
+                            # Debug: mostrar que se encontró el producto
+                            # st.write(f"🔍 Producto {p} encontrado en Recepción: {qty_recepcion_traz} unidades")
                         
                         # --- VALORES ---
                         qty_prev = p_prev['Cantidad']
@@ -5370,7 +5379,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         
                         total_inicial_cant += qty_prev
                         total_ventas_cant += qty_sold
-                        total_recepcion_cant += qty_recepcion_traz
+                        total_recepcion_cant += qty_recepcion_traz  # 🔥 CORREGIDO: Ahora suma correctamente
                         total_esperado_cant += expected_qty
                         total_reportado_cant += qty_curr
                         
@@ -5435,13 +5444,14 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     mostrar_kpi_paso_paso(col_v_inv3, titulo_diff_valor, diff_total_valor, icono_diff_valor, variante_diff_valor)
                     
                     # ============================================================
-                    # 10. KPIS PASO A PASO - POR CANTIDAD (TRAZABILIDAD)
+                    # 10. KPIS PASO A PASO - POR CANTIDAD (TRAZABILIDAD) - CORREGIDO
                     # ============================================================
                     st.markdown("---")
                     st.markdown("#### 📊 Paso a paso del cálculo de Inventario (CANTIDADES - Trazabilidad)")
                     
                     col_inv_c1, col_inv_c2, col_inv_c3, col_inv_c4, col_inv_c5 = st.columns(5)
                     
+                    # 🔥 CORREGIDO: Mostrar la cantidad correcta de recepción
                     mostrar_kpi_paso_paso(col_inv_c1, "Inv. Anterior (und)", total_inicial_cant, "📦", "blue")
                     mostrar_kpi_paso_paso(col_inv_c2, "Ventas (und)", total_ventas_cant, "📊", "red")
                     mostrar_kpi_paso_paso(col_inv_c3, "Recepción (und)", total_recepcion_cant, "📥", "purple")
@@ -5449,7 +5459,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     mostrar_kpi_paso_paso(col_inv_c5, "Inv. Reportado (und)", total_reportado_cant, "📄", "green")
                     
                     # ============================================================
-                    # 11. VERIFICACIÓN DE INVENTARIO POR CANTIDAD
+                    # 11. VERIFICACIÓN DE INVENTARIO POR CANTIDAD - CORREGIDO
                     # ============================================================
                     st.markdown("#### ✅ Verificación de Inventario (CANTIDADES)")
                     
