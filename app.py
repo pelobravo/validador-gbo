@@ -5,6 +5,7 @@
 # 📋 REORGANIZADO: Estructura con pestañas (Resumen, Conciliación, Archivos)
 # 🎯 REFACTORIZADO: KPIs con función mostrar_kpi_paso_paso para mejor legibilidad
 # 📊 MEJORADO: Resúmenes con tarjetas ejecutivas en dos columnas
+# 🔄 NUEVO: Uploader Recepción Trazabilidad para trazabilidad de inventarios
 
 import streamlit as st
 import pandas as pd
@@ -170,6 +171,7 @@ archivo_cobranzas = None
 archivo_egresos = None
 archivo_estado_cuenta = None
 archivo_recepciones = None
+archivo_recepciones_trazabilidad = None  # <--- NUEVO
 archivo_notas_credito_cliente = None
 archivo_notas_credito_proveedor = None
 archivo_costo_facturacion = None
@@ -2395,11 +2397,11 @@ with st.container():
     with col_u5:
         archivo_recepciones = st.file_uploader("📦 Recepciones", type=["xlsx", "xls"], key="rec_top")
     with col_u6:
-        archivo_notas_credito_cliente = st.file_uploader("📝 NC Clientes", type=["xlsx", "xls"], key="notas_cliente_top")
+        archivo_recepciones_trazabilidad = st.file_uploader("📊 Recepción Trazabilidad", type=["xlsx", "xls"], key="rec_traz_top")  # <--- NUEVO
     with col_u7:
-        archivo_notas_credito_proveedor = st.file_uploader("📝 NC Proveedores", type=["xlsx", "xls"], key="notas_proveedor_top")
+        archivo_notas_credito_cliente = st.file_uploader("📝 NC Clientes", type=["xlsx", "xls"], key="notas_cliente_top")
     with col_u8:
-        archivo_costo_facturacion = st.file_uploader("📈 Costo Facturación", type=["xlsx", "xls"], key="costo_fact_top")
+        archivo_notas_credito_proveedor = st.file_uploader("📝 NC Proveedores", type=["xlsx", "xls"], key="notas_proveedor_top")
     
     # Tercera fila - Archivos de verificación
     st.markdown("#### 🔍 Archivos de Verificación")
@@ -2840,6 +2842,7 @@ archivo_cobranzas = obtener_archivo_historico_o_subido(archivo_cobranzas, "cobra
 archivo_egresos = obtener_archivo_historico_o_subido(archivo_egresos, "egresos")
 archivo_estado_cuenta = obtener_archivo_historico_o_subido(archivo_estado_cuenta, "estado_cuenta")
 archivo_recepciones = obtener_archivo_historico_o_subido(archivo_recepciones, "recepciones")
+archivo_recepciones_trazabilidad = obtener_archivo_historico_o_subido(archivo_recepciones_trazabilidad, "recepcion_trazabilidad")  # <--- NUEVO
 archivo_notas_credito_cliente = obtener_archivo_historico_o_subido(archivo_notas_credito_cliente, "notas_cliente")
 archivo_notas_credito_proveedor = obtener_archivo_historico_o_subido(archivo_notas_credito_proveedor, "notas_proveedor")
 archivo_costo_facturacion = obtener_archivo_historico_o_subido(archivo_costo_facturacion, "costo_facturacion")
@@ -3039,6 +3042,31 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             compras_credito = 0.0
     else:
         st.info("ℹ️ No se cargó archivo de Recepción. Se usará valor 0,00 para inventario.")
+    
+    # ============================================================
+    # RECEPCIÓN TRAZABILIDAD (NUEVO - Para trazabilidad de inventarios)
+    # ============================================================
+    df_recepciones_traz = None
+    recepcion_traz_data = {}
+
+    if archivo_recepciones_trazabilidad:
+        try:
+            df_recepciones_traz = pd.read_excel(archivo_recepciones_trazabilidad)
+            archivos_data['Recepción Trazabilidad'] = {'df': df_recepciones_traz, 'nombre': archivo_recepciones_trazabilidad.name}
+            
+            # Procesar el archivo de Recepción Trazabilidad para extraer productos y cantidades
+            recepcion_traz_data = ProcesadorArchivos.procesar_recepcion_trazabilidad(df_recepciones_traz)
+            
+            if recepcion_traz_data:
+                st.success(f"✅ Recepción Trazabilidad procesada: {len(recepcion_traz_data)} productos registrados")
+            else:
+                st.warning("⚠️ No se pudieron extraer datos del archivo de Recepción Trazabilidad")
+        except Exception as e:
+            st.warning(f"⚠️ Error procesando Recepción Trazabilidad: {str(e)}")
+            df_recepciones_traz = None
+            recepcion_traz_data = {}
+    else:
+        st.info("ℹ️ No se cargó archivo de Recepción Trazabilidad. La trazabilidad de inventarios por producto usará solo ventas.")
     
     # ============================================================
     # COSTO DE FACTURACIÓN - DEBE EXTRAER DE COLUMNA E
@@ -5223,6 +5251,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     if 'df_costo' in locals() and df_costo is not None:
                         util_df = ProcesadorArchivos.cargar_detalle_utilidad(df_costo)
                     
+                    # Obtener recepciones de trazabilidad (si están disponibles)
+                    recepciones_traz = recepcion_traz_data if 'recepcion_traz_data' in locals() and recepcion_traz_data else {}
+                    
                     # Diccionarios para búsqueda rápida
                     inv_prev_dict = inv_prev.set_index('Producto').to_dict('index')
                     inv_curr_dict = inv_curr.set_index('Producto').to_dict('index')
@@ -5235,6 +5266,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     diferencias = []
                     total_inicial = 0
                     total_ventas = 0
+                    total_recepcion_traz = 0
                     total_esperado_valor = 0
                     total_reportado_valor = 0
                     
@@ -5258,9 +5290,15 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         qty_sold = u_row['Cantidad']
                         cost_sold = u_row['Costo_Total']
                         
-                        # Cálculos de trazabilidad
-                        expected_qty = qty_prev - qty_sold
-                        expected_val = val_prev - cost_sold
+                        # Datos de recepción trazabilidad
+                        qty_recepcion_traz = 0.0
+                        if p in recepciones_traz:
+                            qty_recepcion_traz = recepciones_traz[p]['cantidad']
+                            total_recepcion_traz += qty_recepcion_traz * price_prev
+                        
+                        # Cálculos de trazabilidad incluyendo recepción
+                        expected_qty = qty_prev - qty_sold + qty_recepcion_traz
+                        expected_val = val_prev - cost_sold + (qty_recepcion_traz * price_prev)
                         qty_diff = qty_curr - expected_qty
                         val_diff = val_curr - expected_val
                         
@@ -5289,6 +5327,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 'Estado': estado,
                                 'Q. Anterior': qty_prev,
                                 'Vendido': qty_sold,
+                                'Recepción Traz': qty_recepcion_traz,
                                 'Q. Esperada': expected_qty,
                                 'Q. Reportada': qty_curr,
                                 'Dif. Cantidad': qty_diff,
@@ -5304,15 +5343,17 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     st.markdown("---")
                     st.markdown("#### 📊 Resumen de Totales de Inventario")
                     
-                    col_kpi_inv1, col_kpi_inv2, col_kpi_inv3, col_kpi_inv4 = st.columns(4)
+                    col_kpi_inv1, col_kpi_inv2, col_kpi_inv3, col_kpi_inv4, col_kpi_inv5 = st.columns(5)
                     
                     with col_kpi_inv1:
                         st.metric("📦 Inventario Inicial", formato_venezolano(total_inicial))
                     with col_kpi_inv2:
                         st.metric("📊 Costo de Ventas", formato_venezolano(total_ventas))
                     with col_kpi_inv3:
-                        st.metric("📋 Inventario Esperado", formato_venezolano(total_esperado_valor))
+                        st.metric("📦 Recepción Traz.", formato_venezolano(total_recepcion_traz))
                     with col_kpi_inv4:
+                        st.metric("📋 Inventario Esperado", formato_venezolano(total_esperado_valor))
+                    with col_kpi_inv5:
                         st.metric("📄 Inventario Reportado", formato_venezolano(total_reportado_valor))
                     
                     # Diferencia total destacada
@@ -5345,7 +5386,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         st.metric("📊 Total Ventas (Unid.)", f"{total_unidades:,.0f}")
                     
                     # ============================================================
-                    # SECCIÓN 3: BOTONES PARA EXPLORAR DETALLES
+                    # SECCIÓN 3: BOTONES PARA EXPLORAR DETALLES (IGUAL QUE ANTES)
                     # ============================================================
                     st.markdown("---")
                     st.markdown("#### 🔍 Explorar Detalles de Inventario")
@@ -5397,10 +5438,11 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 df_formatted['Dif. Cantidad'] = df_formatted['Dif. Cantidad'].apply(lambda x: f"{x:.2f}")
                                 df_formatted['Q. Anterior'] = df_formatted['Q. Anterior'].apply(lambda x: f"{x:.2f}")
                                 df_formatted['Vendido'] = df_formatted['Vendido'].apply(lambda x: f"{x:.2f}")
+                                df_formatted['Recepción Traz'] = df_formatted['Recepción Traz'].apply(lambda x: f"{x:.2f}")
                                 df_formatted['Q. Esperada'] = df_formatted['Q. Esperada'].apply(lambda x: f"{x:.2f}")
                                 df_formatted['Q. Reportada'] = df_formatted['Q. Reportada'].apply(lambda x: f"{x:.2f}")
                                 
-                                columnas_mostrar = ['Código', 'Descripción', 'Estado', 'Q. Anterior', 'Vendido', 'Q. Esperada', 'Q. Reportada', 'Dif. Cantidad', 'Precio Ant.', 'Precio Nuevo', 'Efecto Precio', 'Dif. Valor']
+                                columnas_mostrar = ['Código', 'Descripción', 'Estado', 'Q. Anterior', 'Vendido', 'Recepción Traz', 'Q. Esperada', 'Q. Reportada', 'Dif. Cantidad', 'Precio Ant.', 'Precio Nuevo', 'Efecto Precio', 'Dif. Valor']
                                 columnas_existentes = [c for c in columnas_mostrar if c in df_formatted.columns]
                                 
                                 def colorear_estado(row):
