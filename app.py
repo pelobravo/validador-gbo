@@ -2416,13 +2416,17 @@ with st.container():
     with col_u12:
         archivo_tb = st.file_uploader("🔄 TB.xlsx", type=["xlsx", "xls"], key="tb_top")
     
-    # Cuarta fila - Archivo CxP Anterior (opcional)
-    col_u13, col_u14 = st.columns([1, 3])
+    # Cuarta fila - Archivos adicionales
+    st.markdown("#### 📎 Archivos Adicionales")
+    col_u13, col_u14, col_u15, col_u16 = st.columns(4)
+    
     with col_u13:
+        archivo_costo_facturacion = st.file_uploader("📈 Costo Facturación", type=["xlsx", "xls"], key="costo_fact_top")
+    with col_u14:
         archivo_cxp_anterior = st.file_uploader("📄 CxP Día Anterior", type=["xlsx", "xls"], key="cxp_ant_top")
+    # col_u15 y col_u16 quedan disponibles para futuros archivos
     
     st.markdown("---")
-
 # ============================================================
 # SIDEBAR CORPORATIVA (SEGÚN ROL) - SIN UPLOADERS
 # ============================================================
