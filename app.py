@@ -2,6 +2,7 @@
 # 🔥 MODIFICADO: Identificación y visualización de OT Nuevas en Cuentas por Pagar
 # 🤖 INTEGRACIÓN CON DEEPSEEK API
 # 🎨 MEJORADO: Uploaders en parte superior, KPIs con tarjetas, botón Limpiar al pie
+# 📋 REORGANIZADO: Estructura con pestañas (Resumen, Conciliación, Archivos)
 
 import streamlit as st
 import pandas as pd
@@ -318,15 +319,15 @@ def formato_venezolano_desde_str(valor_str):
         return 0
 
 # ============================================================
-# FUNCIÓN PARA MOSTRAR ARCHIVO CON FORMATO
+# FUNCIÓN PARA MOSTRAR ARCHIVO CON FORMATO (MODIFICADA - SIN AUTO-RENDERIZADO)
 # ============================================================
 def mostrar_archivo_con_formato(df, nombre_archivo, titulo):
     """
     Muestra un DataFrame con formato mejorado y estadísticas básicas
+    - Ahora no se renderiza automáticamente, solo retorna el DataFrame y metadatos
     """
     if df is None or df.empty:
-        st.warning(f"⚠️ El archivo {nombre_archivo} está vacío")
-        return
+        return None, "⚠️ Archivo vacío", None
     
     # 🔥 CONVERTIR TODAS LAS FECHAS A STRING PARA EVITAR ERRORES DE PYARROW
     for col in df.columns:
@@ -338,25 +339,43 @@ def mostrar_archivo_con_formato(df, nombre_archivo, titulo):
             except:
                 pass
     
-    with st.expander(f"📄 {titulo} - {nombre_archivo}", expanded=False):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("📊 Filas", len(df))
-        with col2:
-            st.metric("📋 Columnas", len(df.columns))
-        with col3:
-            columnas_numericas = df.select_dtypes(include=['number']).columns
-            if len(columnas_numericas) > 0:
-                total = df[columnas_numericas[0]].sum()
-                st.metric("💰 Total", formato_venezolano(total))
-        
-        st.dataframe(
-            df.style.background_gradient(subset=columnas_numericas, cmap='Blues', low=0.1, high=0.9),
-            width='stretch',
-            height=400
-        )
-        
-        st.caption(f"📌 Columnas: {', '.join(df.columns)}")
+    # Estadísticas básicas
+    stats = {
+        'filas': len(df),
+        'columnas': len(df.columns),
+        'total': None
+    }
+    columnas_numericas = df.select_dtypes(include=['number']).columns
+    if len(columnas_numericas) > 0:
+        stats['total'] = df[columnas_numericas[0]].sum()
+    
+    return df, stats, columnas_numericas
+
+# ============================================================
+# FUNCIÓN PARA RENDERIZAR ARCHIVO EN PESTAÑA
+# ============================================================
+def renderizar_archivo_en_tab(df, nombre_archivo, titulo, stats, columnas_numericas):
+    """Renderiza un archivo en la pestaña de archivos"""
+    if df is None or df.empty:
+        st.warning(f"⚠️ El archivo {nombre_archivo} está vacío")
+        return
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("📊 Filas", stats['filas'])
+    with col2:
+        st.metric("📋 Columnas", stats['columnas'])
+    with col3:
+        if stats['total'] is not None:
+            st.metric("💰 Total", formato_venezolano(stats['total']))
+    
+    st.dataframe(
+        df.style.background_gradient(subset=columnas_numericas, cmap='Blues', low=0.1, high=0.9),
+        use_container_width=True,
+        height=400
+    )
+    
+    st.caption(f"📌 Columnas: {', '.join(df.columns)}")
 
 # ============================================================
 # FUNCIÓN HELPER PARA VALORES SEGUROS
@@ -875,7 +894,6 @@ st.markdown("""
     /* ============================================================
        MEJORA DE VISIBILIDAD DE UPLOADERS EN ÁREA PRINCIPAL
        ============================================================ */
-    /* Forzar color oscuro en los labels de uploaders del área principal */
     .main .stFileUploader > label {
         color: #1a3a5c !important;
         font-weight: 600 !important;
@@ -898,7 +916,6 @@ st.markdown("""
     /* ============================================================
        CORRECCIÓN DE CONTRASTE EN SIDEBAR (CHAT INPUT Y EXPANDERS)
        ============================================================ */
-    /* Corregir texto escrito dentro del chat input e inputs del sidebar */
     [data-testid="stSidebar"] input,
     [data-testid="stSidebar"] textarea,
     [data-testid="stSidebar"] select,
@@ -909,14 +926,12 @@ st.markdown("""
         -webkit-text-fill-color: #0f172a !important;
     }
     
-    /* Asegurar visibilidad del placeholder en el chat input */
     [data-testid="stSidebar"] textarea::placeholder,
     [data-testid="stSidebar"] input::placeholder {
         color: #64748b !important;
         opacity: 0.8 !important;
     }
 
-    /* Estilo para los expanders dentro del sidebar (Asistente Virtual) */
     [data-testid="stSidebar"] [data-testid="stExpander"] {
         background-color: transparent !important;
         border: 1px solid rgba(255, 255, 255, 0.08) !important;
@@ -946,10 +961,34 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# SESION STATE
+# INICIALIZACIÓN DE SESSION STATE - BANDERAS DE CONTROL
 # ============================================================
 if 'empresa_activa' not in st.session_state:
     st.session_state.empresa_activa = "Bodeguita Guayana"
+
+# Banderas para control de visualización de tablas dinámicas
+if 'mostrar_todos_productos' not in st.session_state:
+    st.session_state.mostrar_todos_productos = False
+if 'mostrar_solo_diff' not in st.session_state:
+    st.session_state.mostrar_solo_diff = False
+if 'mostrar_cambio_precio' not in st.session_state:
+    st.session_state.mostrar_cambio_precio = False
+if 'mostrar_cxp_actual' not in st.session_state:
+    st.session_state.mostrar_cxp_actual = False
+if 'mostrar_cxp_recepciones' not in st.session_state:
+    st.session_state.mostrar_cxp_recepciones = False
+if 'mostrar_cxp_cruzado' not in st.session_state:
+    st.session_state.mostrar_cxp_cruzado = False
+if 'mostrar_cxc_duplicadas' not in st.session_state:
+    st.session_state.mostrar_cxc_duplicadas = False
+if 'mostrar_cxc_nc' not in st.session_state:
+    st.session_state.mostrar_cxc_nc = False
+if 'mostrar_cxc_completo' not in st.session_state:
+    st.session_state.mostrar_cxc_completo = False
+if 'mostrar_transito_analisis' not in st.session_state:
+    st.session_state.mostrar_transito_analisis = False
+if 'mostrar_transito_tb' not in st.session_state:
+    st.session_state.mostrar_transito_tb = False
 
 # Función para inicializar saldos y ajustes de una empresa y fecha
 def inicializar_saldos_empresa(empresa, fecha_str):
@@ -1320,7 +1359,6 @@ def mostrar_recepciones_rezagadas(df_recepciones, fecha_actual, empresa):
 
 # ============================================================
 # FUNCIÓN CORREGIDA: COTEJO AUTOMÁTICO DE DOCUMENTOS (NE / OT)
-# 🔥 MODIFICADO: Identificación y visualización de OT Nuevas
 # ============================================================
 def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, empresa, diferencia_cxp=0.0):
     """
@@ -1727,7 +1765,7 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
             
             # Mostrar la tabla con las columnas relevantes
             columnas_mostrar = ['N° Documento', 'Monto (Bs.)', 'Fecha Vencimiento', 'Proveedor', 'Estado']
-            st.dataframe(df_ot_nuevas_display[columnas_mostrar], width='stretch')
+            st.dataframe(df_ot_nuevas_display[columnas_mostrar], use_container_width=True)
             
             # 🔥 Mostrar el total de las OT nuevas de forma destacada
             st.success(f"💰 **Total de OT Nuevas: {formato_venezolano(total_ot_nuevas)} Bs.**")
@@ -1780,7 +1818,7 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                 df_ot_elim = pd.DataFrame(ot_eliminadas)
                 if 'monto' in df_ot_elim.columns:
                     df_ot_elim['Monto'] = df_ot_elim['monto'].apply(formato_venezolano)
-                st.dataframe(df_ot_elim[['documento', 'Monto', 'estado']], width='stretch')
+                st.dataframe(df_ot_elim[['documento', 'Monto', 'estado']], use_container_width=True)
                 st.metric("💰 Total OT Eliminadas", formato_venezolano(total_ot_eliminadas))
             else:
                 st.info("No hay OT que hayan sido eliminadas del CxP entre el día anterior y hoy.")
@@ -1789,7 +1827,7 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
         with st.expander("✅ NE Conciliados (Están en Recepciones y en CxP)", expanded=False):
             if ne_en_cxp:
                 df_ne_conc = pd.DataFrame(ne_en_cxp)
-                st.dataframe(df_ne_conc, width='stretch')
+                st.dataframe(df_ne_conc, use_container_width=True)
             else:
                 st.info("No hay NE conciliados en este período.")
 
@@ -1799,7 +1837,7 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                 st.warning(f"🔍 Se encontraron {len(ne_faltantes)} NE que están en Recepciones pero NO en Cuentas por Pagar.")
                 st.info("💡 Esto indica que la recepción fue pagada al contado y no generó deuda en CxP.")
                 df_ne_falt = pd.DataFrame(ne_faltantes)
-                st.dataframe(df_ne_falt, width='stretch')
+                st.dataframe(df_ne_falt, use_container_width=True)
                 st.metric("💰 Total NE Faltantes (Pago al Contado)", formato_venezolano(total_ne_faltantes))
             else:
                 st.success("✅ Todas las NE de Recepciones están en CxP.")
@@ -1811,7 +1849,7 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
                 st.info("💡 Esto indica que son cargas manuales o ajustes administrativos.")
                 df_ot = pd.DataFrame(ot_no_rec)
                 df_ot['Monto'] = df_ot['monto'].apply(formato_venezolano)
-                st.dataframe(df_ot[['documento', 'Monto', 'estado']], width='stretch')
+                st.dataframe(df_ot[['documento', 'Monto', 'estado']], use_container_width=True)
                 st.metric("💰 Total OT (Carga Manual)", formato_venezolano(total_ot_no_rec))
             else:
                 st.success("✅ No hay OT en CxP que no estén en Recepciones.")
@@ -1866,7 +1904,7 @@ def mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_actual, emp
         if docs_diferencia:
             df_docs = pd.DataFrame(docs_diferencia)
             df_docs['Monto'] = df_docs['Monto'].apply(formato_venezolano)
-            st.dataframe(df_docs, width='stretch')
+            st.dataframe(df_docs, use_container_width=True)
         else:
             st.info("No se identificaron documentos que expliquen la diferencia.")
                     
@@ -2002,7 +2040,7 @@ def mostrar_dashboard_general_consolidado():
     for col in ['Inventario', 'CxC', 'Bancos', 'CxP', 'Tránsito', 'Capital Neto']:
         df_formatted[col] = df_formatted[col].apply(formato_venezolano)
         
-    st.dataframe(df_formatted, width='stretch', hide_index=True)
+    st.dataframe(df_formatted, use_container_width=True, hide_index=True)
     
     # Evolución Consolidada Histórica
     st.markdown("### 📈 Evolución Histórica Comparativa")
@@ -2132,7 +2170,7 @@ def mostrar_dashboard_historico_empresa(empresa):
         for col in ['inventario', 'cx_c', 'bancos', 'cx_p', 'transito', 'capital']:
             if col in df_mostrar.columns:
                 df_mostrar[col] = df_mostrar[col].apply(formato_venezolano)
-        st.dataframe(df_mostrar, width='stretch', hide_index=True)
+        st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
     else:
         st.info("No hay registros en el rango de fechas seleccionado.")
 
@@ -2145,7 +2183,7 @@ def mostrar_dashboard_historico_empresa(empresa):
         for col in ['valor_calculado', 'valor_reportado', 'diferencia']:
             if col in df_incons.columns:
                 df_incons[col] = df_incons[col].apply(formato_venezolano)
-        st.dataframe(df_incons, width='stretch', hide_index=True)
+        st.dataframe(df_incons, use_container_width=True, hide_index=True)
     else:
         st.success("✅ No se han detectado inconsistencias para esta empresa.")
 
@@ -2513,7 +2551,7 @@ with st.sidebar:
                 for col in columnas_numericas:
                     if col in df_mostrar.columns:
                         df_mostrar[col] = df_mostrar[col].apply(formato_venezolano)
-                st.dataframe(df_mostrar, width='stretch')
+                st.dataframe(df_mostrar, use_container_width=True)
                 st.caption(f"📊 {len(historial)} registros")
                 
                 col_res1, col_res2 = st.columns(2)
@@ -2811,7 +2849,7 @@ if st.session_state.get('mostrar_historial', False) and st.session_state.get('hi
             if col in df_mostrar.columns:
                 df_mostrar[col] = df_mostrar[col].apply(formato_venezolano)
         
-        st.dataframe(df_mostrar, width='stretch')
+        st.dataframe(df_mostrar, use_container_width=True)
         
         if 'capital' in historial.columns and len(historial) > 1:
             try:
@@ -2830,7 +2868,7 @@ if st.session_state.get('mostrar_historial', False) and st.session_state.get('hi
                 pass
 
 # ============================================================
-# PROCESAMIENTO PRINCIPAL
+# PROCESAMIENTO PRINCIPAL (SI HAY ARCHIVOS OBLIGATORIOS)
 # ============================================================
 if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_estado_cuenta:
     
@@ -2920,20 +2958,21 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
-    # LECTURA DE ARCHIVOS
+    # LECTURA DE ARCHIVOS (SILENCIOSA - SIN RENDERIZADO AUTOMÁTICO)
     # ============================================================
+    archivos_data = {}
     try:
         df_facturacion = pd.read_excel(archivo_facturacion)
-        mostrar_archivo_con_formato(df_facturacion, archivo_facturacion.name, "Facturación Diaria")
+        archivos_data['Facturación'] = {'df': df_facturacion, 'nombre': archivo_facturacion.name}
         
         df_cobranzas = pd.read_excel(archivo_cobranzas)
-        mostrar_archivo_con_formato(df_cobranzas, archivo_cobranzas.name, "Cobranzas Procesadas")
+        archivos_data['Cobranzas'] = {'df': df_cobranzas, 'nombre': archivo_cobranzas.name}
         
         df_egresos = pd.read_excel(archivo_egresos)
-        mostrar_archivo_con_formato(df_egresos, archivo_egresos.name, "Egresos iPago")
+        archivos_data['Egresos'] = {'df': df_egresos, 'nombre': archivo_egresos.name}
         
         df_estado_cuenta = pd.read_excel(archivo_estado_cuenta)
-        mostrar_archivo_con_formato(df_estado_cuenta, archivo_estado_cuenta.name, "Estado de Cuenta Bancario")
+        archivos_data['Estado Cuenta'] = {'df': df_estado_cuenta, 'nombre': archivo_estado_cuenta.name}
     except Exception as e:
         st.error(f"❌ Error al leer archivos Excel: {str(e)}")
         st.stop()
@@ -2947,7 +2986,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     if archivo_recepciones:
         try:
             df_recepciones = pd.read_excel(archivo_recepciones)
-            mostrar_archivo_con_formato(df_recepciones, archivo_recepciones.name, "Recepción de Mercancía")
+            archivos_data['Recepciones'] = {'df': df_recepciones, 'nombre': archivo_recepciones.name}
             recepcion_total, compras_credito, _, _ = ProcesadorArchivos.procesar_recepciones(df_recepciones)
             st.info(f"✅ Recepción de mercancía procesada: {formato_venezolano(recepcion_total)}")
             
@@ -2967,7 +3006,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     if archivo_costo_facturacion:
         try:
             df_costo = pd.read_excel(archivo_costo_facturacion)
-            mostrar_archivo_con_formato(df_costo, archivo_costo_facturacion.name, "Costo de Facturación (Reporte Utilidad)")
+            archivos_data['Costo Facturación'] = {'df': df_costo, 'nombre': archivo_costo_facturacion.name}
             costo_facturacion = ProcesadorArchivos.procesar_costo_facturacion(df_costo)
             st.success(f"✅ Costo de facturación cargado: {formato_venezolano(costo_facturacion)}")
         except Exception as e:
@@ -2984,18 +3023,18 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     if archivo_cxc_reportado:
         try:
             df_cxc_rep = pd.read_excel(archivo_cxc_reportado)
+            archivos_data['CxC Reportado'] = {'df': df_cxc_rep, 'nombre': archivo_cxc_reportado.name}
             saldos_reportados['Cuentas por cobrar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxc_rep, 'cxc')
             archivos_cargados['CxC'] = df_cxc_rep
-            mostrar_archivo_con_formato(df_cxc_rep, archivo_cxc_reportado.name, "Cuentas por Cobrar")
         except Exception as e:
             st.warning(f"⚠️ Error al leer CxC reportado: {str(e)}")
     
     if archivo_cxp_reportado:
         try:
             df_cxp_rep = pd.read_excel(archivo_cxp_reportado)
+            archivos_data['CxP Reportado'] = {'df': df_cxp_rep, 'nombre': archivo_cxp_reportado.name}
             saldos_reportados['Cuentas por pagar'] = ProcesadorArchivos.extraer_saldo_reportado(df_cxp_rep, 'cxp')
             archivos_cargados['CxP'] = df_cxp_rep
-            mostrar_archivo_con_formato(df_cxp_rep, archivo_cxp_reportado.name, "Cuentas por Pagar")
         except Exception as e:
             st.warning(f"⚠️ Error al leer CxP reportado: {str(e)}")
     
@@ -3003,9 +3042,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     if archivo_inventario_reportado:
         try:
             df_inv_rep = pd.read_excel(archivo_inventario_reportado)
+            archivos_data['Inventario Reportado'] = {'df': df_inv_rep, 'nombre': archivo_inventario_reportado.name}
             saldos_reportados['Inventario'] = ProcesadorArchivos.extraer_saldo_reportado(df_inv_rep, 'inventario')
             archivos_cargados['Inventario'] = df_inv_rep
-            mostrar_archivo_con_formato(df_inv_rep, archivo_inventario_reportado.name, "Inventario")
             
             # Guardar el archivo en RUTA_ARCHIVOS para histórico
             try:
@@ -3022,6 +3061,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     if 'archivo_inventario_anterior' in locals() and archivo_inventario_anterior:
         try:
             df_inv_ant = pd.read_excel(archivo_inventario_anterior)
+            archivos_data['Inventario Anterior'] = {'df': df_inv_ant, 'nombre': archivo_inventario_anterior.name}
             st.info("📄 Carga exitosa del Inventario del Día Anterior (desde archivo subido).")
         except Exception as e:
             st.warning(f"⚠️ Error al leer Inventario del Día Anterior subido: {str(e)}")
@@ -3033,6 +3073,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             file_ant_path = os.path.join(RUTA_ARCHIVOS, f"inventario_{st.session_state.empresa_activa}_{fecha_ant_str}.xlsx")
             if os.path.exists(file_ant_path):
                 df_inv_ant = pd.read_excel(file_ant_path)
+                archivos_data['Inventario Anterior'] = {'df': df_inv_ant, 'nombre': f"inventario_{fecha_ant_str}.xlsx"}
                 st.info(f"📄 Se cargó automáticamente el Inventario del Día Anterior ({fecha_ant_str}) desde el histórico.")
         except Exception as cache_err:
             print(f"Error al buscar inventario anterior en histórico: {cache_err}")
@@ -3040,11 +3081,11 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     if archivo_tb:
         try:
             df_tb = pd.read_excel(archivo_tb)
+            archivos_data['TB'] = {'df': df_tb, 'nombre': archivo_tb.name}
             transito_reportado = extraer_transito_reportado(df_tb, st.session_state.saldos['transito'])
             if transito_reportado is not None:
                 saldos_reportados['Transferencias en tránsito'] = transito_reportado
                 archivos_cargados['Tránsito'] = df_tb
-                mostrar_archivo_con_formato(df_tb, archivo_tb.name, "Transferencias en Tránsito")
         except Exception as e:
             st.warning(f"⚠️ Error al leer TB.xlsx: {str(e)}")
     
@@ -3055,7 +3096,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     if archivo_notas_credito_cliente:
         try:
             df_notas_cliente = pd.read_excel(archivo_notas_credito_cliente)
-            mostrar_archivo_con_formato(df_notas_cliente, archivo_notas_credito_cliente.name, "Notas de Crédito Clientes")
+            archivos_data['Notas Crédito Clientes'] = {'df': df_notas_cliente, 'nombre': archivo_notas_credito_cliente.name}
             notas_credito_cliente, _, _ = ProcesadorArchivos.procesar_notas_credito(df_notas_cliente)
         except Exception as e:
             st.warning(f"⚠️ Error al procesar notas de crédito clientes: {str(e)}")
@@ -3064,7 +3105,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     if archivo_notas_credito_proveedor:
         try:
             df_notas_proveedor = pd.read_excel(archivo_notas_credito_proveedor)
-            mostrar_archivo_con_formato(df_notas_proveedor, archivo_notas_credito_proveedor.name, "Notas de Crédito Proveedores")
+            archivos_data['Notas Crédito Proveedores'] = {'df': df_notas_proveedor, 'nombre': archivo_notas_credito_proveedor.name}
             notas_credito_proveedor, _, _ = ProcesadorArchivos.procesar_notas_credito(df_notas_proveedor)
         except Exception as e:
             st.warning(f"⚠️ Error al procesar notas de crédito proveedores: {str(e)}")
@@ -3081,7 +3122,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         if not df_proveedores.empty:
             with st.expander("📋 Detalle de PROVEEDORES DE MERCANCIA (filtrados)", expanded=False):
                 st.success(f"✅ Se encontraron {len(df_proveedores)} registros de PROVEEDORES DE MERCANCIA")
-                st.dataframe(df_proveedores, width='stretch')
+                st.dataframe(df_proveedores, use_container_width=True)
                 
                 col1, col2 = st.columns(2)
                 with col1:
@@ -3157,7 +3198,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             formato_venezolano(saldos_reportados.get('Transferencias en tránsito', 0))
         ]
     }
-    st.dataframe(pd.DataFrame(mov_data), width='stretch', hide_index=True)
+    st.dataframe(pd.DataFrame(mov_data), use_container_width=True, hide_index=True)
     
     st.info(f"""
     📊 **Resumen de Egresos iPago:**
@@ -3222,788 +3263,1080 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     diferencia_bancos = bancos_calculado - saldo_final
     
     # ============================================================
-    # Mostrar información detallada del cálculo de Bancos
+    # ESTRUCTURA PRINCIPAL CON PESTAÑAS
     # ============================================================
-    st.markdown("#### 📊 Detalle del cálculo de Bancos")
-    
-    col_b1, col_b2, col_b3, col_b4 = st.columns(4)
-    with col_b1:
-        st.metric("🏦 Saldo Inicial (estado de cuenta)", formato_venezolano(saldo_inicial_bancos))
-    with col_b2:
-        st.metric("📈 Ingresos (estado de cuenta)", formato_venezolano(total_ingresos))
-    with col_b3:
-        st.metric("📉 Egresos (estado de cuenta)", formato_venezolano(total_egresos_banco))
-    with col_b4:
-        st.metric("🏁 Bancos calculado", formato_venezolano(bancos_calculado))
-    
-    # Verificar contra el saldo final del estado de cuenta
-    st.markdown("#### ✅ Verificación con Estado de Cuenta")
-    
-    col_v1, col_v2, col_v3 = st.columns(3)
-    with col_v1:
-        st.metric("📋 Saldo Final (Estado de Cuenta)", formato_venezolano(saldo_final))
-    with col_v2:
-        st.metric("📊 Bancos Calculado", formato_venezolano(bancos_calculado))
-    with col_v3:
-        diferencia_bancos = bancos_calculado - saldo_final
-        if abs(diferencia_bancos) < 0.01:
-            st.metric("✅ Diferencia", "0,00", delta="✅ Coincide")
-        else:
-            st.metric("⚠️ Diferencia", formato_venezolano(diferencia_bancos), delta=f"{'📈' if diferencia_bancos > 0 else '📉'} {formato_venezolano(abs(diferencia_bancos))}")
-            st.warning(f"⚠️ Hay una diferencia de {formato_venezolano(diferencia_bancos)} entre el Bancos calculado y el saldo final del estado de cuenta.")
-    
-    st.info(f"ℹ️ **Saldo Inicial Bancario (desde estado de cuenta):** {formato_venezolano(saldo_inicial_bancos)} Bs.")
-    
-    st.markdown("---")
+    tab_resumen, tab_conciliacion, tab_auditoria_archivos = st.tabs([
+        "📈 Resumen Ejecutivo", 
+        "🔍 Conciliación y Auditoría Profunda", 
+        "📄 Archivos Fuente del Día"
+    ])
     
     # ============================================================
-    # ACTIVOS vs PASIVOS
+    # PESTAÑA 1: RESUMEN EJECUTIVO
     # ============================================================
-    st.markdown("#### 📊 Estructura del Capital de Trabajo")
-    html_table = mostrar_tabla_activos_pasivos(
-        inventario_calculado, cx_c_calculado, bancos_calculado, 
-        cx_p_calculado, transito_calculado, capital_calculado
-    )
-    st.markdown(html_table, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # ============================================================
-    # 🔥 COMPARACIÓN VS VALORES REPORTADOS - VERSIÓN FINAL CORREGIDA
-    # ============================================================
-    st.markdown("#### 📋 Comparación vs Valores Reportados")
-
-    # Obtener valores reportados
-    inventario_reportado = saldos_reportados.get('Inventario')
-    cx_c_reportado = saldos_reportados.get('Cuentas por cobrar')
-    cx_p_reportado = saldos_reportados.get('Cuentas por pagar')
-    transito_reportado = saldos_reportados.get('Transferencias en tránsito')
-
-    # Obtener valores del día anterior desde la sesión
-    inventario_anterior = safe_number(st.session_state.saldos.get('inventario', 0))
-    cx_c_anterior = safe_number(st.session_state.saldos.get('cx_c', 0))
-    bancos_anterior = safe_number(st.session_state.saldos.get('bancos', 0))
-    cx_p_anterior = safe_number(st.session_state.saldos.get('cx_p', 0))
-    transito_anterior = safe_number(st.session_state.saldos.get('transito', 0))
-    
-    # 💡 CORRECCIÓN: Calcular el capital anterior directo de los saldos base existentes
-    capital_anterior = (inventario_anterior + cx_c_anterior + bancos_anterior) - (cx_p_anterior + transito_anterior)
-
-    # Calcular diferencias
-    diff_inv_real = safe_number(inventario_calculado) - safe_number(inventario_reportado) if inventario_reportado is not None else 0
-    diff_cxc_real = safe_number(cx_c_calculado) - safe_number(cx_c_reportado) if cx_c_reportado is not None else 0
-    diff_cxp_real = safe_number(cx_p_calculado) - safe_number(cx_p_reportado) if cx_p_reportado is not None else 0
-    diff_transito_real = safe_number(transito_calculado) - safe_number(transito_reportado) if transito_reportado is not None else 0
-    diff_capital = capital_calculado - capital_anterior
-
-    # Función para formatear diferencia
-    def formatear_diff(valor_calculado, valor_reportado):
-        if valor_reportado is None or valor_reportado == 0:
-            return "-"
-        diff = safe_number(valor_calculado) - safe_number(valor_reportado)
-        if abs(diff) < 0.01:
-            return "✅ 0,00"
-        elif diff > 0:
-            return f"📈 +{formato_venezolano(diff)}"
-        else:
-            return f"📉 {formato_venezolano(diff)}"
-
-    # Crear lista para la tabla
-    comparacion_data = []
-
-    # 1. INVENTARIO
-    diff_inv_display = formatear_diff(inventario_calculado, inventario_reportado)
-    comparacion_data.append({
-        "Cuenta": "Inventario",
-        "Fórmula": "Inv. inicial + Recepción - Costo facturación",
-        "Día Anterior": formato_venezolano(inventario_anterior),
-        "Calculado": formato_venezolano(inventario_calculado),
-        "Reportado": formato_venezolano(inventario_reportado) if inventario_reportado is not None and inventario_reportado > 0 else "0,00",
-        "Diferencia": diff_inv_display
-    })
-
-    # 2. CUENTAS POR COBRAR
-    diff_cxc_display = formatear_diff(cx_c_calculado, cx_c_reportado)
-    comparacion_data.append({
-        "Cuenta": "Cuentas por cobrar",
-        "Fórmula": "CxC inicial + Facturación - Cobranzas - NC Clientes",
-        "Día Anterior": formato_venezolano(cx_c_anterior),
-        "Calculado": formato_venezolano(cx_c_calculado),
-        "Reportado": formato_venezolano(cx_c_reportado) if cx_c_reportado is not None and cx_c_reportado > 0 else "0,00",
-        "Diferencia": diff_cxc_display
-    })
-
-    # 3. BANCOS
-    diff_bancos_display = formatear_diff(bancos_calculado, bancos_anterior) if bancos_anterior != 0 else "-"
-    comparacion_data.append({
-        "Cuenta": "Bancos",
-        "Fórmula": "Saldo Inicial (E/C) + Ingresos - Egresos",
-        "Día Anterior": formato_venezolano(bancos_anterior),
-        "Calculado": formato_venezolano(bancos_calculado),
-        "Reportado": formato_venezolano(saldo_final) if saldo_final > 0 else "0,00",
-        "Diferencia": diff_bancos_display
-    })
-
-    # 4. CUENTAS POR PAGAR
-    diff_cxp_display = formatear_diff(cx_p_calculado, cx_p_reportado)
-    comparacion_data.append({
-        "Cuenta": "Cuentas por pagar",
-        "Fórmula": "CxP inicial + Recepciones - Pagos proveedores",
-        "Día Anterior": formato_venezolano(cx_p_anterior),
-        "Calculado": formato_venezolano(cx_p_calculado),
-        "Reportado": formato_venezolano(cx_p_reportado) if cx_p_reportado is not None and cx_p_reportado > 0 else "0,00",
-        "Diferencia": diff_cxp_display
-    })
-
-    # 5. TRANSFERENCIAS EN TRÁNSITO
-    diff_transito_display = formatear_diff(transito_calculado, transito_reportado)
-    comparacion_data.append({
-        "Cuenta": "Transferencias en tránsito",
-        "Fórmula": "Tránsito inicial + Ingresos del día - Cobranzas",
-        "Día Anterior": formato_venezolano(transito_anterior),
-        "Calculado": formato_venezolano(transito_calculado),
-        "Reportado": formato_venezolano(transito_reportado) if transito_reportado is not None and transito_reportado > 0 else "0,00",
-        "Diferencia": diff_transito_display
-    })
-
-    # 6. CAPITAL DE TRABAJO NETO
-    if abs(diff_capital) < 0.01:
-        diff_capital_display = "✅ 0,00"
-    elif diff_capital > 0:
-        diff_capital_display = f"📈 +{formato_venezolano(diff_capital)}"
-    else:
-        diff_capital_display = f"📉 {formato_venezolano(diff_capital)}"
-    
-    comparacion_data.append({
-        "Cuenta": "Capital de Trabajo Neto",
-        "Fórmula": "(Inv + CxC + Bancos) - (CxP + Tránsito)",
-        "Día Anterior": formato_venezolano(capital_anterior),
-        "Calculado": formato_venezolano(capital_calculado),
-        "Reportado": formato_venezolano(capital_calculado),
-        "Diferencia": diff_capital_display
-    })
-
-    # Crear DataFrame
-    df_comparacion = pd.DataFrame(comparacion_data)
-    columnas_mostrar = ['Cuenta', 'Fórmula', 'Día Anterior', 'Calculado', 'Reportado', 'Diferencia']
-    
-    # Aplicar estilos a la tabla
-    def colorear_filas(row):
-        diff_text = str(row['Diferencia'])
-        if diff_text != "-" and "✅" not in diff_text:
-            if "📈" in diff_text:
-                return ['background-color: #d4edda;'] * len(row)
-            elif "📉" in diff_text:
-                return ['background-color: #f8d7da;'] * len(row)
-        if row['Cuenta'] == 'Capital de Trabajo Neto':
-            if "📈" in diff_text:
-                return ['background-color: #0f3d2e; color: white; font-weight: bold;'] * len(row)
-            elif "📉" in diff_text:
-                return ['background-color: #3d1a1a; color: white; font-weight: bold;'] * len(row)
+    with tab_resumen:
+        # Mostrar información detallada del cálculo de Bancos
+        st.markdown("#### 📊 Detalle del cálculo de Bancos")
+        
+        col_b1, col_b2, col_b3, col_b4 = st.columns(4)
+        with col_b1:
+            st.metric("🏦 Saldo Inicial (estado de cuenta)", formato_venezolano(saldo_inicial_bancos))
+        with col_b2:
+            st.metric("📈 Ingresos (estado de cuenta)", formato_venezolano(total_ingresos))
+        with col_b3:
+            st.metric("📉 Egresos (estado de cuenta)", formato_venezolano(total_egresos_banco))
+        with col_b4:
+            st.metric("🏁 Bancos calculado", formato_venezolano(bancos_calculado))
+        
+        # Verificar contra el saldo final del estado de cuenta
+        st.markdown("#### ✅ Verificación con Estado de Cuenta")
+        
+        col_v1, col_v2, col_v3 = st.columns(3)
+        with col_v1:
+            st.metric("📋 Saldo Final (Estado de Cuenta)", formato_venezolano(saldo_final))
+        with col_v2:
+            st.metric("📊 Bancos Calculado", formato_venezolano(bancos_calculado))
+        with col_v3:
+            diferencia_bancos = bancos_calculado - saldo_final
+            if abs(diferencia_bancos) < 0.01:
+                st.metric("✅ Diferencia", "0,00", delta="✅ Coincide")
             else:
-                return ['background-color: #1a3a5c; color: white; font-weight: bold;'] * len(row)
-        return [''] * len(row)
-    
-    st.dataframe(
-        df_comparacion[columnas_mostrar].style.apply(colorear_filas, axis=1).hide(axis='index'),
-        use_container_width=True
-    )
-
-    # ============================================================
-    # 📦 TRAZABILIDAD DE INVENTARIO - PRODUCTO POR PRODUCTO (MEJORADO)
-    # ============================================================
-    st.markdown("### 📦 Trazabilidad de Inventario - Producto por Producto")
-    st.caption("Análisis detallado: Inventario Inicial - Ventas (Costo) = Inventario Esperado vs Inventario Reportado")
-    
-    # --- ANÁLISIS DE INVENTARIO (PRODUCTO POR PRODUCTO) ---
-    if 'df_inv_ant' in locals() and df_inv_ant is not None and 'df_inv_rep' in locals() and df_inv_rep is not None:
-        try:
-            # Cargar detalle de inventario anterior y actual
-            inv_prev = ProcesadorArchivos.cargar_detalle_inventario(df_inv_ant)
-            inv_curr = ProcesadorArchivos.cargar_detalle_inventario(df_inv_rep)
-            
-            if inv_prev is not None and inv_curr is not None:
-                # Cargar utilidades (costo de facturación) si está disponible
-                util_df = None
-                if 'df_costo' in locals() and df_costo is not None:
-                    util_df = ProcesadorArchivos.cargar_detalle_utilidad(df_costo)
-                
-                # Diccionarios para búsqueda rápida
-                inv_prev_dict = inv_prev.set_index('Producto').to_dict('index')
-                inv_curr_dict = inv_curr.set_index('Producto').to_dict('index')
-                util_dict = util_df.set_index('Cod_Producto').to_dict('index') if util_df is not None else {}
-                
-                # Obtener todos los productos
-                all_prods = set(inv_prev_dict.keys()).union(set(inv_curr_dict.keys()))
-                
-                # Listas para almacenar resultados
-                diferencias = []
-                total_inicial = 0
-                total_ventas = 0
-                total_esperado_valor = 0
-                total_reportado_valor = 0
-                
-                for p in all_prods:
-                    p_prev = inv_prev_dict.get(p, {'Cantidad': 0.0, 'Precio/Unidad': 0.0, 'Total(*)': 0.0, 'Descrip_Clean': 'N/A'})
-                    p_curr = inv_curr_dict.get(p, {'Cantidad': 0.0, 'Precio/Unidad': 0.0, 'Total(*)': 0.0, 'Descrip_Clean': 'N/A'})
-                    u_row = util_dict.get(p, {'Cantidad': 0.0, 'Costo_Total': 0.0, 'Producto_Original': 'N/A'})
-                    
-                    # Datos del inventario anterior
-                    qty_prev = p_prev['Cantidad']
-                    price_prev = p_prev['Precio/Unidad']
-                    val_prev = p_prev['Total(*)']
-                    desc = p_curr['Descrip_Clean'] if p_curr['Descrip_Clean'] != 'N/A' else (p_prev['Descrip_Clean'] if p_prev['Descrip_Clean'] != 'N/A' else u_row['Producto_Original'])
-                    
-                    # Datos del inventario actual
-                    qty_curr = p_curr['Cantidad']
-                    price_curr = p_curr['Precio/Unidad']
-                    val_curr = p_curr['Total(*)']
-                    
-                    # Datos de ventas
-                    qty_sold = u_row['Cantidad']
-                    cost_sold = u_row['Costo_Total']
-                    
-                    # Cálculos de trazabilidad
-                    expected_qty = qty_prev - qty_sold
-                    expected_val = val_prev - cost_sold
-                    qty_diff = qty_curr - expected_qty
-                    val_diff = val_curr - expected_val
-                    
-                    # Acumular totales
-                    total_inicial += val_prev
-                    total_ventas += cost_sold
-                    total_esperado_valor += expected_val
-                    total_reportado_valor += val_curr
-                    
-                    # Determinar el estado del producto
-                    estado = "✅ OK"
-                    if abs(qty_diff) > 0.01 and abs(val_diff) > 0.01:
-                        estado = "🔴 FALTANTE" if qty_diff < 0 else "🟢 SOBRANTE"
-                    elif abs(qty_diff) > 0.01:
-                        estado = "🟡 DIF. CANTIDAD"
-                    elif abs(val_diff) > 0.01:
-                        estado = "🟠 DIF. PRECIO"
-                    
-                    # Mostrar productos con diferencias o movimientos
-                    if abs(qty_sold) > 0.01 or abs(qty_diff) > 0.01 or abs(val_diff) > 0.01 or abs(price_curr - price_prev) > 0.01:
-                        efecto_precio = (price_curr - price_prev) * qty_curr if qty_curr > 0 else 0
-                        
-                        diferencias.append({
-                            'Código': p,
-                            'Descripción': desc[:40],
-                            'Estado': estado,
-                            'Q. Anterior': qty_prev,
-                            'Vendido': qty_sold,
-                            'Q. Esperada': expected_qty,
-                            'Q. Reportada': qty_curr,
-                            'Dif. Cantidad': qty_diff,
-                            'Precio Ant.': price_prev,
-                            'Precio Nuevo': price_curr,
-                            'Efecto Precio': efecto_precio,
-                            'Dif. Valor': val_diff
-                        })
-                
-                # ============================================================
-                # SECCIÓN 1: KPIS Y RESUMEN DE TOTALES (SIEMPRE VISIBLE)
-                # ============================================================
-                st.markdown("---")
-                st.markdown("#### 📊 Resumen de Totales de Inventario")
-                
-                col_kpi_inv1, col_kpi_inv2, col_kpi_inv3, col_kpi_inv4 = st.columns(4)
-                
-                with col_kpi_inv1:
-                    st.metric("📦 Inventario Inicial", formato_venezolano(total_inicial))
-                with col_kpi_inv2:
-                    st.metric("📊 Costo de Ventas", formato_venezolano(total_ventas))
-                with col_kpi_inv3:
-                    st.metric("📋 Inventario Esperado", formato_venezolano(total_esperado_valor))
-                with col_kpi_inv4:
-                    st.metric("📄 Inventario Reportado", formato_venezolano(total_reportado_valor))
-                
-                # Diferencia total destacada
-                diff_total_inv = total_reportado_valor - total_esperado_valor
-                if abs(diff_total_inv) < 0.01:
-                    st.success(f"✅ **Diferencia Total:** {formato_venezolano(diff_total_inv)} Bs. (¡Conciliación perfecta!)")
-                elif diff_total_inv > 0:
-                    st.warning(f"⚠️ **Sobrante de inventario:** {formato_venezolano(diff_total_inv)} Bs.")
-                else:
-                    st.error(f"❌ **Faltante de inventario:** {formato_venezolano(diff_total_inv)} Bs.")
-                
-                # ============================================================
-                # SECCIÓN 2: ESTADÍSTICAS RÁPIDAS (SIEMPRE VISIBLE)
-                # ============================================================
-                st.markdown("---")
-                st.markdown("#### 📈 Estadísticas de Productos")
-                
-                col_est1, col_est2, col_est3, col_est4 = st.columns(4)
-                
-                with col_est1:
-                    st.metric("📦 Total Productos", len(diferencias))
-                with col_est2:
-                    ok_count = len([d for d in diferencias if d['Estado'] == '✅ OK'])
-                    st.metric("✅ Productos OK", ok_count, delta=f"{ok_count}/{len(diferencias)}")
-                with col_est3:
-                    warning_count = len([d for d in diferencias if d['Estado'] != '✅ OK'])
-                    st.metric("⚠️ Con Diferencias", warning_count, delta=f"{warning_count}/{len(diferencias)}")
-                with col_est4:
-                    total_unidades = sum([d['Vendido'] for d in diferencias])
-                    st.metric("📊 Total Ventas (Unid.)", f"{total_unidades:,.0f}")
-                
-                # ============================================================
-                # SECCIÓN 3: BOTONES PARA EXPLORAR DETALLES
-                # ============================================================
-                st.markdown("---")
-                st.markdown("#### 🔍 Explorar Detalles de Inventario")
-                
-                col_btn1, col_btn2, col_btn3 = st.columns(3)
-                
-                with col_btn1:
-                    if st.button("📋 Ver Todos los Productos", width='stretch', key="btn_todos_productos"):
-                        st.session_state['mostrar_todos_productos'] = not st.session_state.get('mostrar_todos_productos', False)
-                
-                with col_btn2:
-                    if st.button("⚠️ Solo Productos con Diferencias", width='stretch', key="btn_productos_diff"):
-                        st.session_state['mostrar_solo_diff'] = not st.session_state.get('mostrar_solo_diff', False)
-                
-                with col_btn3:
-                    if st.button("💰 Productos con Cambio de Precio", width='stretch', key="btn_cambio_precio"):
-                        st.session_state['mostrar_cambio_precio'] = not st.session_state.get('mostrar_cambio_precio', False)
-                
-                # ============================================================
-                # SECCIÓN 4: TABLA DE PRODUCTOS (CON EXPANDER)
-                # ============================================================
-                st.markdown("---")
-                
-                # Determinar qué tabla mostrar según los botones
-                mostrar_todos = st.session_state.get('mostrar_todos_productos', False)
-                mostrar_solo_diff = st.session_state.get('mostrar_solo_diff', False)
-                mostrar_cambio_precio = st.session_state.get('mostrar_cambio_precio', False)
-                
-                if mostrar_todos or mostrar_solo_diff or mostrar_cambio_precio:
-                    df_display = pd.DataFrame(diferencias)
-                    
-                    if mostrar_solo_diff:
-                        df_display = df_display[df_display['Estado'] != '✅ OK']
-                        titulo_tabla = f"⚠️ Productos con Diferencias ({len(df_display)})"
-                    elif mostrar_cambio_precio:
-                        cambios_precio = [d for d in diferencias if abs(d['Efecto Precio']) > 0.01]
-                        df_display = pd.DataFrame(cambios_precio)
-                        titulo_tabla = f"💰 Productos con Cambio de Precio ({len(df_display)})"
-                    else:
-                        titulo_tabla = f"📋 Todos los Productos ({len(df_display)})"
-                    
-                    if not df_display.empty:
-                        with st.expander(f"📊 {titulo_tabla}", expanded=True):
-                            df_formatted = df_display.copy()
-                            for col in ['Precio Ant.', 'Precio Nuevo', 'Efecto Precio', 'Dif. Valor']:
-                                if col in df_formatted.columns:
-                                    df_formatted[col] = df_formatted[col].apply(formato_venezolano)
-                            
-                            df_formatted['Dif. Cantidad'] = df_formatted['Dif. Cantidad'].apply(lambda x: f"{x:.2f}")
-                            df_formatted['Q. Anterior'] = df_formatted['Q. Anterior'].apply(lambda x: f"{x:.2f}")
-                            df_formatted['Vendido'] = df_formatted['Vendido'].apply(lambda x: f"{x:.2f}")
-                            df_formatted['Q. Esperada'] = df_formatted['Q. Esperada'].apply(lambda x: f"{x:.2f}")
-                            df_formatted['Q. Reportada'] = df_formatted['Q. Reportada'].apply(lambda x: f"{x:.2f}")
-                            
-                            columnas_mostrar = ['Código', 'Descripción', 'Estado', 'Q. Anterior', 'Vendido', 'Q. Esperada', 'Q. Reportada', 'Dif. Cantidad', 'Precio Ant.', 'Precio Nuevo', 'Efecto Precio', 'Dif. Valor']
-                            columnas_existentes = [c for c in columnas_mostrar if c in df_formatted.columns]
-                            
-                            def colorear_estado(row):
-                                estado = row['Estado']
-                                if estado == '🔴 FALTANTE':
-                                    return ['background-color: #ffcccc;'] * len(row)
-                                elif estado == '🟢 SOBRANTE':
-                                    return ['background-color: #ccffcc;'] * len(row)
-                                elif estado == '🟠 DIF. PRECIO':
-                                    return ['background-color: #fff3cd;'] * len(row)
-                                elif estado == '🟡 DIF. CANTIDAD':
-                                    return ['background-color: #fff3cd;'] * len(row)
-                                return [''] * len(row)
-                            
-                            st.dataframe(
-                                df_formatted[columnas_existentes].style.apply(colorear_estado, axis=1).hide(axis='index'),
-                                width='stretch',
-                                height=400
-                            )
-                            
-                            if mostrar_solo_diff or mostrar_todos:
-                                col_res1, col_res2, col_res3 = st.columns(3)
-                                with col_res1:
-                                    faltantes = len(df_display[df_display['Estado'] == '🔴 FALTANTE'])
-                                    st.metric("🔴 Faltantes", faltantes)
-                                with col_res2:
-                                    sobrantes = len(df_display[df_display['Estado'] == '🟢 SOBRANTE'])
-                                    st.metric("🟢 Sobrantes", sobrantes)
-                                with col_res3:
-                                    otras = len(df_display[~df_display['Estado'].isin(['🔴 FALTANTE', '🟢 SOBRANTE', '✅ OK'])])
-                                    st.metric("🟡 Otras Diferencias", otras)
-                    else:
-                        st.info("ℹ️ No hay productos que coincidan con el filtro seleccionado.")
-                    
-                    if st.button("🔒 Cerrar todas las vistas", width='stretch'):
-                        st.session_state['mostrar_todos_productos'] = False
-                        st.session_state['mostrar_solo_diff'] = False
-                        st.session_state['mostrar_cambio_precio'] = False
-                        st.rerun()
-                
-                else:
-                    st.info("👆 **Haz clic en uno de los botones arriba** para explorar el detalle de productos.")
-                
-                # ============================================================
-                # SECCIÓN 5: RESUMEN DE DIFERENCIAS (SIEMPRE VISIBLE)
-                # ============================================================
-                if diferencias:
-                    st.markdown("---")
-                    st.markdown("#### 📊 Resumen de Diferencias de Inventario")
-                    
-                    total_faltante = sum([d['Dif. Cantidad'] for d in diferencias if d['Estado'] == '🔴 FALTANTE'])
-                    total_sobrante = sum([d['Dif. Cantidad'] for d in diferencias if d['Estado'] == '🟢 SOBRANTE'])
-                    total_efecto_precio = sum([d['Efecto Precio'] for d in diferencias if abs(d['Efecto Precio']) > 0.01])
-                    
-                    col_res1, col_res2, col_res3 = st.columns(3)
-                    
-                    with col_res1:
-                        if total_faltante < 0:
-                            st.error(f"🔴 **Faltante:** {abs(total_faltante):.2f} unidades")
-                        else:
-                            st.success(f"✅ **Faltante:** 0 unidades")
-                    
-                    with col_res2:
-                        if total_sobrante > 0:
-                            st.success(f"🟢 **Sobrante:** {total_sobrante:.2f} unidades")
-                        else:
-                            st.info("ℹ️ **Sobrante:** 0 unidades")
-                    
-                    with col_res3:
-                        if abs(total_efecto_precio) > 0.01:
-                            if total_efecto_precio > 0:
-                                st.warning(f"📈 **Efecto Precio:** +{formato_venezolano(total_efecto_precio)} Bs.")
-                            else:
-                                st.warning(f"📉 **Efecto Precio:** {formato_venezolano(total_efecto_precio)} Bs.")
-                        else:
-                            st.success("✅ **Efecto Precio:** 0 Bs.")
-            else:
-                st.warning("⚠️ No se pudieron cargar los detalles de inventario. Verifica el formato de los archivos.")
-        except Exception as e:
-            st.error(f"❌ Error en el análisis de trazabilidad de inventario: {str(e)}")
-            import traceback
-            st.code(traceback.format_exc())
-    else:
-        st.info("📄 **Carga los archivos de Inventario (día anterior y actual) y Costo de Facturación para ver el análisis detallado de inventario.**")
-    
-    st.markdown("---")
-    
-    # ============================================================
-    # 🔍 ANÁLISIS DE OTRAS CUENTAS (CxC, CxP, TRANSITO) - CORREGIDO
-    # ============================================================
-    st.markdown("### 🔍 Análisis de Diferencias en Otras Cuentas")
-    
-    # --- CUENTAS POR COBRAR ---
-    if abs(diff_cxc) > 0.01:
-        with st.expander(f"👤 Cuentas por Cobrar (Diferencia: {formatear_diferencia(cx_c_calculado, cx_c_reportado)})", expanded=True):
-            st.markdown(f"**Fórmula**: `CxC Calculado ({formato_venezolano(cx_c_calculado)})` vs `CxC Reportado ({formato_venezolano(cx_c_reportado)})`")
-            st.markdown(f"La diferencia de **{formato_venezolano(diff_cxc)} Bs/USD** en Cuentas por Cobrar puede explicarse por:")
-            
-            # Buscar transacciones coincidentes en los archivos
-            cands_cxc = []
-            if 'df_facturacion' in locals() and df_facturacion is not None:
-                cands_cxc.extend(buscar_candidatos_por_monto(df_facturacion, diff_cxc, "Facturación Semanal"))
-            if 'df_cobranzas' in locals() and df_cobranzas is not None:
-                cands_cxc.extend(buscar_candidatos_por_monto(df_cobranzas, diff_cxc, "Cobranzas Diarias"))
-            if 'df_notas_cliente' in locals() and df_notas_cliente is not None:
-                cands_cxc.extend(buscar_candidatos_por_monto(df_notas_cliente, diff_cxc, "Notas de Crédito Clientes"))
-            if 'df_cxc_rep' in locals() and df_cxc_rep is not None:
-                cands_cxc.extend(buscar_candidatos_por_monto(df_cxc_rep, diff_cxc, "Reporte CxC"))
-                
-            if cands_cxc:
-                st.info("🔍 **Transacciones con importe coincidente encontradas en los archivos:**")
-                for c in cands_cxc[:5]:
-                    st.markdown(f"- {c}")
-            else:
-                st.write("No se encontraron transacciones individuales con este importe exacto.")
-                
-            st.markdown("""
-            **💡 Puntos clave a revisar:**
-            - **Facturación vs Notas de Crédito**: Valide si hay facturas de crédito anuladas en el sistema mediante notas de crédito que no se hayan descontado correctamente en la sumatoria del día.
-            - **Cobranzas Cruzadas**: Revise si se reportaron cobros que no corresponden a facturas de este cliente, afectando el saldo de Cuentas por Cobrar reportado.
-            """)
-    
-    # --- CUENTAS POR PAGAR ---
-    if abs(diff_cxp) > 0.01:
-        with st.expander(f"🤝 Cuentas por Pagar (Diferencia: {formatear_diferencia(cx_p_calculado, cx_p_reportado)})", expanded=True):
-            st.markdown(f"**Fórmula**: `CxP Calculado ({formato_venezolano(cx_p_calculado)})` vs `CxP Reportado ({formato_venezolano(cx_p_reportado)})`")
-            st.markdown(f"La diferencia de **{formato_venezolano(diff_cxp)} Bs/USD** en Cuentas por Pagar puede explicarse por:")
-            
-            # Buscar transacciones coincidentes
-            cands_cxp = []
-            if 'df_recepciones' in locals() and df_recepciones is not None:
-                cands_cxp.extend(buscar_candidatos_por_monto(df_recepciones, diff_cxp, "Recepciones de Mercancía"))
-            if 'df_proveedores' in locals() and df_proveedores is not None:
-                cands_cxp.extend(buscar_candidatos_por_monto(df_proveedores, diff_cxp, "Proveedores de Mercancía"))
-            if 'df_notas_proveedor' in locals() and df_notas_proveedor is not None:
-                cands_cxp.extend(buscar_candidatos_por_monto(df_notas_proveedor, diff_cxp, "Notas de Crédito Proveedores"))
-            if 'df_cxp_rep' in locals() and df_cxp_rep is not None:
-                cands_cxp.extend(buscar_candidatos_por_monto(df_cxp_rep, diff_cxp, "Reporte CxP"))
-                
-            if cands_cxp:
-                st.info("🔍 **Transacciones con importe coincidente encontradas en los archivos:**")
-                for c in cands_cxp[:5]:
-                    st.markdown(f"- {c}")
-            else:
-                st.write("No se encontraron transacciones individuales con este importe exacto.")
-                    
-            # Mostrar cotejo automático de recepciones contra CxP
-            df_recepciones_ok = 'df_recepciones' in locals() and df_recepciones is not None
-            df_cxp_rep_ok = 'df_cxp_rep' in locals() and df_cxp_rep is not None
-            
-            if df_recepciones_ok and df_cxp_rep_ok:
-                mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_procesar, st.session_state.empresa_activa, diff_cxp)
-            else:
-                st.info("ℹ️ *Sube el archivo de **Recepciones** para ver el cotejo automático de documentos (NE / OT) contra Cuentas por Pagar.*")
-                
-            st.markdown("""
-            **💡 Puntos clave a revisar:**
-            - **Pagos a Proveedores**: Valide si hay egresos ejecutados en iPago que no correspondan a facturas de proveedores de mercancía (p.ej., gastos de administración o servicios) que se clasificaron erróneamente.
-            - **Notas de Crédito Recibidas**: Confirme si hay descuentos otorgados por proveedores que no se reflejaron en el balance de compras.
-            """)
-    
-    # --- TRANSFERENCIAS EN TRÁNSITO ---
-    if abs(diff_transito) > 0.01:
-        with st.expander(f"✈️ Transferencias en Tránsito (Diferencia: {formatear_diferencia(transito_calculado, transito_reportado)})", expanded=True):
-            st.markdown(f"**Fórmula**: `Tránsito Calculado ({formato_venezolano(transito_calculado)})` vs `Tránsito Reportado ({formato_venezolano(transito_reportado)})`")
-            st.markdown(f"La diferencia de **{formato_venezolano(diff_transito)} Bs/USD** en Transferencias en Tránsito puede explicarse por:")
-            
-            # Buscar transacciones coincidentes
-            cands_transito = []
-            if 'df_cobranzas' in locals() and df_cobranzas is not None:
-                cands_transito.extend(buscar_candidatos_por_monto(df_cobranzas, diff_transito, "Cobranzas Diarias"))
-            if 'df_estado_cuenta' in locals() and df_estado_cuenta is not None:
-                cands_transito.extend(buscar_candidatos_por_monto(df_estado_cuenta, diff_transito, "Estado de Cuenta Bancario"))
-            if 'df_tb' in locals() and df_tb is not None:
-                cands_transito.extend(buscar_candidatos_por_monto(df_tb, diff_transito, "Balanza / Tránsito"))
-                
-            if cands_transito:
-                st.info("🔍 **Transacciones con importe coincidente encontradas en los archivos:**")
-                for c in cands_transito[:5]:
-                    st.markdown(f"- {c}")
-            else:
-                st.write("No se encontraron transacciones individuales con este importe exacto.")
-                
-            st.markdown("""
-            **💡 Puntos clave a revisar:**
-            - **Depósitos en Tránsito**: Cobranzas que fueron registradas en el sistema administrativo del día pero que ingresaron efectivamente al banco al día siguiente hábil.
-            - **Egresos no debitados**: Pagos emitidos a proveedores mediante transferencia que aún no han sido cobrados o debitados por la entidad bancaria.
-            """)
-    
-    # --- BANCOS ---
-    if abs(diferencia_bancos) > 0.01:
-        with st.expander(f"🏦 Bancos (Diferencia: {formatear_diferencia(bancos_calculado, saldo_final)})", expanded=True):
-            st.markdown(f"**Fórmula**: `Bancos Calculado ({formato_venezolano(bancos_calculado)})` vs `Saldo Final Estado de Cuenta ({formato_venezolano(saldo_final)})`")
-            st.markdown(f"La diferencia de **{formato_venezolano(diferencia_bancos)} Bs/USD** en Bancos puede explicarse por:")
-            
-            # Buscar transacciones coincidentes
-            cands_bancos = []
-            if 'df_estado_cuenta' in locals() and df_estado_cuenta is not None:
-                cands_bancos.extend(buscar_candidatos_por_monto(df_estado_cuenta, diferencia_bancos, "Estado de Cuenta"))
-            if 'df_cobranzas' in locals() and df_cobranzas is not None:
-                cands_bancos.extend(buscar_candidatos_por_monto(df_cobranzas, diferencia_bancos, "Cobranzas Diarias"))
-            if 'df_egresos' in locals() and df_egresos is not None:
-                cands_bancos.extend(buscar_candidatos_por_monto(df_egresos, diferencia_bancos, "Egresos iPago"))
-                
-            if cands_bancos:
-                st.info("🔍 **Transacciones con importe coincidente encontradas en los archivos:**")
-                for c in cands_bancos[:5]:
-                    st.markdown(f"- {c}")
-            else:
-                st.write("No se encontraron transacciones individuales con este importe exacto.")
-                
-            st.markdown("""
-            **💡 Puntos clave a revisar:**
-            - **Comisiones o Impuestos Bancarios (IGTF/IDB)**: Verifique si existen cobros de comisiones o impuestos en el estado de cuenta que no estén registrados en el sistema administrativo.
-            - **Depósitos o Transferencias no identificados**: Revise si hay ingresos en el banco que no tengan soporte o no hayan sido notificados por ventas/cobranzas.
-            - **Cheques o transferencias emitidas no cobradas**: Confirme si hay egresos del sistema que aún no han sido debitados por el banco.
-            """)
-            
-    st.markdown("---")
-    
-    # ============================================================
-    # 🔥 TRAZABILIDAD DE CUENTAS POR PAGAR (MEJORADO)
-    # ============================================================
-    st.markdown("### 🔍 Trazabilidad de Cuentas por Pagar")
-    st.caption("Análisis detallado: CxP Anterior + Recepciones - Pagos Proveedores = CxP Calculado vs CxP Reportado")
-    
-    # Mostrar el cálculo paso a paso
-    st.markdown("#### 📊 Paso a paso del cálculo")
-    
-    col_p1, col_p2, col_p3, col_p4, col_p5 = st.columns(5)
-    
-    with col_p1:
-        st.metric("📋 CxP Anterior", formato_venezolano(cx_p_anterior))
-    with col_p2:
-        st.metric("📦 Recepciones", formato_venezolano(recepcion_total))
-    with col_p3:
-        st.metric("💰 Pagos Proveedores", formato_venezolano(pagos_proveedores))
-    with col_p4:
-        st.metric("📊 CxP Calculado", formato_venezolano(cx_p_calculado))
-    with col_p5:
-        st.metric("📄 CxP Reportado", formato_venezolano(cx_p_reportado) if cx_p_reportado is not None else "N/A")
-    
-    # Verificar si hay diferencia
-    diff_cxp_calc = safe_number(cx_p_calculado) - safe_number(cx_p_reportado) if cx_p_reportado is not None else 0
-    
-    if abs(diff_cxp_calc) < 0.01:
-        st.success("✅ **¡CONCILIACIÓN PERFECTA!** El CxP Calculado coincide con el CxP Reportado.")
-    else:
-        st.error(f"⚠️ **DIFERENCIA DETECTADA:** {formato_venezolano(abs(diff_cxp_calc))} Bs. de diferencia entre Calculado y Reportado")
+                st.metric("⚠️ Diferencia", formato_venezolano(diferencia_bancos), delta=f"{'📈' if diferencia_bancos > 0 else '📉'} {formato_venezolano(abs(diferencia_bancos))}")
+                st.warning(f"⚠️ Hay una diferencia de {formato_venezolano(diferencia_bancos)} entre el Bancos calculado y el saldo final del estado de cuenta.")
+        
+        st.info(f"ℹ️ **Saldo Inicial Bancario (desde estado de cuenta):** {formato_venezolano(saldo_inicial_bancos)} Bs.")
+        
+        st.markdown("---")
         
         # ============================================================
-        # ANÁLISIS PROFUNDO DE DOCUMENTOS (NE / OT / FA) CON BOTONES
+        # ACTIVOS vs PASIVOS
+        # ============================================================
+        st.markdown("#### 📊 Estructura del Capital de Trabajo")
+        html_table = mostrar_tabla_activos_pasivos(
+            inventario_calculado, cx_c_calculado, bancos_calculado, 
+            cx_p_calculado, transito_calculado, capital_calculado
+        )
+        st.markdown(html_table, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # ============================================================
+        # 🔥 COMPARACIÓN VS VALORES REPORTADOS - VERSIÓN FINAL CORREGIDA
+        # ============================================================
+        st.markdown("#### 📋 Comparación vs Valores Reportados")
+
+        # Obtener valores reportados
+        inventario_reportado = saldos_reportados.get('Inventario')
+        cx_c_reportado = saldos_reportados.get('Cuentas por cobrar')
+        cx_p_reportado = saldos_reportados.get('Cuentas por pagar')
+        transito_reportado = saldos_reportados.get('Transferencias en tránsito')
+
+        # Obtener valores del día anterior desde la sesión
+        inventario_anterior = safe_number(st.session_state.saldos.get('inventario', 0))
+        cx_c_anterior = safe_number(st.session_state.saldos.get('cx_c', 0))
+        bancos_anterior = safe_number(st.session_state.saldos.get('bancos', 0))
+        cx_p_anterior = safe_number(st.session_state.saldos.get('cx_p', 0))
+        transito_anterior = safe_number(st.session_state.saldos.get('transito', 0))
+        
+        # 💡 CORRECCIÓN: Calcular el capital anterior directo de los saldos base existentes
+        capital_anterior = (inventario_anterior + cx_c_anterior + bancos_anterior) - (cx_p_anterior + transito_anterior)
+
+        # Calcular diferencias
+        diff_inv_real = safe_number(inventario_calculado) - safe_number(inventario_reportado) if inventario_reportado is not None else 0
+        diff_cxc_real = safe_number(cx_c_calculado) - safe_number(cx_c_reportado) if cx_c_reportado is not None else 0
+        diff_cxp_real = safe_number(cx_p_calculado) - safe_number(cx_p_reportado) if cx_p_reportado is not None else 0
+        diff_transito_real = safe_number(transito_calculado) - safe_number(transito_reportado) if transito_reportado is not None else 0
+        diff_capital = capital_calculado - capital_anterior
+
+        # Función para formatear diferencia
+        def formatear_diff(valor_calculado, valor_reportado):
+            if valor_reportado is None or valor_reportado == 0:
+                return "-"
+            diff = safe_number(valor_calculado) - safe_number(valor_reportado)
+            if abs(diff) < 0.01:
+                return "✅ 0,00"
+            elif diff > 0:
+                return f"📈 +{formato_venezolano(diff)}"
+            else:
+                return f"📉 {formato_venezolano(diff)}"
+
+        # Crear lista para la tabla
+        comparacion_data = []
+
+        # 1. INVENTARIO
+        diff_inv_display = formatear_diff(inventario_calculado, inventario_reportado)
+        comparacion_data.append({
+            "Cuenta": "Inventario",
+            "Fórmula": "Inv. inicial + Recepción - Costo facturación",
+            "Día Anterior": formato_venezolano(inventario_anterior),
+            "Calculado": formato_venezolano(inventario_calculado),
+            "Reportado": formato_venezolano(inventario_reportado) if inventario_reportado is not None and inventario_reportado > 0 else "0,00",
+            "Diferencia": diff_inv_display
+        })
+
+        # 2. CUENTAS POR COBRAR
+        diff_cxc_display = formatear_diff(cx_c_calculado, cx_c_reportado)
+        comparacion_data.append({
+            "Cuenta": "Cuentas por cobrar",
+            "Fórmula": "CxC inicial + Facturación - Cobranzas - NC Clientes",
+            "Día Anterior": formato_venezolano(cx_c_anterior),
+            "Calculado": formato_venezolano(cx_c_calculado),
+            "Reportado": formato_venezolano(cx_c_reportado) if cx_c_reportado is not None and cx_c_reportado > 0 else "0,00",
+            "Diferencia": diff_cxc_display
+        })
+
+        # 3. BANCOS
+        diff_bancos_display = formatear_diff(bancos_calculado, bancos_anterior) if bancos_anterior != 0 else "-"
+        comparacion_data.append({
+            "Cuenta": "Bancos",
+            "Fórmula": "Saldo Inicial (E/C) + Ingresos - Egresos",
+            "Día Anterior": formato_venezolano(bancos_anterior),
+            "Calculado": formato_venezolano(bancos_calculado),
+            "Reportado": formato_venezolano(saldo_final) if saldo_final > 0 else "0,00",
+            "Diferencia": diff_bancos_display
+        })
+
+        # 4. CUENTAS POR PAGAR
+        diff_cxp_display = formatear_diff(cx_p_calculado, cx_p_reportado)
+        comparacion_data.append({
+            "Cuenta": "Cuentas por pagar",
+            "Fórmula": "CxP inicial + Recepciones - Pagos proveedores",
+            "Día Anterior": formato_venezolano(cx_p_anterior),
+            "Calculado": formato_venezolano(cx_p_calculado),
+            "Reportado": formato_venezolano(cx_p_reportado) if cx_p_reportado is not None and cx_p_reportado > 0 else "0,00",
+            "Diferencia": diff_cxp_display
+        })
+
+        # 5. TRANSFERENCIAS EN TRÁNSITO
+        diff_transito_display = formatear_diff(transito_calculado, transito_reportado)
+        comparacion_data.append({
+            "Cuenta": "Transferencias en tránsito",
+            "Fórmula": "Tránsito inicial + Ingresos del día - Cobranzas",
+            "Día Anterior": formato_venezolano(transito_anterior),
+            "Calculado": formato_venezolano(transito_calculado),
+            "Reportado": formato_venezolano(transito_reportado) if transito_reportado is not None and transito_reportado > 0 else "0,00",
+            "Diferencia": diff_transito_display
+        })
+
+        # 6. CAPITAL DE TRABAJO NETO
+        if abs(diff_capital) < 0.01:
+            diff_capital_display = "✅ 0,00"
+        elif diff_capital > 0:
+            diff_capital_display = f"📈 +{formato_venezolano(diff_capital)}"
+        else:
+            diff_capital_display = f"📉 {formato_venezolano(diff_capital)}"
+        
+        comparacion_data.append({
+            "Cuenta": "Capital de Trabajo Neto",
+            "Fórmula": "(Inv + CxC + Bancos) - (CxP + Tránsito)",
+            "Día Anterior": formato_venezolano(capital_anterior),
+            "Calculado": formato_venezolano(capital_calculado),
+            "Reportado": formato_venezolano(capital_calculado),
+            "Diferencia": diff_capital_display
+        })
+
+        # Crear DataFrame
+        df_comparacion = pd.DataFrame(comparacion_data)
+        columnas_mostrar = ['Cuenta', 'Fórmula', 'Día Anterior', 'Calculado', 'Reportado', 'Diferencia']
+        
+        # Aplicar estilos a la tabla
+        def colorear_filas(row):
+            diff_text = str(row['Diferencia'])
+            if diff_text != "-" and "✅" not in diff_text:
+                if "📈" in diff_text:
+                    return ['background-color: #d4edda;'] * len(row)
+                elif "📉" in diff_text:
+                    return ['background-color: #f8d7da;'] * len(row)
+            if row['Cuenta'] == 'Capital de Trabajo Neto':
+                if "📈" in diff_text:
+                    return ['background-color: #0f3d2e; color: white; font-weight: bold;'] * len(row)
+                elif "📉" in diff_text:
+                    return ['background-color: #3d1a1a; color: white; font-weight: bold;'] * len(row)
+                else:
+                    return ['background-color: #1a3a5c; color: white; font-weight: bold;'] * len(row)
+            return [''] * len(row)
+        
+        st.dataframe(
+            df_comparacion[columnas_mostrar].style.apply(colorear_filas, axis=1).hide(axis='index'),
+            use_container_width=True
+        )
+        
+        st.markdown("---")
+        
+        # ============================================================
+        # VALIDACIONES CRUZADAS
+        # ============================================================
+        st.markdown("#### ✅ Validaciones Cruzadas")
+        
+        diff_bancos = safe_number(bancos_calculado) - safe_number(saldo_final)
+        if abs(diff_bancos) > 0.01:
+            st.error(f"❌ **Bancos**: Diferencia de {formato_venezolano(abs(diff_bancos))} Bs. con el saldo final del estado de cuenta")
+        else:
+            st.success(f"✅ **Bancos**: Coincide con el saldo final del estado de cuenta")
+        
+        if cobranzas > safe_number(st.session_state.saldos['cx_c']) + facturacion:
+            st.warning(f"⚠️ **CxC**: Cobranzas ({formato_venezolano(cobranzas)}) superan saldo disponible")
+        
+        if pagos_proveedores > safe_number(st.session_state.saldos['cx_p']) + recepcion_total:
+            st.warning(f"⚠️ **CxP**: Pagos a proveedores ({formato_venezolano(pagos_proveedores)}) superan saldo disponible")
+        
+        if transito_calculado >= 0:
+            st.success(f"✅ **Transferencias**: Saldo positivo ({formato_venezolano(transito_calculado)})")
+        else:
+            st.error(f"❌ **Transferencias**: Saldo negativo ({formato_venezolano(transito_calculado)})")
+        
+        st.info(f"ℹ️ **Saldo Final Bancario Reportado**: {formato_venezolano(saldo_final)} Bs.")
+        
+        st.markdown("---")
+        
+        # ============================================================
+        # KPI - RESUMEN DEL DÍA
+        # ============================================================
+        st.markdown("#### 📊 Resumen del Día")
+        
+        capital_anterior = safe_number(st.session_state.saldos.get('capital_anterior', capital_calculado))
+        var_capital = capital_calculado - capital_anterior
+        
+        col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
+        
+        with col_kpi1:
+            st.markdown(f"""
+            <div class="kpi-card kpi-capital">
+                <div class="icon-bg">🏁</div>
+                <div class="label">🏁 CAPITAL DE TRABAJO NETO</div>
+                <div class="value">{formato_venezolano(capital_calculado)}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col_kpi2:
+            arrow = "📉" if var_capital < 0 else "📈"
+            if var_capital >= 0:
+                color_class = "kpi-capital-positivo"
+            else:
+                color_class = "kpi-capital-negativo"
+            st.markdown(f"""
+            <div class="kpi-card {color_class}">
+                <div class="icon-bg">{arrow}</div>
+                <div class="label">{arrow} VARIACIÓN DEL CAPITAL</div>
+                <div class="value">{formato_venezolano(var_capital)}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col_kpi3:
+            st.markdown(f"""
+            <div class="kpi-card kpi-capital">
+                <div class="icon-bg">🔄</div>
+                <div class="label">🔄 TRANSFERENCIAS EN TRÁNSITO</div>
+                <div class="value">{formato_venezolano(transito_calculado)}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # ============================================================
+        # BOTONES DE ACCIÓN
+        # ============================================================
+        
+        inventario_final = saldos_reportados.get('Inventario', inventario_calculado)
+        cx_c_final = saldos_reportados.get('Cuentas por cobrar', cx_c_calculado)
+        cx_p_final = saldos_reportados.get('Cuentas por pagar', cx_p_calculado)
+        transito_final = saldos_reportados.get('Transferencias en tránsito', transito_calculado)
+        bancos_final = bancos_calculado
+        
+        col_btn1, col_btn2 = st.columns(2)
+        
+        with col_btn1:
+            if st.button("💾 Guardar saldos calculados", width='stretch'):
+                saldos_guardar = {
+                    'inventario': inventario_final,
+                    'cx_c': cx_c_final,
+                    'bancos': bancos_final,
+                    'cx_p': cx_p_final,
+                    'transito': transito_final,
+                    'capital': capital_calculado
+                }
+                
+                # 1. Guardar saldos diarios
+                db.guardar_saldos(
+                    fecha_procesar.strftime('%Y-%m-%d'),
+                    saldos_guardar,
+                    empresa=st.session_state.empresa_activa
+                )
+                
+                # 2. Guardar inconsistencias detectadas históricamente
+                fecha_str = fecha_procesar.strftime('%Y-%m-%d')
+                empresa_activa = st.session_state.empresa_activa
+                
+                try:
+                    conn = sqlite3.connect(db.db_path)
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM inconsistencias WHERE fecha = ? AND empresa = ?", (fecha_str, empresa_activa))
+                    conn.commit()
+                    conn.close()
+                except Exception as e:
+                    print(f"Error al borrar inconsistencias previas: {e}")
+
+                if abs(diff_inv) > 0.01:
+                    db.guardar_inconsistencia(
+                        fecha_str, "Inventario", inventario_calculado, 
+                        inventario_reportado if inventario_reportado is not None else 0.0, 
+                        diff_inv, f"Diferencia de inventario en el cierre: {diff_inv:.2f}",
+                        empresa=empresa_activa
+                    )
+                if abs(diff_cxc) > 0.01:
+                    db.guardar_inconsistencia(
+                        fecha_str, "Cuentas por cobrar", cx_c_calculado, 
+                        cx_c_reportado if cx_c_reportado is not None else 0.0, 
+                        diff_cxc, f"Diferencia de CxC en el cierre: {diff_cxc:.2f}",
+                        empresa=empresa_activa
+                    )
+                if abs(diff_cxp) > 0.01:
+                    db.guardar_inconsistencia(
+                        fecha_str, "Cuentas por pagar", cx_p_calculado, 
+                        cx_p_reportado if cx_p_reportado is not None else 0.0, 
+                        diff_cxp, f"Diferencia de CxP en el cierre: {diff_cxp:.2f}",
+                        empresa=empresa_activa
+                    )
+                if abs(diff_transito) > 0.01:
+                    db.guardar_inconsistencia(
+                        fecha_str, "Transferencias en tránsito", transito_calculado, 
+                        transito_reportado if transito_reportado is not None else 0.0, 
+                        diff_transito, f"Diferencia de Tránsito en el cierre: {diff_transito:.2f}",
+                        empresa=empresa_activa
+                    )
+                if abs(diferencia_bancos) > 0.01:
+                    db.guardar_inconsistencia(
+                        fecha_str, "Bancos", bancos_calculado, saldo_final, 
+                        diferencia_bancos, f"Diferencia de Bancos en el cierre vs Estado de Cuenta: {diferencia_bancos:.2f}",
+                        empresa=empresa_activa
+                    )
+
+                # 3. Guardar resultado de auditoría en auditoria_memoria.db
+                from motor_auditoria import guardar_resultado_cierre, calcular_kpis
+                fallas = st.session_state.get('fallas_detectadas')
+                df_c = st.session_state.get('df_consolidado')
+                hay_err = st.session_state.get('hay_errores')
+                
+                if fallas is None or df_c is None:
+                    from motor_auditoria import ejecutar_auditoria_inteligente
+                    hay_err, fallas, df_c = ejecutar_auditoria_inteligente(
+                        archivo_facturacion, archivo_cobranzas, archivo_egresos, archivo_estado_cuenta
+                    )
+                
+                kpis = calcular_kpis(df_c)
+                guardar_resultado_cierre(
+                    hay_err, fallas, df_c, kpis, 
+                    fecha=fecha_str, 
+                    empresa=empresa_activa
+                )
+                
+                st.session_state.saldos['inventario'] = inventario_final
+                st.session_state.saldos['cx_c'] = cx_c_final
+                st.session_state.saldos['bancos'] = bancos_final
+                st.session_state.saldos['cx_p'] = cx_p_final
+                st.session_state.saldos['transito'] = transito_final
+                st.session_state.saldos['capital_anterior'] = capital_calculado
+                
+                st.success("✅ Saldos, inconsistencias y reporte de auditoría guardados correctamente")
+                st.rerun()
+        
+        with col_btn2:
+            if st.button("📊 Ver gráfico evolución", width='stretch'):
+                historial = db.obtener_historial_saldos_completo(30, empresa=st.session_state.empresa_activa)
+                if not historial.empty and len(historial) > 1:
+                    try:
+                        historial_ordenado = historial.sort_values('fecha')
+                        
+                        fig, axes = plt.subplots(2, 1, figsize=(12, 8))
+                        
+                        axes[0].plot(historial_ordenado['fecha'], historial_ordenado['capital'], 
+                                    marker='o', linewidth=2, color='#c9a84c')
+                        axes[0].set_title('Evolución del Capital de Trabajo Neto', fontsize=14, fontweight='bold', color='#0a1628')
+                        axes[0].set_xlabel('Fecha', color='#6a8aac')
+                        axes[0].set_ylabel('Capital (Bs.)', color='#6a8aac')
+                        axes[0].grid(True, alpha=0.3)
+                        axes[0].set_facecolor('#f8fafc')
+                        axes[0].tick_params(axis='x', rotation=45, colors='#6a8aac')
+                        
+                        axes[1].plot(historial_ordenado['fecha'], historial_ordenado['inventario'], 
+                                    marker='s', linewidth=2, label='Inventario', color='#2ecc71')
+                        axes[1].plot(historial_ordenado['fecha'], historial_ordenado['cx_c'], 
+                                    marker='^', linewidth=2, label='CxC', color='#3498db')
+                        axes[1].plot(historial_ordenado['fecha'], historial_ordenado['bancos'], 
+                                    marker='d', linewidth=2, label='Bancos', color='#f39c12')
+                        axes[1].set_title('Evolución de Componentes del Capital', fontsize=14, fontweight='bold', color='#0a1628')
+                        axes[1].set_xlabel('Fecha', color='#6a8aac')
+                        axes[1].set_ylabel('Monto (Bs.)', color='#6a8aac')
+                        axes[1].legend(loc='upper left')
+                        axes[1].grid(True, alpha=0.3)
+                        axes[1].set_facecolor('#f8fafc')
+                        axes[1].tick_params(axis='x', rotation=45, colors='#6a8aac')
+                        
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                    except Exception as e:
+                        st.warning(f"No se pudo generar el gráfico: {str(e)}")
+                else:
+                    st.info("No hay suficientes datos históricos para generar gráficos (mínimo 2 días)")
+        
+        # ============================================================
+        # AJUSTES MANUALES - ENVOLVER EN EXPANDER
+        # ============================================================
+        with st.expander("✏️ Registrar Ajustes de Diferencias Técnicas", expanded=False):
+            col_ajuste1, col_ajuste2, col_ajuste3, col_ajuste4 = st.columns(4)
+
+            with col_ajuste1:
+                ajuste_inv = st.number_input(
+                    "Ajuste Inventario",
+                    value=float(st.session_state.ajustes['inventario']['monto']),
+                    step=1.0,
+                    format="%.2f",
+                    key="ajuste_inv"
+                )
+                just_inv = st.text_input(
+                    "Justificación",
+                    value=st.session_state.ajustes['inventario']['justificacion'],
+                    placeholder="Ej: Ajuste por merma",
+                    key="just_inv"
+                )
+
+            with col_ajuste2:
+                ajuste_cxc = st.number_input(
+                    "Ajuste CxC",
+                    value=float(st.session_state.ajustes['cx_c']['monto']),
+                    step=1.0,
+                    format="%.2f",
+                    key="ajuste_cxc"
+                )
+                just_cxc = st.text_input(
+                    "Justificación",
+                    value=st.session_state.ajustes['cx_c']['justificacion'],
+                    placeholder="Ej: Ajuste por cobranza no registrada",
+                    key="just_cxc"
+                )
+
+            with col_ajuste3:
+                ajuste_cxp = st.number_input(
+                    "Ajuste CxP",
+                    value=float(st.session_state.ajustes['cx_p']['monto']),
+                    step=1.0,
+                    format="%.2f",
+                    key="ajuste_cxp"
+                )
+                just_cxp = st.text_input(
+                    "Justificación",
+                    value=st.session_state.ajustes['cx_p']['justificacion'],
+                    placeholder="Ej: Ajuste por factura no registrada",
+                    key="just_cxp"
+                )
+
+            with col_ajuste4:
+                ajuste_transito = st.number_input(
+                    "Ajuste Tránsito",
+                    value=float(st.session_state.ajustes['transito']['monto']),
+                    step=1.0,
+                    format="%.2f",
+                    key="ajuste_transito"
+                )
+                just_transito = st.text_input(
+                    "Justificación",
+                    value=st.session_state.ajustes['transito']['justificacion'],
+                    placeholder="Ej: Ajuste por transferencia pendiente",
+                    key="just_transito"
+                )
+
+            col_btn_ajuste1, col_btn_ajuste2 = st.columns(2)
+            with col_btn_ajuste1:
+                if st.button("💾 Guardar Ajustes", width='stretch'):
+                    st.session_state.ajustes['inventario'] = {'monto': ajuste_inv, 'justificacion': just_inv}
+                    st.session_state.ajustes['cx_c'] = {'monto': ajuste_cxc, 'justificacion': just_cxc}
+                    st.session_state.ajustes['cx_p'] = {'monto': ajuste_cxp, 'justificacion': just_cxp}
+                    st.session_state.ajustes['transito'] = {'monto': ajuste_transito, 'justificacion': just_transito}
+                    
+                    db.guardar_ajustes(
+                        fecha_procesar.strftime('%Y-%m-%d'),
+                        st.session_state.ajustes,
+                        empresa=st.session_state.empresa_activa
+                    )
+                    
+                    st.success("✅ Ajustes guardados correctamente")
+                    st.rerun()
+            
+            with col_btn_ajuste2:
+                if st.button("🔄 Resetear Ajustes", width='stretch'):
+                    st.session_state.ajustes = {
+                        'inventario': {'monto': 0.0, 'justificacion': ''},
+                        'cx_c': {'monto': 0.0, 'justificacion': ''},
+                        'cx_p': {'monto': 0.0, 'justificacion': ''},
+                        'transito': {'monto': 0.0, 'justificacion': ''}
+                    }
+                    st.success("✅ Ajustes reseteados a 0")
+                    st.rerun()
+
+        # ============================================================
+        # CIERRE DIARIO - RESUMEN
         # ============================================================
         st.markdown("---")
-        st.markdown("#### 🔍 Análisis de Documentos (NE / OT / FA)")
-        
-        # Verificar si tenemos los archivos necesarios
-        tiene_recepciones = 'df_recepciones' in locals() and df_recepciones is not None
-        tiene_cxp_rep = 'df_cxp_rep' in locals() and df_cxp_rep is not None
-        
-        if not tiene_recepciones and not tiene_cxp_rep:
-            st.warning("⚠️ **Faltan archivos para el análisis profundo.** Sube el archivo de Recepciones y/o CxP Reportado para continuar.")
+        st.markdown("#### 📊 CIERRE DIARIO - Capital de Trabajo Neto")
+
+        archivos_faltantes = []
+        origen_archivos = {}
+
+        if not archivo_cxc_reportado:
+            archivos_faltantes.append("📄 Cuentas por cobrar (CxC)")
+            origen_archivos['CxC'] = "❌ NO DISPONIBLE"
         else:
-            # Botones para controlar la visualización
-            col_btn_cxp1, col_btn_cxp2, col_btn_cxp3 = st.columns(3)
+            origen_archivos['CxC'] = "📄 " + archivo_cxc_reportado.name
+
+        if not archivo_cxp_reportado:
+            archivos_faltantes.append("📄 Cuentas por pagar (CxP)")
+            origen_archivos['CxP'] = "❌ NO DISPONIBLE"
+        else:
+            origen_archivos['CxP'] = "📄 " + archivo_cxp_reportado.name
+
+        if not archivo_inventario_reportado:
+            archivos_faltantes.append("📄 Inventario")
+            origen_archivos['Inventario'] = "❌ NO DISPONIBLE"
+        else:
+            origen_archivos['Inventario'] = "📄 " + archivo_inventario_reportado.name
+
+        if not archivo_tb:
+            archivos_faltantes.append("📄 Transferencias en tránsito (TB)")
+            origen_archivos['Tránsito'] = "❌ NO DISPONIBLE"
+        else:
+            origen_archivos['Tránsito'] = "📄 " + archivo_tb.name
+
+        origen_archivos['Bancos'] = "📄 " + archivo_estado_cuenta.name if archivo_estado_cuenta else "📄 Estado de cuenta"
+
+        if archivos_faltantes:
+            st.warning(f"""
+            ⚠️ **Faltan archivos de verificación para el Cierre Diario:**
             
-            with col_btn_cxp1:
-                if st.button("📋 Ver Documentos CxP Actual", width='stretch', key="btn_cxp_actual"):
-                    st.session_state['mostrar_cxp_actual'] = not st.session_state.get('mostrar_cxp_actual', False)
+            {', '.join(archivos_faltantes)}
             
-            with col_btn_cxp2:
-                if st.button("📋 Ver Documentos Recepciones", width='stretch', key="btn_cxp_recepciones"):
-                    st.session_state['mostrar_cxp_recepciones'] = not st.session_state.get('mostrar_cxp_recepciones', False)
+            **El Cierre Diario SOLO usa valores de los archivos de verificación.**
+            Carga los archivos faltantes para obtener el Capital de Trabajo Neto correcto.
+            """)
+
+        if archivo_cxc_reportado:
+            cx_c_cierre = saldos_reportados.get('Cuentas por cobrar')
+            if cx_c_cierre is None or cx_c_cierre == 0:
+                st.error("❌ **Error:** No se pudo extraer el valor de Cuentas por cobrar del archivo.")
+                cx_c_cierre = 0
+            else:
+                st.success(f"💰 CxC: **DESDE ARCHIVO** → {formato_venezolano(cx_c_cierre)}")
+        else:
+            cx_c_cierre = 0
+            st.warning(f"💰 CxC: **NO DISPONIBLE** (falta archivo) → 0,00")
+
+        if archivo_inventario_reportado:
+            inventario_cierre = saldos_reportados.get('Inventario')
+            if inventario_cierre is None or inventario_cierre == 0:
+                st.error("❌ **Error:** No se pudo extraer el valor de Inventario del archivo.")
+                inventario_cierre = 0
+            else:
+                st.success(f"📦 Inventario: **DESDE ARCHIVO** → {formato_venezolano(inventario_cierre)}")
+        else:
+            inventario_cierre = 0
+            st.warning(f"📦 Inventario: **NO DISPONIBLE** (falta archivo) → 0,00")
+
+        if archivo_cxp_reportado:
+            cx_p_cierre = saldos_reportados.get('Cuentas por pagar')
+            if cx_p_cierre is None or cx_p_cierre == 0:
+                st.error("❌ **Error:** No se pudo extraer el valor de Cuentas por pagar del archivo.")
+                cx_p_cierre = 0
+            else:
+                st.success(f"📋 CxP: **DESDE ARCHIVO** → {formato_venezolano(cx_p_cierre)}")
+        else:
+            cx_p_cierre = 0
+            st.warning(f"📋 CxP: **NO DISPONIBLE** (falta archivo) → 0,00")
+
+        if archivo_tb:
+            transito_cierre = saldos_reportados.get('Transferencias en tránsito')
+            if transito_cierre is None or transito_cierre == 0:
+                st.error("❌ **Error:** No se pudo extraer el valor de Transferencias en tránsito del archivo.")
+                transito_cierre = 0
+            else:
+                st.success(f"🔄 Tránsito: **DESDE ARCHIVO** → {formato_venezolano(transito_cierre)}")
+        else:
+            transito_cierre = 0
+            st.warning(f"🔄 Tránsito: **NO DISPONIBLE** (falta archivo) → 0,00")
+
+        bancos_cierre = saldo_final
+        st.success(f"🏦 Bancos: **DESDE ESTADO DE CUENTA** → {formato_venezolano(bancos_cierre)}")
+
+        cx_c_cierre = safe_number(cx_c_cierre)
+        inventario_cierre = safe_number(inventario_cierre)
+        bancos_cierre = safe_number(bancos_cierre)
+        cx_p_cierre = safe_number(cx_p_cierre)
+        transito_cierre = safe_number(transito_cierre)
+
+        activos_operativos = cx_c_cierre + inventario_cierre + bancos_cierre
+        pasivos_operativos = cx_p_cierre + transito_cierre
+        capital_neto = activos_operativos - pasivos_operativos
+
+        st.markdown("#### 📋 Detalle del Cierre Diario")
+
+        cierre_detalle = [
+            {"Concepto": "📦 Inventario", "Archivo Origen": origen_archivos.get('Inventario', 'NO DISPONIBLE'), "Tipo": "ACTIVO", "Monto": formato_venezolano(inventario_cierre)},
+            {"Concepto": "💰 Cuentas por cobrar", "Archivo Origen": origen_archivos.get('CxC', 'NO DISPONIBLE'), "Tipo": "ACTIVO", "Monto": formato_venezolano(cx_c_cierre)},
+            {"Concepto": "🏦 Bancos", "Archivo Origen": origen_archivos.get('Bancos', 'NO DISPONIBLE'), "Tipo": "ACTIVO", "Monto": formato_venezolano(bancos_cierre)},
+            {"Concepto": "📌 TOTAL ACTIVOS OPERATIVOS", "Archivo Origen": "Suma de activos", "Tipo": "ACTIVO_TOTAL", "Monto": formato_venezolano(activos_operativos)},
+            {"Concepto": "📋 Cuentas por pagar", "Archivo Origen": origen_archivos.get('CxP', 'NO DISPONIBLE'), "Tipo": "PASIVO", "Monto": formato_venezolano(cx_p_cierre)},
+            {"Concepto": "🔄 Transferencias en tránsito", "Archivo Origen": origen_archivos.get('Tránsito', 'NO DISPONIBLE'), "Tipo": "PASIVO", "Monto": formato_venezolano(transito_cierre)},
+            {"Concepto": "📌 TOTAL PASIVOS OPERATIVOS", "Archivo Origen": "Suma de pasivos", "Tipo": "PASIVO_TOTAL", "Monto": formato_venezolano(pasivos_operativos)},
+            {"Concepto": "🏁 CAPITAL DE TRABAJO NETO", "Archivo Origen": "Activos - Pasivos", "Tipo": "CAPITAL", "Monto": formato_venezolano(capital_neto)}
+        ]
+
+        df_cierre = pd.DataFrame(cierre_detalle)
+
+        def color_cierre_rows(row):
+            if row['Tipo'] == 'ACTIVO_TOTAL':
+                return ['background-color: #e8f5e9; font-weight: bold;'] * len(row)
+            elif row['Tipo'] == 'PASIVO_TOTAL':
+                return ['background-color: #fff3e0; font-weight: bold;'] * len(row)
+            elif row['Tipo'] == 'CAPITAL':
+                if capital_neto >= 0:
+                    return ['background-color: #0f3d2e; color: white; font-weight: bold; font-size: 1.1rem;'] * len(row)
+                else:
+                    return ['background-color: #3d1a1a; color: white; font-weight: bold; font-size: 1.1rem;'] * len(row)
+            elif row['Tipo'] == 'ACTIVO':
+                return ['background-color: #f1f8f4;'] * len(row)
+            elif row['Tipo'] == 'PASIVO':
+                return ['background-color: #fff8f0;'] * len(row)
+            return [''] * len(row)
+
+        styled_df = df_cierre.style.apply(color_cierre_rows, axis=1).hide(axis='index')
+        st.dataframe(styled_df, use_container_width=True)
+
+        with st.expander("📂 Ver origen detallado de cada archivo", expanded=False):
+            st.markdown("""
+            ### 📂 Origen de los archivos utilizados en el Cierre Diario
             
-            with col_btn_cxp3:
-                if st.button("📊 Ver Análisis Cruzado", width='stretch', key="btn_cxp_cruzado"):
-                    st.session_state['mostrar_cxp_cruzado'] = not st.session_state.get('mostrar_cxp_cruzado', False)
+            | Concepto | Archivo | Estado |
+            |----------|---------|--------|
+            """)
             
-            try:
-                import re
+            if archivo_cxc_reportado:
+                st.markdown(f"| 💰 Cuentas por cobrar | `{archivo_cxc_reportado.name}` | ✅ Cargado |")
+            else:
+                st.markdown("| 💰 Cuentas por cobrar | **NO CARGADO** | ❌ No disponible |")
+            
+            if archivo_inventario_reportado:
+                st.markdown(f"| 📦 Inventario | `{archivo_inventario_reportado.name}` | ✅ Cargado |")
+            else:
+                st.markdown("| 📦 Inventario | **NO CARGADO** | ❌ No disponible |")
+            
+            if archivo_cxp_reportado:
+                st.markdown(f"| 📋 Cuentas por pagar | `{archivo_cxp_reportado.name}` | ✅ Cargado |")
+            else:
+                st.markdown("| 📋 Cuentas por pagar | **NO CARGADO** | ❌ No disponible |")
+            
+            if archivo_tb:
+                st.markdown(f"| 🔄 Transferencias en tránsito | `{archivo_tb.name}` | ✅ Cargado |")
+            else:
+                st.markdown("| 🔄 Transferencias en tránsito | **NO CARGADO** | ❌ No disponible |")
+            
+            if archivo_estado_cuenta:
+                st.markdown(f"| 🏦 Bancos | `{archivo_estado_cuenta.name}` | ✅ Cargado |")
+            else:
+                st.markdown("| 🏦 Bancos | **NO CARGADO** | ❌ No disponible |")
+            
+            st.markdown("""
+            
+            ### 📌 Valores extraídos:
+            """)
+            
+            st.markdown(f"""
+            | Concepto | Valor | Origen |
+            |----------|-------|--------|
+            | Cuentas por cobrar | {formato_venezolano(cx_c_cierre)} | {origen_archivos.get('CxC', 'NO DISPONIBLE')} |
+            | Inventario | {formato_venezolano(inventario_cierre)} | {origen_archivos.get('Inventario', 'NO DISPONIBLE')} |
+            | Bancos | {formato_venezolano(bancos_cierre)} | {origen_archivos.get('Bancos', 'NO DISPONIBLE')} |
+            | Cuentas por pagar | {formato_venezolano(cx_p_cierre)} | {origen_archivos.get('CxP', 'NO DISPONIBLE')} |
+            | Transferencias en tránsito | {formato_venezolano(transito_cierre)} | {origen_archivos.get('Tránsito', 'NO DISPONIBLE')} |
+            """)
+
+        # ============================================================
+        # RESUMEN DEL CIERRE DIARIO - KPIS CORPORATIVOS
+        # ============================================================
+        st.markdown("---")
+        st.markdown("#### 📊 Resumen del Cierre Diario")
+        st.caption("💡 Haz clic en cada KPI para ver su composición detallada")
+
+        col_c1, col_c2, col_c3 = st.columns(3)
+
+        with col_c1:
+            popover_activos = f"""
+            ##### 📈 Composición de Activos Operativos
+            
+            | Concepto | Monto | Archivo Origen |
+            |----------|-------|----------------|
+            | **Cuentas por cobrar** | {formato_venezolano(cx_c_cierre)} | {'✅ Cargado' if archivo_cxc_reportado else '❌ No disponible'} |
+            | **Inventario** | {formato_venezolano(inventario_cierre)} | {'✅ Cargado' if archivo_inventario_reportado else '❌ No disponible'} |
+            | **Bancos** | {formato_venezolano(bancos_cierre)} | ✅ Estado de cuenta |
+            | **TOTAL ACTIVOS** | **{formato_venezolano(activos_operativos)}** |  |
+            
+            ✅ Valores tomados de los archivos de verificación.
+            """
+            
+            with st.popover("", width='stretch'):
+                st.markdown(popover_activos)
+                if cx_c_cierre > 0 or inventario_cierre > 0 or bancos_cierre > 0:
+                    fig, ax = plt.subplots(figsize=(6, 3))
+                    componentes = ['CxC', 'Inventario', 'Bancos']
+                    valores = [cx_c_cierre, inventario_cierre, bancos_cierre]
+                    colores = ['#3498db', '#2ecc71', '#f39c12']
+                    ax.bar(componentes, valores, color=colores)
+                    ax.set_title('Composición de Activos', fontsize=10, color='#0a1628')
+                    ax.set_ylabel('Monto (Bs.)', color='#6a8aac')
+                    ax.set_facecolor('#f8fafc')
+                    plt.tight_layout()
+                    st.pyplot(fig)
+            
+            st.markdown(f"""
+            <div class="kpi-card kpi-activos">
+                <div class="icon-bg">📈</div>
+                <div class="label">📈 ACTIVOS OPERATIVOS</div>
+                <div class="value">{formato_venezolano(activos_operativos)}</div>
+                <div class="sub-label">💡 Haz clic para ver detalle</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col_c2:
+            popover_pasivos = f"""
+            ##### 📉 Composición de Pasivos Operativos
+            
+            | Concepto | Monto | Archivo Origen |
+            |----------|-------|----------------|
+            | **Cuentas por pagar** | {formato_venezolano(cx_p_cierre)} | {'✅ Cargado' if archivo_cxp_reportado else '❌ No disponible'} |
+            | **Transferencias en tránsito** | {formato_venezolano(transito_cierre)} | {'✅ Cargado' if archivo_tb else '❌ No disponible'} |
+            | **TOTAL PASIVOS** | **{formato_venezolano(pasivos_operativos)}** |  |
+            
+            ✅ Valores tomados de los archivos de verificación.
+            """
+            
+            with st.popover("", width='stretch'):
+                st.markdown(popover_pasivos)
+            
+            st.markdown(f"""
+            <div class="kpi-card kpi-pasivos">
+                <div class="icon-bg">📉</div>
+                <div class="label">📉 PASIVOS OPERATIVOS</div>
+                <div class="value">{formato_venezolano(pasivos_operativos)}</div>
+                <div class="sub-label">💡 Haz clic para ver detalle</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col_c3:
+            if capital_neto >= 0:
+                clase = "kpi-capital-positivo"
+                emoji = "✅"
+            else:
+                clase = "kpi-capital-negativo"
+                emoji = "❌"
+            
+            popover_capital = f"""
+            ##### 🏁 Cálculo del Capital de Trabajo Neto
+            
+            | Concepto | Fórmula | Monto |
+            |----------|---------|-------|
+            | **Activos Operativos** | CxC + Inv. + Bancos | {formato_venezolano(activos_operativos)} |
+            | **Pasivos Operativos** | CxP + Tránsito | {formato_venezolano(pasivos_operativos)} |
+            | **CAPITAL DE TRABAJO NETO** | Activos - Pasivos | **{formato_venezolano(capital_neto)}** |
+            
+            **Ratio Activos/Pasivos:** {f"{activos_operativos / pasivos_operativos:.2f}x" if pasivos_operativos > 0 else "N/A"}
+            
+            {f"✅ Capital de Trabajo Neto POSITIVO: {formato_venezolano(capital_neto)}" if capital_neto >= 0 else f"❌ Capital de Trabajo Neto NEGATIVO: {formato_venezolano(capital_neto)}"}
+            """
+            
+            with st.popover("", width='stretch'):
+                st.markdown(popover_capital)
+            
+            st.markdown(f"""
+            <div class="kpi-card {clase}">
+                <div class="icon-bg">🏁</div>
+                <div class="label">{emoji} CAPITAL DE TRABAJO NETO</div>
+                <div class="value">{formato_venezolano(capital_neto)}</div>
+                <div class="sub-label">💡 Haz clic para ver detalle</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with st.expander("📌 Detalle del Cierre Diario", expanded=False):
+            st.markdown(f"""
+            ### 📊 Cierre Diario - {fecha_procesar.strftime('%Y-%m-%d')}
+            
+            | Concepto | Origen | Valor |
+            |----------|--------|-------|
+            | **ACTIVOS OPERATIVOS** | | |
+            | Cuentas por cobrar | {'Archivo CxC' if archivo_cxc_reportado else '❌ NO DISPONIBLE'} | {formato_venezolano(cx_c_cierre)} |
+            | Inventario | {'Archivo Inventario' if archivo_inventario_reportado else '❌ NO DISPONIBLE'} | {formato_venezolano(inventario_cierre)} |
+            | Bancos | Estado de cuenta | {formato_venezolano(bancos_cierre)} |
+            | | **Total Activos** | **{formato_venezolano(activos_operativos)}** |
+            | | | |
+            | **PASIVOS OPERATIVOS** | | |
+            | Cuentas por pagar | {'Archivo CxP' if archivo_cxp_reportado else '❌ NO DISPONIBLE'} | {formato_venezolano(cx_p_cierre)} |
+            | Transferencias en tránsito | {'Archivo TB' if archivo_tb else '❌ NO DISPONIBLE'} | {formato_venezolano(transito_cierre)} |
+            | | **Total Pasivos** | **{formato_venezolano(pasivos_operativos)}** |
+            | | | |
+            | **🏁 CAPITAL DE TRABAJO NETO** | Activos - Pasivos | **{formato_venezolano(capital_neto)}** |
+            """)
+
+            if capital_neto >= 0:
+                st.success(f"✅ Capital de Trabajo Neto POSITIVO: {formato_venezolano(capital_neto)}")
+            else:
+                st.error(f"❌ Capital de Trabajo Neto NEGATIVO: {formato_venezolano(capital_neto)}")
+
+            st.markdown("""
+            ### ⚠️ Importante
+            **El Cierre Diario utiliza EXCLUSIVAMENTE los valores de los archivos de verificación:**
+            - Cuentas por cobrar → Archivo CxC
+            - Inventario → Archivo Inventario
+            - Cuentas por pagar → Archivo CxP
+            - Transferencias en tránsito → Archivo TB
+            
+            **NO utiliza valores calculados** de facturación, cobranzas o egresos.
+            """)
+        
+        st.markdown("---")
+    
+    # ============================================================
+    # PESTAÑA 2: CONCILIACIÓN Y AUDITORÍA PROFUNDA
+    # ============================================================
+    with tab_conciliacion:
+        st.markdown("### 🔍 Conciliación y Auditoría Profunda")
+        
+        # ============================================================
+        # 🔍 ANÁLISIS DE OTRAS CUENTAS (CxC, CxP, TRANSITO)
+        # ============================================================
+        st.markdown("### 🔍 Análisis de Diferencias en Otras Cuentas")
+        
+        # --- CUENTAS POR COBRAR ---
+        if abs(diff_cxc) > 0.01:
+            with st.expander(f"👤 Cuentas por Cobrar (Diferencia: {formatear_diferencia(cx_c_calculado, cx_c_reportado)})", expanded=True):
+                st.markdown(f"**Fórmula**: `CxC Calculado ({formato_venezolano(cx_c_calculado)})` vs `CxC Reportado ({formato_venezolano(cx_c_reportado)})`")
+                st.markdown(f"La diferencia de **{formato_venezolano(diff_cxc)} Bs/USD** en Cuentas por Cobrar puede explicarse por:")
                 
-                # ============================================================
-                # 1. EXTRAER DOCUMENTOS DEL CxP ACTUAL
-                # ============================================================
-                cxp_actual_docs = {}
-                if tiene_cxp_rep:
-                    df_cxp_clean = ProcesadorArchivos._limpiar_columnas(df_cxp_rep)
-                    idx_cxp = None
-                    for idx, row in df_cxp_clean.iterrows():
-                        row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                        if 'documento' in row_str and any(k in row_str for k in ['saldo', 'pendt', 'pendiente']):
-                            idx_cxp = idx
-                            break
-                    if idx_cxp is None:
-                        idx_cxp = ProcesadorArchivos._encontrar_fila_datos(df_cxp_clean, ['proveedor', 'documento', 'saldo'])
+                # Buscar transacciones coincidentes en los archivos
+                cands_cxc = []
+                if 'df_facturacion' in locals() and df_facturacion is not None:
+                    cands_cxc.extend(buscar_candidatos_por_monto(df_facturacion, diff_cxc, "Facturación Semanal"))
+                if 'df_cobranzas' in locals() and df_cobranzas is not None:
+                    cands_cxc.extend(buscar_candidatos_por_monto(df_cobranzas, diff_cxc, "Cobranzas Diarias"))
+                if 'df_notas_cliente' in locals() and df_notas_cliente is not None:
+                    cands_cxc.extend(buscar_candidatos_por_monto(df_notas_cliente, diff_cxc, "Notas de Crédito Clientes"))
+                if 'df_cxc_rep' in locals() and df_cxc_rep is not None:
+                    cands_cxc.extend(buscar_candidatos_por_monto(df_cxc_rep, diff_cxc, "Reporte CxC"))
                     
-                    if idx_cxp is not None and idx_cxp >= 0 and idx_cxp < len(df_cxp_clean):
-                        df_datos = df_cxp_clean.iloc[idx_cxp:].reset_index(drop=True)
-                        if len(df_datos) > 0:
-                            header_row = df_datos.iloc[0]
-                            new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
-                            df_datos.columns = new_cols
-                            df_cxp_clean = df_datos.iloc[1:].reset_index(drop=True)
+                if cands_cxc:
+                    st.info("🔍 **Transacciones con importe coincidente encontradas en los archivos:**")
+                    for c in cands_cxc[:5]:
+                        st.markdown(f"- {c}")
+                else:
+                    st.write("No se encontraron transacciones individuales con este importe exacto.")
                     
-                    col_doc = ProcesadorArchivos._buscar_columna(df_cxp_clean, 'documento', 'doc', 'factura', 'nro_doc', 'referencia')
-                    col_monto = None
-                    if len(df_cxp_clean.columns) > 2:
-                        col_monto = df_cxp_clean.columns[2]
-                    else:
-                        col_monto = ProcesadorArchivos._buscar_columna(df_cxp_clean, 'saldo', 'saldo pendt', 'pendiente', 'monto')
+                st.markdown("""
+                **💡 Puntos clave a revisar:**
+                - **Facturación vs Notas de Crédito**: Valide si hay facturas de crédito anuladas en el sistema mediante notas de crédito que no se hayan descontado correctamente en la sumatoria del día.
+                - **Cobranzas Cruzadas**: Revise si se reportaron cobros que no corresponden a facturas de este cliente, afectando el saldo de Cuentas por Cobrar reportado.
+                """)
+        
+        # --- CUENTAS POR PAGAR ---
+        if abs(diff_cxp) > 0.01:
+            with st.expander(f"🤝 Cuentas por Pagar (Diferencia: {formatear_diferencia(cx_p_calculado, cx_p_reportado)})", expanded=True):
+                st.markdown(f"**Fórmula**: `CxP Calculado ({formato_venezolano(cx_p_calculado)})` vs `CxP Reportado ({formato_venezolano(cx_p_reportado)})`")
+                st.markdown(f"La diferencia de **{formato_venezolano(diff_cxp)} Bs/USD** en Cuentas por Pagar puede explicarse por:")
+                
+                # Buscar transacciones coincidentes
+                cands_cxp = []
+                if 'df_recepciones' in locals() and df_recepciones is not None:
+                    cands_cxp.extend(buscar_candidatos_por_monto(df_recepciones, diff_cxp, "Recepciones de Mercancía"))
+                if 'df_proveedores' in locals() and df_proveedores is not None:
+                    cands_cxp.extend(buscar_candidatos_por_monto(df_proveedores, diff_cxp, "Proveedores de Mercancía"))
+                if 'df_notas_proveedor' in locals() and df_notas_proveedor is not None:
+                    cands_cxp.extend(buscar_candidatos_por_monto(df_notas_proveedor, diff_cxp, "Notas de Crédito Proveedores"))
+                if 'df_cxp_rep' in locals() and df_cxp_rep is not None:
+                    cands_cxp.extend(buscar_candidatos_por_monto(df_cxp_rep, diff_cxp, "Reporte CxP"))
                     
-                    col_proveedor = ProcesadorArchivos._buscar_columna(df_cxp_clean, 'proveedor', 'rif', 'nombre', 'razon social')
+                if cands_cxp:
+                    st.info("🔍 **Transacciones con importe coincidente encontradas en los archivos:**")
+                    for c in cands_cxp[:5]:
+                        st.markdown(f"- {c}")
+                else:
+                    st.write("No se encontraron transacciones individuales con este importe exacto.")
+                        
+                # Mostrar cotejo automático de recepciones contra CxP
+                df_recepciones_ok = 'df_recepciones' in locals() and df_recepciones is not None
+                df_cxp_rep_ok = 'df_cxp_rep' in locals() and df_cxp_rep is not None
+                
+                if df_recepciones_ok and df_cxp_rep_ok:
+                    mostrar_cotejo_recepciones_cxp(df_recepciones, df_cxp_rep, fecha_procesar, st.session_state.empresa_activa, diff_cxp)
+                else:
+                    st.info("ℹ️ *Sube el archivo de **Recepciones** para ver el cotejo automático de documentos (NE / OT) contra Cuentas por Pagar.*")
                     
-                    if col_doc and col_monto:
+                st.markdown("""
+                **💡 Puntos clave a revisar:**
+                - **Pagos a Proveedores**: Valide si hay egresos ejecutados en iPago que no correspondan a facturas de proveedores de mercancía (p.ej., gastos de administración o servicios) que se clasificaron erróneamente.
+                - **Notas de Crédito Recibidas**: Confirme si hay descuentos otorgados por proveedores que no se reflejaron en el balance de compras.
+                """)
+        
+        # --- TRANSFERENCIAS EN TRÁNSITO ---
+        if abs(diff_transito) > 0.01:
+            with st.expander(f"✈️ Transferencias en Tránsito (Diferencia: {formatear_diferencia(transito_calculado, transito_reportado)})", expanded=True):
+                st.markdown(f"**Fórmula**: `Tránsito Calculado ({formato_venezolano(transito_calculado)})` vs `Tránsito Reportado ({formato_venezolano(transito_reportado)})`")
+                st.markdown(f"La diferencia de **{formato_venezolano(diff_transito)} Bs/USD** en Transferencias en Tránsito puede explicarse por:")
+                
+                # Buscar transacciones coincidentes
+                cands_transito = []
+                if 'df_cobranzas' in locals() and df_cobranzas is not None:
+                    cands_transito.extend(buscar_candidatos_por_monto(df_cobranzas, diff_transito, "Cobranzas Diarias"))
+                if 'df_estado_cuenta' in locals() and df_estado_cuenta is not None:
+                    cands_transito.extend(buscar_candidatos_por_monto(df_estado_cuenta, diff_transito, "Estado de Cuenta Bancario"))
+                if 'df_tb' in locals() and df_tb is not None:
+                    cands_transito.extend(buscar_candidatos_por_monto(df_tb, diff_transito, "Balanza / Tránsito"))
+                    
+                if cands_transito:
+                    st.info("🔍 **Transacciones con importe coincidente encontradas en los archivos:**")
+                    for c in cands_transito[:5]:
+                        st.markdown(f"- {c}")
+                else:
+                    st.write("No se encontraron transacciones individuales con este importe exacto.")
+                    
+                st.markdown("""
+                **💡 Puntos clave a revisar:**
+                - **Depósitos en Tránsito**: Cobranzas que fueron registradas en el sistema administrativo del día pero que ingresaron efectivamente al banco al día siguiente hábil.
+                - **Egresos no debitados**: Pagos emitidos a proveedores mediante transferencia que aún no han sido cobrados o debitados por la entidad bancaria.
+                """)
+        
+        # --- BANCOS ---
+        if abs(diferencia_bancos) > 0.01:
+            with st.expander(f"🏦 Bancos (Diferencia: {formatear_diferencia(bancos_calculado, saldo_final)})", expanded=True):
+                st.markdown(f"**Fórmula**: `Bancos Calculado ({formato_venezolano(bancos_calculado)})` vs `Saldo Final Estado de Cuenta ({formato_venezolano(saldo_final)})`")
+                st.markdown(f"La diferencia de **{formato_venezolano(diferencia_bancos)} Bs/USD** en Bancos puede explicarse por:")
+                
+                # Buscar transacciones coincidentes
+                cands_bancos = []
+                if 'df_estado_cuenta' in locals() and df_estado_cuenta is not None:
+                    cands_bancos.extend(buscar_candidatos_por_monto(df_estado_cuenta, diferencia_bancos, "Estado de Cuenta"))
+                if 'df_cobranzas' in locals() and df_cobranzas is not None:
+                    cands_bancos.extend(buscar_candidatos_por_monto(df_cobranzas, diferencia_bancos, "Cobranzas Diarias"))
+                if 'df_egresos' in locals() and df_egresos is not None:
+                    cands_bancos.extend(buscar_candidatos_por_monto(df_egresos, diferencia_bancos, "Egresos iPago"))
+                    
+                if cands_bancos:
+                    st.info("🔍 **Transacciones con importe coincidente encontradas en los archivos:**")
+                    for c in cands_bancos[:5]:
+                        st.markdown(f"- {c}")
+                else:
+                    st.write("No se encontraron transacciones individuales con este importe exacto.")
+                    
+                st.markdown("""
+                **💡 Puntos clave a revisar:**
+                - **Comisiones o Impuestos Bancarios (IGTF/IDB)**: Verifique si existen cobros de comisiones o impuestos en el estado de cuenta que no estén registrados en el sistema administrativo.
+                - **Depósitos o Transferencias no identificados**: Revise si hay ingresos en el banco que no tengan soporte o no hayan sido notificados por ventas/cobranzas.
+                - **Cheques o transferencias emitidas no cobradas**: Confirme si hay egresos del sistema que aún no han sido debitados por el banco.
+                """)
+                
+        st.markdown("---")
+        
+        # ============================================================
+        # 🔥 TRAZABILIDAD DE CUENTAS POR PAGAR (MEJORADO)
+        # ============================================================
+        st.markdown("### 🔍 Trazabilidad de Cuentas por Pagar")
+        st.caption("Análisis detallado: CxP Anterior + Recepciones - Pagos Proveedores = CxP Calculado vs CxP Reportado")
+        
+        # Mostrar el cálculo paso a paso
+        st.markdown("#### 📊 Paso a paso del cálculo")
+        
+        col_p1, col_p2, col_p3, col_p4, col_p5 = st.columns(5)
+        
+        with col_p1:
+            st.metric("📋 CxP Anterior", formato_venezolano(cx_p_anterior))
+        with col_p2:
+            st.metric("📦 Recepciones", formato_venezolano(recepcion_total))
+        with col_p3:
+            st.metric("💰 Pagos Proveedores", formato_venezolano(pagos_proveedores))
+        with col_p4:
+            st.metric("📊 CxP Calculado", formato_venezolano(cx_p_calculado))
+        with col_p5:
+            st.metric("📄 CxP Reportado", formato_venezolano(cx_p_reportado) if cx_p_reportado is not None else "N/A")
+        
+        # Verificar si hay diferencia
+        diff_cxp_calc = safe_number(cx_p_calculado) - safe_number(cx_p_reportado) if cx_p_reportado is not None else 0
+        
+        if abs(diff_cxp_calc) < 0.01:
+            st.success("✅ **¡CONCILIACIÓN PERFECTA!** El CxP Calculado coincide con el CxP Reportado.")
+        else:
+            st.error(f"⚠️ **DIFERENCIA DETECTADA:** {formato_venezolano(abs(diff_cxp_calc))} Bs. de diferencia entre Calculado y Reportado")
+            
+            # ============================================================
+            # ANÁLISIS PROFUNDO DE DOCUMENTOS (NE / OT / FA) CON BOTONES
+            # ============================================================
+            st.markdown("---")
+            st.markdown("#### 🔍 Análisis de Documentos (NE / OT / FA)")
+            
+            # Verificar si tenemos los archivos necesarios
+            tiene_recepciones = 'df_recepciones' in locals() and df_recepciones is not None
+            tiene_cxp_rep = 'df_cxp_rep' in locals() and df_cxp_rep is not None
+            
+            if not tiene_recepciones and not tiene_cxp_rep:
+                st.warning("⚠️ **Faltan archivos para el análisis profundo.** Sube el archivo de Recepciones y/o CxP Reportado para continuar.")
+            else:
+                # Botones para controlar la visualización
+                col_btn_cxp1, col_btn_cxp2, col_btn_cxp3 = st.columns(3)
+                
+                with col_btn_cxp1:
+                    if st.button("📋 Ver Documentos CxP Actual", width='stretch', key="btn_cxp_actual_tab2"):
+                        st.session_state['mostrar_cxp_actual'] = not st.session_state.get('mostrar_cxp_actual', False)
+                
+                with col_btn_cxp2:
+                    if st.button("📋 Ver Documentos Recepciones", width='stretch', key="btn_cxp_recepciones_tab2"):
+                        st.session_state['mostrar_cxp_recepciones'] = not st.session_state.get('mostrar_cxp_recepciones', False)
+                
+                with col_btn_cxp3:
+                    if st.button("📊 Ver Análisis Cruzado", width='stretch', key="btn_cxp_cruzado_tab2"):
+                        st.session_state['mostrar_cxp_cruzado'] = not st.session_state.get('mostrar_cxp_cruzado', False)
+                
+                try:
+                    import re
+                    
+                    # ============================================================
+                    # 1. EXTRAER DOCUMENTOS DEL CxP ACTUAL
+                    # ============================================================
+                    cxp_actual_docs = {}
+                    if tiene_cxp_rep:
+                        df_cxp_clean = ProcesadorArchivos._limpiar_columnas(df_cxp_rep)
+                        idx_cxp = None
                         for idx, row in df_cxp_clean.iterrows():
-                            doc = str(row[col_doc]).strip()
-                            monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto])
-                            if doc and doc != 'nan' and doc != 'None' and monto:
-                                doc_norm = re.sub(r'[^0-9]', '', doc)
-                                doc_norm = re.sub(r'^0+', '', doc_norm)
-                                if doc_norm:
-                                    doc_upper = doc.upper()
-                                    if 'NE' in doc_upper:
-                                        tipo = 'NE'
-                                    elif 'OT' in doc_upper:
-                                        tipo = 'OT'
-                                    elif 'FA' in doc_upper or 'FACT' in doc_upper:
-                                        tipo = 'FA'
-                                    else:
-                                        tipo = 'DESCONOCIDO'
-                                    
-                                    proveedor = 'No identificado'
-                                    if col_proveedor:
-                                        try:
-                                            prov_val = str(row[col_proveedor]).strip()
-                                            if prov_val and prov_val != 'nan' and prov_val != 'None':
-                                                proveedor = prov_val
-                                        except:
-                                            pass
-                                    
-                                    cxp_actual_docs[doc_norm] = {
-                                        'original': doc,
-                                        'monto': float(monto),
-                                        'tipo': tipo,
-                                        'proveedor': proveedor
-                                    }
-                
-                # ============================================================
-                # 2. EXTRAER DOCUMENTOS DE RECEPCIONES
-                # ============================================================
-                recepciones_docs = {}
-                if tiene_recepciones:
-                    df_rec_clean = ProcesadorArchivos._limpiar_columnas(df_recepciones)
-                    
-                    idx_rec = None
-                    for idx, row in df_rec_clean.iterrows():
-                        row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                        if 'compra' in row_str and 'proveedor' in row_str and 'recep' in row_str:
-                            idx_rec = idx
-                            break
-                    if idx_rec is None:
-                        idx_rec = ProcesadorArchivos._encontrar_fila_datos(df_rec_clean, ['compra', 'proveedor', 'recep'])
-                    
-                    if idx_rec is not None and idx_rec >= 0 and idx_rec < len(df_rec_clean):
-                        df_datos = df_rec_clean.iloc[idx_rec:].reset_index(drop=True)
-                        if len(df_datos) > 0:
-                            header_row = df_datos.iloc[0]
-                            new_cols = [str(col).strip() if pd.notna(col) else f'col_{i}' for i, col in enumerate(header_row)]
-                            df_datos.columns = new_cols
-                            df_rec_clean = df_datos.iloc[1:].reset_index(drop=True)
-                    
-                    cols_doc_rec = []
-                    for col in df_rec_clean.columns:
-                        col_l = str(col).lower()
-                        if 'fact' in col_l or 'compra' in col_l or 'documento' in col_l:
-                            cols_doc_rec.append(col)
-                    
-                    col_rec_monto = None
-                    for col in df_rec_clean.columns:
-                        clean_col = re.sub(r'[^a-z0-9]', '', str(col).lower())
-                        if 'neto' in clean_col and 'iva' in clean_col:
-                            col_rec_monto = col
-                            break
-                    if col_rec_monto is None:
-                        for col in df_rec_clean.columns:
-                            clean_col = re.sub(r'[^a-z0-9]', '', str(col).lower())
-                            if 'neto' in clean_col or 'total' in clean_col:
-                                col_rec_monto = col
+                            row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                            if 'documento' in row_str and any(k in row_str for k in ['saldo', 'pendt', 'pendiente']):
+                                idx_cxp = idx
                                 break
-                    
-                    if cols_doc_rec and col_rec_monto:
-                        for idx, row in df_rec_clean.iterrows():
-                            monto = ProcesadorArchivos._convertir_numero_europeo(row[col_rec_monto])
-                            if not monto:
-                                continue
-                            for col_doc in cols_doc_rec:
+                        if idx_cxp is None:
+                            idx_cxp = ProcesadorArchivos._encontrar_fila_datos(df_cxp_clean, ['proveedor', 'documento', 'saldo'])
+                        
+                        if idx_cxp is not None and idx_cxp >= 0 and idx_cxp < len(df_cxp_clean):
+                            df_datos = df_cxp_clean.iloc[idx_cxp:].reset_index(drop=True)
+                            if len(df_datos) > 0:
+                                header_row = df_datos.iloc[0]
+                                new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
+                                df_datos.columns = new_cols
+                                df_cxp_clean = df_datos.iloc[1:].reset_index(drop=True)
+                        
+                        col_doc = ProcesadorArchivos._buscar_columna(df_cxp_clean, 'documento', 'doc', 'factura', 'nro_doc', 'referencia')
+                        col_monto = None
+                        if len(df_cxp_clean.columns) > 2:
+                            col_monto = df_cxp_clean.columns[2]
+                        else:
+                            col_monto = ProcesadorArchivos._buscar_columna(df_cxp_clean, 'saldo', 'saldo pendt', 'pendiente', 'monto')
+                        
+                        col_proveedor = ProcesadorArchivos._buscar_columna(df_cxp_clean, 'proveedor', 'rif', 'nombre', 'razon social')
+                        
+                        if col_doc and col_monto:
+                            for idx, row in df_cxp_clean.iterrows():
                                 doc = str(row[col_doc]).strip()
-                                if doc and doc != 'nan' and doc != 'None':
+                                monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto])
+                                if doc and doc != 'nan' and doc != 'None' and monto:
                                     doc_norm = re.sub(r'[^0-9]', '', doc)
                                     doc_norm = re.sub(r'^0+', '', doc_norm)
                                     if doc_norm:
@@ -4016,1367 +4349,1150 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                             tipo = 'FA'
                                         else:
                                             tipo = 'DESCONOCIDO'
-                                        recepciones_docs[doc_norm] = {
+                                        
+                                        proveedor = 'No identificado'
+                                        if col_proveedor:
+                                            try:
+                                                prov_val = str(row[col_proveedor]).strip()
+                                                if prov_val and prov_val != 'nan' and prov_val != 'None':
+                                                    proveedor = prov_val
+                                            except:
+                                                pass
+                                        
+                                        cxp_actual_docs[doc_norm] = {
                                             'original': doc,
                                             'monto': float(monto),
-                                            'tipo': tipo
+                                            'tipo': tipo,
+                                            'proveedor': proveedor
                                         }
-                
-                # ============================================================
-                # MOSTRAR DOCUMENTOS SEGÚN BOTONES
-                # ============================================================
-                if st.session_state.get('mostrar_cxp_actual', False):
-                    with st.expander("📋 Documentos en CxP Reportado (Día Actual)", expanded=True):
-                        if cxp_actual_docs:
-                            df_cxp_docs = pd.DataFrame(list(cxp_actual_docs.values()))
-                            tipos_actual = {}
-                            for doc in cxp_actual_docs.values():
-                                tipos_actual[doc['tipo']] = tipos_actual.get(doc['tipo'], 0) + 1
-                            st.write("**Clasificación:** " + ", ".join([f"{k}: {v}" for k, v in tipos_actual.items()]))
-                            st.dataframe(df_cxp_docs, width='stretch')
-                            st.metric("📄 Total Documentos", len(cxp_actual_docs))
-                        else:
-                            st.info("No hay documentos en CxP Reportado")
-                
-                if st.session_state.get('mostrar_cxp_recepciones', False):
-                    with st.expander("📦 Documentos en Recepciones", expanded=True):
-                        if recepciones_docs:
-                            df_rec_docs = pd.DataFrame(list(recepciones_docs.values()))
-                            tipos_rec = {}
-                            for doc in recepciones_docs.values():
-                                tipos_rec[doc['tipo']] = tipos_rec.get(doc['tipo'], 0) + 1
-                            st.write("**Clasificación:** " + ", ".join([f"{k}: {v}" for k, v in tipos_rec.items()]))
-                            st.dataframe(df_rec_docs, width='stretch')
-                            st.metric("📦 Total Recepciones", len(recepciones_docs))
-                        else:
-                            st.info("No hay documentos en Recepciones")
-                
-                # ============================================================
-                # ANÁLISIS CRUZADO DE DOCUMENTOS
-                # ============================================================
-                if st.session_state.get('mostrar_cxp_cruzado', False):
-                    with st.expander("📊 Análisis Cruzado de Documentos", expanded=True):
-                        # Clasificar documentos
-                        ot_nuevas = []
-                        for doc_norm, info in cxp_actual_docs.items():
-                            if info['tipo'] == 'OT':
-                                ot_nuevas.append({
-                                    'documento': info['original'],
-                                    'monto': info['monto'],
-                                    'proveedor': info.get('proveedor', 'No identificado'),
-                                    'tipo': 'OT NUEVA (Carga Manual)'
-                                })
-                        
-                        ne_pago_contado = []
-                        for doc_norm, info in recepciones_docs.items():
-                            if info['tipo'] == 'NE' and doc_norm not in cxp_actual_docs:
-                                ne_pago_contado.append({
-                                    'documento': info['original'],
-                                    'monto': info['monto'],
-                                    'tipo': 'NE (Pago al Contado)'
-                                })
-                        
-                        fa_en_cxp_no_recepcion = []
-                        for doc_norm, info in cxp_actual_docs.items():
-                            if info['tipo'] == 'FA' and doc_norm not in recepciones_docs:
-                                fa_en_cxp_no_recepcion.append({
-                                    'documento': info['original'],
-                                    'monto': info['monto'],
-                                    'proveedor': info.get('proveedor', 'No identificado'),
-                                    'tipo': 'FA en CxP sin Recepción'
-                                })
-                        
-                        fa_en_recepcion_no_cxp = []
-                        for doc_norm, info in recepciones_docs.items():
-                            if info['tipo'] == 'FA' and doc_norm not in cxp_actual_docs:
-                                fa_en_recepcion_no_cxp.append({
-                                    'documento': info['original'],
-                                    'monto': info['monto'],
-                                    'tipo': 'FA en Recepción sin CxP'
-                                })
-                        
-                        total_ot_nuevas = sum([x['monto'] for x in ot_nuevas])
-                        total_ne_pago_contado = sum([x['monto'] for x in ne_pago_contado])
-                        total_fa_en_cxp_no_recepcion = sum([x['monto'] for x in fa_en_cxp_no_recepcion])
-                        total_fa_en_recepcion_no_cxp = sum([x['monto'] for x in fa_en_recepcion_no_cxp])
-                        
-                        # Mostrar resultados
-                        col_a1, col_a2 = st.columns(2)
-                        
-                        with col_a1:
-                            st.metric("🆕 OT Nuevas", len(ot_nuevas), delta=f"{formato_venezolano(total_ot_nuevas)}")
-                            if ot_nuevas:
-                                st.warning(f"⚠️ {len(ot_nuevas)} OT nuevas detectadas")
-                                for item in ot_nuevas[:5]:
-                                    st.write(f"- 📄 {item['documento']}: {formato_venezolano(item['monto'])}")
-                                if len(ot_nuevas) > 5:
-                                    st.write(f"... y {len(ot_nuevas) - 5} más")
-                            else:
-                                st.success("✅ No hay OT nuevas")
-                            
-                            st.metric("📄 FA en CxP sin Recepción", len(fa_en_cxp_no_recepcion), delta=f"{formato_venezolano(total_fa_en_cxp_no_recepcion)}")
-                            if fa_en_cxp_no_recepcion:
-                                st.error(f"❌ {len(fa_en_cxp_no_recepcion)} FA en CxP sin Recepción")
-                                for item in fa_en_cxp_no_recepcion[:5]:
-                                    st.write(f"- 📄 {item['documento']}: {formato_venezolano(item['monto'])} ({item['proveedor']})")
-                                if len(fa_en_cxp_no_recepcion) > 5:
-                                    st.write(f"... y {len(fa_en_cxp_no_recepcion) - 5} más")
-                            else:
-                                st.success("✅ No hay FA sin Recepción")
-                        
-                        with col_a2:
-                            st.metric("⚠️ NE Pago al Contado", len(ne_pago_contado), delta=f"{formato_venezolano(total_ne_pago_contado)}")
-                            if ne_pago_contado:
-                                st.info(f"ℹ️ {len(ne_pago_contado)} NE pagadas al contado")
-                                for item in ne_pago_contado[:5]:
-                                    st.write(f"- 📄 {item['documento']}: {formato_venezolano(item['monto'])}")
-                                if len(ne_pago_contado) > 5:
-                                    st.write(f"... y {len(ne_pago_contado) - 5} más")
-                            else:
-                                st.success("✅ No hay NE pagadas al contado")
-                            
-                            st.metric("📄 FA en Recepción sin CxP", len(fa_en_recepcion_no_cxp), delta=f"{formato_venezolano(total_fa_en_recepcion_no_cxp)}")
-                            if fa_en_recepcion_no_cxp:
-                                st.warning(f"⚠️ {len(fa_en_recepcion_no_cxp)} FA en Recepción sin CxP")
-                                for item in fa_en_recepcion_no_cxp[:5]:
-                                    st.write(f"- 📄 {item['documento']}: {formato_venezolano(item['monto'])}")
-                                if len(fa_en_recepcion_no_cxp) > 5:
-                                    st.write(f"... y {len(fa_en_recepcion_no_cxp) - 5} más")
-                            else:
-                                st.success("✅ No hay FA sin CxP")
-                        
-                        # Diagnóstico
-                        st.markdown("---")
-                        st.markdown("#### 🎯 Diagnóstico de la Diferencia")
-                        
-                        diferencia_explicada = total_ot_nuevas + total_ne_pago_contado + total_fa_en_recepcion_no_cxp
-                        diferencia_no_explicada = abs(diff_cxp_calc) - diferencia_explicada
-                        
-                        st.markdown(f"""
-                        | Concepto | Monto | Explicación |
-                        |----------|-------|-------------|
-                        | **Diferencia Total** | {formato_venezolano(abs(diff_cxp_calc))} | Diferencia en CxP Calculado vs Reportado |
-                        | 🆕 **OT Nuevas** | {formato_venezolano(total_ot_nuevas)} | Cargas manuales nuevas |
-                        | ⚠️ **NE Pago al Contado** | {formato_venezolano(total_ne_pago_contado)} | NE en Recepciones pero NO en CxP |
-                        | 📄 **FA en Recepción sin CxP** | {formato_venezolano(total_fa_en_recepcion_no_cxp)} | Facturas en Recepción pero NO en CxP |
-                        | **Diferencia Explicada** | {formato_venezolano(diferencia_explicada)} | Suma de diferencias identificadas |
-                        | **Diferencia NO Explicada** | {formato_venezolano(diferencia_no_explicada)} | ⚠️ Requiere revisión manual |
-                        """)
-                        
-                        if abs(diferencia_no_explicada) < 0.01:
-                            st.success("✅ **¡DIFERENCIA EXPLICADA COMPLETAMENTE!**")
-                        else:
-                            st.error(f"❌ **DIFERENCIA NO EXPLICADA:** {formato_venezolano(diferencia_no_explicada)} Bs.")
-                
-                # Botón para cerrar todas las vistas de CxP
-                col_btn_close1, col_btn_close2, col_btn_close3 = st.columns(3)
-                with col_btn_close2:
-                    if st.button("🔒 Cerrar todas las vistas de CxP", width='stretch'):
-                        st.session_state['mostrar_cxp_actual'] = False
-                        st.session_state['mostrar_cxp_recepciones'] = False
-                        st.session_state['mostrar_cxp_cruzado'] = False
-                        st.rerun()
-                
-            except Exception as e:
-                st.error(f"❌ Error en el análisis de documentos: {str(e)}")
-                import traceback
-                st.code(traceback.format_exc())
-    
-    st.markdown("---")
-    
-    # ============================================================
-    # 🔥 TRAZABILIDAD DE TRANSFERENCIAS EN TRÁNSITO (MEJORADO)
-    # ============================================================
-    st.markdown("### 🔍 Trazabilidad de Transferencias en Tránsito")
-    st.caption("Análisis detallado: Tránsito Anterior + Ingresos - Cobranzas = Tránsito Calculado vs Tránsito Reportado")
-    
-    # Mostrar el cálculo paso a paso
-    st.markdown("#### 📊 Paso a paso del cálculo")
-    
-    col_t1, col_t2, col_t3, col_t4, col_t5 = st.columns(5)
-    
-    with col_t1:
-        st.metric("🔄 Tránsito Anterior", formato_venezolano(transito_anterior))
-    with col_t2:
-        st.metric("📈 Total Ingresos", formato_venezolano(total_ingresos))
-    with col_t3:
-        st.metric("💰 Cobranzas", formato_venezolano(cobranzas))
-    with col_t4:
-        st.metric("📊 Tránsito Calculado", formato_venezolano(transito_calculado))
-    with col_t5:
-        st.metric("📄 Tránsito Reportado", formato_venezolano(transito_reportado) if transito_reportado is not None else "N/A")
-    
-    # Verificar si hay diferencia
-    diff_transito_calc = safe_number(transito_calculado) - safe_number(transito_reportado) if transito_reportado is not None else 0
-    
-    if abs(diff_transito_calc) < 0.01:
-        st.success("✅ **¡CONCILIACIÓN PERFECTA!** El Tránsito Calculado coincide con el Tránsito Reportado.")
-    else:
-        st.error(f"⚠️ **DIFERENCIA DETECTADA:** {formato_venezolano(abs(diff_transito_calc))} Bs. de diferencia")
-        
-        # Botones para análisis
-        st.markdown("---")
-        col_btn_t1, col_btn_t2 = st.columns(2)
-        
-        with col_btn_t1:
-            if st.button("📊 Ver Análisis de Transferencias", width='stretch', key="btn_transito_analisis"):
-                st.session_state['mostrar_transito_analisis'] = not st.session_state.get('mostrar_transito_analisis', False)
-        
-        with col_btn_t2:
-            if st.button("📋 Ver Detalle de TB", width='stretch', key="btn_transito_tb"):
-                st.session_state['mostrar_transito_tb'] = not st.session_state.get('mostrar_transito_tb', False)
-        
-        if st.session_state.get('mostrar_transito_analisis', False) or st.session_state.get('mostrar_transito_tb', False):
-            try:
-                import re
-                
-                tiene_tb = 'df_tb' in locals() and df_tb is not None
-                tiene_cobranzas = 'df_cobranzas' in locals() and df_cobranzas is not None
-                
-                # Extraer TB
-                tb_docs = {}
-                if tiene_tb and st.session_state.get('mostrar_transito_tb', False):
-                    df_tb_clean = ProcesadorArchivos._limpiar_columnas(df_tb)
                     
-                    idx_tb = None
-                    for idx, row in df_tb_clean.iterrows():
-                        row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                        if any(k in row_str for k in ['total tb', 'tb', 'transferencia']):
-                            idx_tb = idx
-                            break
-                    if idx_tb is None:
-                        idx_tb = ProcesadorArchivos._encontrar_fila_datos(df_tb_clean, ['banco', 'referencia', 'monto'])
-                    
-                    if idx_tb is not None and idx_tb >= 0 and idx_tb < len(df_tb_clean):
-                        df_datos = df_tb_clean.iloc[idx_tb:].reset_index(drop=True)
-                        if len(df_datos) > 0:
-                            header_row = df_datos.iloc[0]
-                            new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
-                            df_datos.columns = new_cols
-                            df_tb_clean = df_datos.iloc[1:].reset_index(drop=True)
-                    
-                    col_ref = ProcesadorArchivos._buscar_columna(df_tb_clean, 'referencia', 'nro', 'deposito', 'documento')
-                    col_monto_tb = ProcesadorArchivos._buscar_columna(df_tb_clean, 'monto', 'total', 'importe', 'saldo')
-                    
-                    if col_ref and col_monto_tb:
-                        for idx, row in df_tb_clean.iterrows():
-                            ref = str(row[col_ref]).strip()
-                            monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_tb])
-                            if ref and ref != 'nan' and ref != 'None' and monto:
-                                ref_norm = re.sub(r'[^0-9]', '', ref)
-                                if ref_norm:
-                                    tb_docs[ref_norm] = {
-                                        'referencia': ref,
-                                        'monto': float(monto)
-                                    }
-                    
-                    with st.expander("📄 Transferencias en Tránsito (TB)", expanded=True):
-                        if tb_docs:
-                            df_tb_docs = pd.DataFrame(list(tb_docs.values()))
-                            st.dataframe(df_tb_docs, width='stretch')
-                            st.metric("📄 Total TB", len(tb_docs))
-                        else:
-                            st.info("No hay transferencias en TB")
-                
-                # Análisis cruzado
-                if st.session_state.get('mostrar_transito_analisis', False):
-                    with st.expander("📊 Análisis de Transferencias", expanded=True):
-                        # Extraer cobranzas
-                        cobranzas_docs = {}
-                        if tiene_cobranzas:
-                            df_cob_clean = ProcesadorArchivos._limpiar_columnas(df_cobranzas)
-                            
-                            idx_cob = None
-                            for idx, row in df_cob_clean.iterrows():
-                                row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                                if 'banco' in row_str and 'cuenta' in row_str and 'deposito' in row_str:
-                                    idx_cob = idx
-                                    break
-                            if idx_cob is None:
-                                idx_cob = ProcesadorArchivos._encontrar_fila_datos(df_cob_clean, ['banco', 'deposito', 'monto'])
-                            
-                            if idx_cob is not None and idx_cob >= 0 and idx_cob < len(df_cob_clean):
-                                df_datos = df_cob_clean.iloc[idx_cob:].reset_index(drop=True)
-                                if len(df_datos) > 0:
-                                    header_row = df_datos.iloc[0]
-                                    new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
-                                    df_datos.columns = new_cols
-                                    df_cob_clean = df_datos.iloc[1:].reset_index(drop=True)
-                            
-                            col_ref_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'deposito', 'nro', 'referencia', 'documento')
-                            col_monto_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'monto', 'total', 'importe')
-                            
-                            if col_ref_cob and col_monto_cob:
-                                for idx, row in df_cob_clean.iterrows():
-                                    ref = str(row[col_ref_cob]).strip()
-                                    monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_cob])
-                                    if ref and ref != 'nan' and ref != 'None' and monto:
-                                        ref_norm = re.sub(r'[^0-9]', '', ref)
-                                        if ref_norm:
-                                            cobranzas_docs[ref_norm] = {
-                                                'referencia': ref,
-                                                'monto': float(monto)
-                                            }
+                    # ============================================================
+                    # 2. EXTRAER DOCUMENTOS DE RECEPCIONES
+                    # ============================================================
+                    recepciones_docs = {}
+                    if tiene_recepciones:
+                        df_rec_clean = ProcesadorArchivos._limpiar_columnas(df_recepciones)
                         
-                        # Clasificar
-                        transito_pendiente = []
-                        for ref_norm, info in tb_docs.items():
-                            if ref_norm not in cobranzas_docs:
-                                transito_pendiente.append({
-                                    'referencia': info['referencia'],
-                                    'monto': info['monto'],
-                                    'estado': '⏳ PENDIENTE'
-                                })
-                        
-                        transito_ya_cobrado = []
-                        for ref_norm, info in tb_docs.items():
-                            if ref_norm in cobranzas_docs:
-                                transito_ya_cobrado.append({
-                                    'referencia': info['referencia'],
-                                    'monto': info['monto'],
-                                    'estado': '✅ YA COBRADO'
-                                })
-                        
-                        total_pendiente = sum([x['monto'] for x in transito_pendiente])
-                        total_ya_cobrado = sum([x['monto'] for x in transito_ya_cobrado])
-                        
-                        col_a1, col_a2 = st.columns(2)
-                        
-                        with col_a1:
-                            st.metric("⏳ Pendientes de Cobro", len(transito_pendiente), delta=f"{formato_venezolano(total_pendiente)}")
-                            if transito_pendiente:
-                                st.warning(f"⏳ {len(transito_pendiente)} transferencias pendientes")
-                                for item in transito_pendiente[:5]:
-                                    st.write(f"- 📄 {item['referencia']}: {formato_venezolano(item['monto'])}")
-                                if len(transito_pendiente) > 5:
-                                    st.write(f"... y {len(transito_pendiente) - 5} más")
-                            else:
-                                st.success("✅ No hay transferencias pendientes")
-                        
-                        with col_a2:
-                            st.metric("✅ Ya Cobradas", len(transito_ya_cobrado), delta=f"{formato_venezolano(total_ya_cobrado)}")
-                            if transito_ya_cobrado:
-                                st.success(f"✅ {len(transito_ya_cobrado)} transferencias ya cobradas")
-                                for item in transito_ya_cobrado[:5]:
-                                    st.write(f"- 📄 {item['referencia']}: {formato_venezolano(item['monto'])}")
-                                if len(transito_ya_cobrado) > 5:
-                                    st.write(f"... y {len(transito_ya_cobrado) - 5} más")
-                            else:
-                                st.info("ℹ️ No hay transferencias ya cobradas")
-                        
-                        # Diagnóstico
-                        st.markdown("---")
-                        st.markdown("#### 🎯 Diagnóstico")
-                        
-                        diferencia_explicada_transito = total_pendiente + total_ya_cobrado
-                        diferencia_no_explicada_transito = abs(diff_transito_calc) - diferencia_explicada_transito
-                        
-                        st.markdown(f"""
-                        | Concepto | Monto | Explicación |
-                        |----------|-------|-------------|
-                        | **Diferencia Total** | {formato_venezolano(abs(diff_transito_calc))} | Diferencia en Tránsito |
-                        | ⏳ **Pendientes** | {formato_venezolano(total_pendiente)} | En TB pero NO en Cobranzas |
-                        | ✅ **Ya Cobradas** | {formato_venezolano(total_ya_cobrado)} | En TB y en Cobranzas |
-                        | **Diferencia Explicada** | {formato_venezolano(diferencia_explicada_transito)} | Suma de pendientes + cobradas |
-                        | **Diferencia NO Explicada** | {formato_venezolano(diferencia_no_explicada_transito)} | ⚠️ Requiere revisión |
-                        """)
-                        
-                        if abs(diferencia_no_explicada_transito) < 0.01:
-                            st.success("✅ **¡DIFERENCIA EXPLICADA COMPLETAMENTE!**")
-                        else:
-                            st.error(f"❌ **DIFERENCIA NO EXPLICADA:** {formato_venezolano(diferencia_no_explicada_transito)} Bs.")
-                
-                # Botón para cerrar vistas de Tránsito
-                if st.button("🔒 Cerrar todas las vistas de Tránsito", width='stretch'):
-                    st.session_state['mostrar_transito_analisis'] = False
-                    st.session_state['mostrar_transito_tb'] = False
-                    st.rerun()
-                    
-            except Exception as e:
-                st.error(f"❌ Error en el análisis de transferencias: {str(e)}")
-                import traceback
-                st.code(traceback.format_exc())
-    
-    st.markdown("---")
-    
-    # ============================================================
-    # 🔥 TRAZABILIDAD DE CUENTAS POR COBRAR (MEJORADO)
-    # ============================================================
-    st.markdown("### 🔍 Trazabilidad de Cuentas por Cobrar")
-    st.caption("Análisis detallado: CxC Anterior + Facturación - Cobranzas - NC Clientes = CxC Calculado vs CxC Reportado")
-    
-    # Mostrar el cálculo paso a paso
-    st.markdown("#### 📊 Paso a paso del cálculo")
-    
-    col_c1, col_c2, col_c3, col_c4, col_c5, col_c6 = st.columns(6)
-    
-    with col_c1:
-        st.metric("💰 CxC Anterior", formato_venezolano(cx_c_anterior))
-    with col_c2:
-        st.metric("📊 Facturación", formato_venezolano(facturacion))
-    with col_c3:
-        st.metric("💰 Cobranzas", formato_venezolano(cobranzas))
-    with col_c4:
-        st.metric("📝 NC Clientes", formato_venezolano(notas_credito_cliente))
-    with col_c5:
-        st.metric("📊 CxC Calculado", formato_venezolano(cx_c_calculado))
-    with col_c6:
-        st.metric("📄 CxC Reportado", formato_venezolano(cx_c_reportado) if cx_c_reportado is not None else "N/A")
-    
-    # Verificar si hay diferencia
-    diff_cxc_calc = safe_number(cx_c_calculado) - safe_number(cx_c_reportado) if cx_c_reportado is not None else 0
-    
-    if abs(diff_cxc_calc) < 0.01:
-        st.success("✅ **¡CONCILIACIÓN PERFECTA!** El CxC Calculado coincide con el CxC Reportado.")
-    else:
-        st.error(f"⚠️ **DIFERENCIA DETECTADA:** {formato_venezolano(abs(diff_cxc_calc))} Bs. de diferencia")
-        
-        # Botones para análisis
-        st.markdown("---")
-        col_btn_cxc1, col_btn_cxc2, col_btn_cxc3 = st.columns(3)
-        
-        with col_btn_cxc1:
-            if st.button("🔴 Ver Cobranzas Duplicadas", width='stretch', key="btn_cxc_duplicadas"):
-                st.session_state['mostrar_cxc_duplicadas'] = not st.session_state.get('mostrar_cxc_duplicadas', False)
-        
-        with col_btn_cxc2:
-            if st.button("📝 Ver Notas de Crédito", width='stretch', key="btn_cxc_nc"):
-                st.session_state['mostrar_cxc_nc'] = not st.session_state.get('mostrar_cxc_nc', False)
-        
-        with col_btn_cxc3:
-            if st.button("📊 Ver Análisis Completo", width='stretch', key="btn_cxc_completo"):
-                st.session_state['mostrar_cxc_completo'] = not st.session_state.get('mostrar_cxc_completo', False)
-        
-        if st.session_state.get('mostrar_cxc_duplicadas', False) or st.session_state.get('mostrar_cxc_nc', False) or st.session_state.get('mostrar_cxc_completo', False):
-            try:
-                import re
-                import os
-                from datetime import timedelta
-                from config import RUTA_ARCHIVOS
-                
-                tiene_cobranzas = 'df_cobranzas' in locals() and df_cobranzas is not None
-                tiene_notas_cliente = 'df_notas_cliente' in locals() and df_notas_cliente is not None
-                
-                # Extraer cobranzas actuales
-                cobranzas_actual_docs = {}
-                if tiene_cobranzas:
-                    df_cob_clean = ProcesadorArchivos._limpiar_columnas(df_cobranzas)
-                    
-                    idx_cob = None
-                    for idx, row in df_cob_clean.iterrows():
-                        row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                        if 'banco' in row_str and 'cuenta' in row_str and 'deposito' in row_str:
-                            idx_cob = idx
-                            break
-                    if idx_cob is None:
-                        idx_cob = ProcesadorArchivos._encontrar_fila_datos(df_cob_clean, ['banco', 'deposito', 'monto'])
-                    
-                    if idx_cob is not None and idx_cob >= 0 and idx_cob < len(df_cob_clean):
-                        df_datos = df_cob_clean.iloc[idx_cob:].reset_index(drop=True)
-                        if len(df_datos) > 0:
-                            header_row = df_datos.iloc[0]
-                            new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
-                            df_datos.columns = new_cols
-                            df_cob_clean = df_datos.iloc[1:].reset_index(drop=True)
-                    
-                    col_ref_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'deposito', 'nro', 'referencia', 'documento')
-                    col_monto_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'monto', 'total', 'importe')
-                    col_cliente_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'cliente', 'nombre', 'rif', 'cedula')
-                    
-                    if col_ref_cob and col_monto_cob:
-                        for idx, row in df_cob_clean.iterrows():
-                            ref = str(row[col_ref_cob]).strip()
-                            monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_cob])
-                            if ref and ref != 'nan' and ref != 'None' and monto:
-                                ref_norm = re.sub(r'[^0-9]', '', ref)
-                                if ref_norm:
-                                    cliente = ''
-                                    if col_cliente_cob:
-                                        try:
-                                            cliente_val = str(row[col_cliente_cob]).strip()
-                                            if cliente_val and cliente_val != 'nan' and cliente_val != 'None':
-                                                cliente = cliente_val
-                                        except:
-                                            pass
-                                    
-                                    cobranzas_actual_docs[ref_norm] = {
-                                        'referencia': ref,
-                                        'monto': float(monto),
-                                        'cliente': cliente
-                                    }
-                
-                # Extraer cobranzas del día anterior
-                cobranzas_anterior_docs = {}
-                try:
-                    empresa_clean = re.sub(r'[^\w\-_]', '_', st.session_state.empresa_activa)
-                    fecha_ant_str = (pd.Timestamp(fecha_procesar) - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
-                    filename_ant = f"cobranzas_{empresa_clean}_{fecha_ant_str}.xlsx"
-                    filepath_ant = os.path.join(RUTA_ARCHIVOS, filename_ant)
-                    
-                    if os.path.exists(filepath_ant):
-                        df_cob_ant = pd.read_excel(filepath_ant)
-                        df_cob_ant_clean = ProcesadorArchivos._limpiar_columnas(df_cob_ant)
-                        
-                        idx_cob_ant = None
-                        for idx, row in df_cob_ant_clean.iterrows():
+                        idx_rec = None
+                        for idx, row in df_rec_clean.iterrows():
                             row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                            if 'banco' in row_str and 'cuenta' in row_str and 'deposito' in row_str:
-                                idx_cob_ant = idx
+                            if 'compra' in row_str and 'proveedor' in row_str and 'recep' in row_str:
+                                idx_rec = idx
                                 break
-                        if idx_cob_ant is None:
-                            idx_cob_ant = ProcesadorArchivos._encontrar_fila_datos(df_cob_ant_clean, ['banco', 'deposito', 'monto'])
+                        if idx_rec is None:
+                            idx_rec = ProcesadorArchivos._encontrar_fila_datos(df_rec_clean, ['compra', 'proveedor', 'recep'])
                         
-                        if idx_cob_ant is not None and idx_cob_ant >= 0 and idx_cob_ant < len(df_cob_ant_clean):
-                            df_datos = df_cob_ant_clean.iloc[idx_cob_ant:].reset_index(drop=True)
+                        if idx_rec is not None and idx_rec >= 0 and idx_rec < len(df_rec_clean):
+                            df_datos = df_rec_clean.iloc[idx_rec:].reset_index(drop=True)
+                            if len(df_datos) > 0:
+                                header_row = df_datos.iloc[0]
+                                new_cols = [str(col).strip() if pd.notna(col) else f'col_{i}' for i, col in enumerate(header_row)]
+                                df_datos.columns = new_cols
+                                df_rec_clean = df_datos.iloc[1:].reset_index(drop=True)
+                        
+                        cols_doc_rec = []
+                        for col in df_rec_clean.columns:
+                            col_l = str(col).lower()
+                            if 'fact' in col_l or 'compra' in col_l or 'documento' in col_l:
+                                cols_doc_rec.append(col)
+                        
+                        col_rec_monto = None
+                        for col in df_rec_clean.columns:
+                            clean_col = re.sub(r'[^a-z0-9]', '', str(col).lower())
+                            if 'neto' in clean_col and 'iva' in clean_col:
+                                col_rec_monto = col
+                                break
+                        if col_rec_monto is None:
+                            for col in df_rec_clean.columns:
+                                clean_col = re.sub(r'[^a-z0-9]', '', str(col).lower())
+                                if 'neto' in clean_col or 'total' in clean_col:
+                                    col_rec_monto = col
+                                    break
+                        
+                        if cols_doc_rec and col_rec_monto:
+                            for idx, row in df_rec_clean.iterrows():
+                                monto = ProcesadorArchivos._convertir_numero_europeo(row[col_rec_monto])
+                                if not monto:
+                                    continue
+                                for col_doc in cols_doc_rec:
+                                    doc = str(row[col_doc]).strip()
+                                    if doc and doc != 'nan' and doc != 'None':
+                                        doc_norm = re.sub(r'[^0-9]', '', doc)
+                                        doc_norm = re.sub(r'^0+', '', doc_norm)
+                                        if doc_norm:
+                                            doc_upper = doc.upper()
+                                            if 'NE' in doc_upper:
+                                                tipo = 'NE'
+                                            elif 'OT' in doc_upper:
+                                                tipo = 'OT'
+                                            elif 'FA' in doc_upper or 'FACT' in doc_upper:
+                                                tipo = 'FA'
+                                            else:
+                                                tipo = 'DESCONOCIDO'
+                                            recepciones_docs[doc_norm] = {
+                                                'original': doc,
+                                                'monto': float(monto),
+                                                'tipo': tipo
+                                            }
+                    
+                    # ============================================================
+                    # MOSTRAR DOCUMENTOS SEGÚN BOTONES
+                    # ============================================================
+                    if st.session_state.get('mostrar_cxp_actual', False):
+                        with st.expander("📋 Documentos en CxP Reportado (Día Actual)", expanded=True):
+                            if cxp_actual_docs:
+                                df_cxp_docs = pd.DataFrame(list(cxp_actual_docs.values()))
+                                tipos_actual = {}
+                                for doc in cxp_actual_docs.values():
+                                    tipos_actual[doc['tipo']] = tipos_actual.get(doc['tipo'], 0) + 1
+                                st.write("**Clasificación:** " + ", ".join([f"{k}: {v}" for k, v in tipos_actual.items()]))
+                                st.dataframe(df_cxp_docs, use_container_width=True)
+                                st.metric("📄 Total Documentos", len(cxp_actual_docs))
+                            else:
+                                st.info("No hay documentos en CxP Reportado")
+                    
+                    if st.session_state.get('mostrar_cxp_recepciones', False):
+                        with st.expander("📦 Documentos en Recepciones", expanded=True):
+                            if recepciones_docs:
+                                df_rec_docs = pd.DataFrame(list(recepciones_docs.values()))
+                                tipos_rec = {}
+                                for doc in recepciones_docs.values():
+                                    tipos_rec[doc['tipo']] = tipos_rec.get(doc['tipo'], 0) + 1
+                                st.write("**Clasificación:** " + ", ".join([f"{k}: {v}" for k, v in tipos_rec.items()]))
+                                st.dataframe(df_rec_docs, use_container_width=True)
+                                st.metric("📦 Total Recepciones", len(recepciones_docs))
+                            else:
+                                st.info("No hay documentos en Recepciones")
+                    
+                    # ============================================================
+                    # ANÁLISIS CRUZADO DE DOCUMENTOS
+                    # ============================================================
+                    if st.session_state.get('mostrar_cxp_cruzado', False):
+                        with st.expander("📊 Análisis Cruzado de Documentos", expanded=True):
+                            # Clasificar documentos
+                            ot_nuevas = []
+                            for doc_norm, info in cxp_actual_docs.items():
+                                if info['tipo'] == 'OT':
+                                    ot_nuevas.append({
+                                        'documento': info['original'],
+                                        'monto': info['monto'],
+                                        'proveedor': info.get('proveedor', 'No identificado'),
+                                        'tipo': 'OT NUEVA (Carga Manual)'
+                                    })
+                            
+                            ne_pago_contado = []
+                            for doc_norm, info in recepciones_docs.items():
+                                if info['tipo'] == 'NE' and doc_norm not in cxp_actual_docs:
+                                    ne_pago_contado.append({
+                                        'documento': info['original'],
+                                        'monto': info['monto'],
+                                        'tipo': 'NE (Pago al Contado)'
+                                    })
+                            
+                            fa_en_cxp_no_recepcion = []
+                            for doc_norm, info in cxp_actual_docs.items():
+                                if info['tipo'] == 'FA' and doc_norm not in recepciones_docs:
+                                    fa_en_cxp_no_recepcion.append({
+                                        'documento': info['original'],
+                                        'monto': info['monto'],
+                                        'proveedor': info.get('proveedor', 'No identificado'),
+                                        'tipo': 'FA en CxP sin Recepción'
+                                    })
+                            
+                            fa_en_recepcion_no_cxp = []
+                            for doc_norm, info in recepciones_docs.items():
+                                if info['tipo'] == 'FA' and doc_norm not in cxp_actual_docs:
+                                    fa_en_recepcion_no_cxp.append({
+                                        'documento': info['original'],
+                                        'monto': info['monto'],
+                                        'tipo': 'FA en Recepción sin CxP'
+                                    })
+                            
+                            total_ot_nuevas = sum([x['monto'] for x in ot_nuevas])
+                            total_ne_pago_contado = sum([x['monto'] for x in ne_pago_contado])
+                            total_fa_en_cxp_no_recepcion = sum([x['monto'] for x in fa_en_cxp_no_recepcion])
+                            total_fa_en_recepcion_no_cxp = sum([x['monto'] for x in fa_en_recepcion_no_cxp])
+                            
+                            # Mostrar resultados
+                            col_a1, col_a2 = st.columns(2)
+                            
+                            with col_a1:
+                                st.metric("🆕 OT Nuevas", len(ot_nuevas), delta=f"{formato_venezolano(total_ot_nuevas)}")
+                                if ot_nuevas:
+                                    st.warning(f"⚠️ {len(ot_nuevas)} OT nuevas detectadas")
+                                    for item in ot_nuevas[:5]:
+                                        st.write(f"- 📄 {item['documento']}: {formato_venezolano(item['monto'])}")
+                                    if len(ot_nuevas) > 5:
+                                        st.write(f"... y {len(ot_nuevas) - 5} más")
+                                else:
+                                    st.success("✅ No hay OT nuevas")
+                                
+                                st.metric("📄 FA en CxP sin Recepción", len(fa_en_cxp_no_recepcion), delta=f"{formato_venezolano(total_fa_en_cxp_no_recepcion)}")
+                                if fa_en_cxp_no_recepcion:
+                                    st.error(f"❌ {len(fa_en_cxp_no_recepcion)} FA en CxP sin Recepción")
+                                    for item in fa_en_cxp_no_recepcion[:5]:
+                                        st.write(f"- 📄 {item['documento']}: {formato_venezolano(item['monto'])} ({item['proveedor']})")
+                                    if len(fa_en_cxp_no_recepcion) > 5:
+                                        st.write(f"... y {len(fa_en_cxp_no_recepcion) - 5} más")
+                                else:
+                                    st.success("✅ No hay FA sin Recepción")
+                            
+                            with col_a2:
+                                st.metric("⚠️ NE Pago al Contado", len(ne_pago_contado), delta=f"{formato_venezolano(total_ne_pago_contado)}")
+                                if ne_pago_contado:
+                                    st.info(f"ℹ️ {len(ne_pago_contado)} NE pagadas al contado")
+                                    for item in ne_pago_contado[:5]:
+                                        st.write(f"- 📄 {item['documento']}: {formato_venezolano(item['monto'])}")
+                                    if len(ne_pago_contado) > 5:
+                                        st.write(f"... y {len(ne_pago_contado) - 5} más")
+                                else:
+                                    st.success("✅ No hay NE pagadas al contado")
+                                
+                                st.metric("📄 FA en Recepción sin CxP", len(fa_en_recepcion_no_cxp), delta=f"{formato_venezolano(total_fa_en_recepcion_no_cxp)}")
+                                if fa_en_recepcion_no_cxp:
+                                    st.warning(f"⚠️ {len(fa_en_recepcion_no_cxp)} FA en Recepción sin CxP")
+                                    for item in fa_en_recepcion_no_cxp[:5]:
+                                        st.write(f"- 📄 {item['documento']}: {formato_venezolano(item['monto'])}")
+                                    if len(fa_en_recepcion_no_cxp) > 5:
+                                        st.write(f"... y {len(fa_en_recepcion_no_cxp) - 5} más")
+                                else:
+                                    st.success("✅ No hay FA sin CxP")
+                            
+                            # Diagnóstico
+                            st.markdown("---")
+                            st.markdown("#### 🎯 Diagnóstico de la Diferencia")
+                            
+                            diferencia_explicada = total_ot_nuevas + total_ne_pago_contado + total_fa_en_recepcion_no_cxp
+                            diferencia_no_explicada = abs(diff_cxp_calc) - diferencia_explicada
+                            
+                            st.markdown(f"""
+                            | Concepto | Monto | Explicación |
+                            |----------|-------|-------------|
+                            | **Diferencia Total** | {formato_venezolano(abs(diff_cxp_calc))} | Diferencia en CxP Calculado vs Reportado |
+                            | 🆕 **OT Nuevas** | {formato_venezolano(total_ot_nuevas)} | Cargas manuales nuevas |
+                            | ⚠️ **NE Pago al Contado** | {formato_venezolano(total_ne_pago_contado)} | NE en Recepciones pero NO en CxP |
+                            | 📄 **FA en Recepción sin CxP** | {formato_venezolano(total_fa_en_recepcion_no_cxp)} | Facturas en Recepción pero NO en CxP |
+                            | **Diferencia Explicada** | {formato_venezolano(diferencia_explicada)} | Suma de diferencias identificadas |
+                            | **Diferencia NO Explicada** | {formato_venezolano(diferencia_no_explicada)} | ⚠️ Requiere revisión manual |
+                            """)
+                            
+                            if abs(diferencia_no_explicada) < 0.01:
+                                st.success("✅ **¡DIFERENCIA EXPLICADA COMPLETAMENTE!**")
+                            else:
+                                st.error(f"❌ **DIFERENCIA NO EXPLICADA:** {formato_venezolano(diferencia_no_explicada)} Bs.")
+                    
+                    # Botón para cerrar todas las vistas de CxP
+                    col_btn_close1, col_btn_close2, col_btn_close3 = st.columns(3)
+                    with col_btn_close2:
+                        if st.button("🔒 Cerrar todas las vistas de CxP", width='stretch'):
+                            st.session_state['mostrar_cxp_actual'] = False
+                            st.session_state['mostrar_cxp_recepciones'] = False
+                            st.session_state['mostrar_cxp_cruzado'] = False
+                            st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"❌ Error en el análisis de documentos: {str(e)}")
+                    import traceback
+                    st.code(traceback.format_exc())
+        
+        st.markdown("---")
+        
+        # ============================================================
+        # 🔥 TRAZABILIDAD DE TRANSFERENCIAS EN TRÁNSITO (MEJORADO)
+        # ============================================================
+        st.markdown("### 🔍 Trazabilidad de Transferencias en Tránsito")
+        st.caption("Análisis detallado: Tránsito Anterior + Ingresos - Cobranzas = Tránsito Calculado vs Tránsito Reportado")
+        
+        # Mostrar el cálculo paso a paso
+        st.markdown("#### 📊 Paso a paso del cálculo")
+        
+        col_t1, col_t2, col_t3, col_t4, col_t5 = st.columns(5)
+        
+        with col_t1:
+            st.metric("🔄 Tránsito Anterior", formato_venezolano(transito_anterior))
+        with col_t2:
+            st.metric("📈 Total Ingresos", formato_venezolano(total_ingresos))
+        with col_t3:
+            st.metric("💰 Cobranzas", formato_venezolano(cobranzas))
+        with col_t4:
+            st.metric("📊 Tránsito Calculado", formato_venezolano(transito_calculado))
+        with col_t5:
+            st.metric("📄 Tránsito Reportado", formato_venezolano(transito_reportado) if transito_reportado is not None else "N/A")
+        
+        # Verificar si hay diferencia
+        diff_transito_calc = safe_number(transito_calculado) - safe_number(transito_reportado) if transito_reportado is not None else 0
+        
+        if abs(diff_transito_calc) < 0.01:
+            st.success("✅ **¡CONCILIACIÓN PERFECTA!** El Tránsito Calculado coincide con el Tránsito Reportado.")
+        else:
+            st.error(f"⚠️ **DIFERENCIA DETECTADA:** {formato_venezolano(abs(diff_transito_calc))} Bs. de diferencia")
+            
+            # Botones para análisis
+            st.markdown("---")
+            col_btn_t1, col_btn_t2 = st.columns(2)
+            
+            with col_btn_t1:
+                if st.button("📊 Ver Análisis de Transferencias", width='stretch', key="btn_transito_analisis_tab2"):
+                    st.session_state['mostrar_transito_analisis'] = not st.session_state.get('mostrar_transito_analisis', False)
+            
+            with col_btn_t2:
+                if st.button("📋 Ver Detalle de TB", width='stretch', key="btn_transito_tb_tab2"):
+                    st.session_state['mostrar_transito_tb'] = not st.session_state.get('mostrar_transito_tb', False)
+            
+            if st.session_state.get('mostrar_transito_analisis', False) or st.session_state.get('mostrar_transito_tb', False):
+                try:
+                    import re
+                    
+                    tiene_tb = 'df_tb' in locals() and df_tb is not None
+                    tiene_cobranzas = 'df_cobranzas' in locals() and df_cobranzas is not None
+                    
+                    # Extraer TB
+                    tb_docs = {}
+                    if tiene_tb and st.session_state.get('mostrar_transito_tb', False):
+                        df_tb_clean = ProcesadorArchivos._limpiar_columnas(df_tb)
+                        
+                        idx_tb = None
+                        for idx, row in df_tb_clean.iterrows():
+                            row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                            if any(k in row_str for k in ['total tb', 'tb', 'transferencia']):
+                                idx_tb = idx
+                                break
+                        if idx_tb is None:
+                            idx_tb = ProcesadorArchivos._encontrar_fila_datos(df_tb_clean, ['banco', 'referencia', 'monto'])
+                        
+                        if idx_tb is not None and idx_tb >= 0 and idx_tb < len(df_tb_clean):
+                            df_datos = df_tb_clean.iloc[idx_tb:].reset_index(drop=True)
                             if len(df_datos) > 0:
                                 header_row = df_datos.iloc[0]
                                 new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
                                 df_datos.columns = new_cols
-                                df_cob_ant_clean = df_datos.iloc[1:].reset_index(drop=True)
+                                df_tb_clean = df_datos.iloc[1:].reset_index(drop=True)
                         
-                        col_ref_cob_ant = ProcesadorArchivos._buscar_columna(df_cob_ant_clean, 'deposito', 'nro', 'referencia', 'documento')
-                        col_monto_cob_ant = ProcesadorArchivos._buscar_columna(df_cob_ant_clean, 'monto', 'total', 'importe')
+                        col_ref = ProcesadorArchivos._buscar_columna(df_tb_clean, 'referencia', 'nro', 'deposito', 'documento')
+                        col_monto_tb = ProcesadorArchivos._buscar_columna(df_tb_clean, 'monto', 'total', 'importe', 'saldo')
                         
-                        if col_ref_cob_ant and col_monto_cob_ant:
-                            for idx, row in df_cob_ant_clean.iterrows():
-                                ref = str(row[col_ref_cob_ant]).strip()
-                                monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_cob_ant])
+                        if col_ref and col_monto_tb:
+                            for idx, row in df_tb_clean.iterrows():
+                                ref = str(row[col_ref]).strip()
+                                monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_tb])
                                 if ref and ref != 'nan' and ref != 'None' and monto:
                                     ref_norm = re.sub(r'[^0-9]', '', ref)
                                     if ref_norm:
-                                        cobranzas_anterior_docs[ref_norm] = {
+                                        tb_docs[ref_norm] = {
                                             'referencia': ref,
                                             'monto': float(monto)
                                         }
+                        
+                        with st.expander("📄 Transferencias en Tránsito (TB)", expanded=True):
+                            if tb_docs:
+                                df_tb_docs = pd.DataFrame(list(tb_docs.values()))
+                                st.dataframe(df_tb_docs, use_container_width=True)
+                                st.metric("📄 Total TB", len(tb_docs))
+                            else:
+                                st.info("No hay transferencias en TB")
+                    
+                    # Análisis cruzado
+                    if st.session_state.get('mostrar_transito_analisis', False):
+                        with st.expander("📊 Análisis de Transferencias", expanded=True):
+                            # Extraer cobranzas
+                            cobranzas_docs = {}
+                            if tiene_cobranzas:
+                                df_cob_clean = ProcesadorArchivos._limpiar_columnas(df_cobranzas)
+                                
+                                idx_cob = None
+                                for idx, row in df_cob_clean.iterrows():
+                                    row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                                    if 'banco' in row_str and 'cuenta' in row_str and 'deposito' in row_str:
+                                        idx_cob = idx
+                                        break
+                                if idx_cob is None:
+                                    idx_cob = ProcesadorArchivos._encontrar_fila_datos(df_cob_clean, ['banco', 'deposito', 'monto'])
+                                
+                                if idx_cob is not None and idx_cob >= 0 and idx_cob < len(df_cob_clean):
+                                    df_datos = df_cob_clean.iloc[idx_cob:].reset_index(drop=True)
+                                    if len(df_datos) > 0:
+                                        header_row = df_datos.iloc[0]
+                                        new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
+                                        df_datos.columns = new_cols
+                                        df_cob_clean = df_datos.iloc[1:].reset_index(drop=True)
+                                
+                                col_ref_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'deposito', 'nro', 'referencia', 'documento')
+                                col_monto_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'monto', 'total', 'importe')
+                                
+                                if col_ref_cob and col_monto_cob:
+                                    for idx, row in df_cob_clean.iterrows():
+                                        ref = str(row[col_ref_cob]).strip()
+                                        monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_cob])
+                                        if ref and ref != 'nan' and ref != 'None' and monto:
+                                            ref_norm = re.sub(r'[^0-9]', '', ref)
+                                            if ref_norm:
+                                                cobranzas_docs[ref_norm] = {
+                                                    'referencia': ref,
+                                                    'monto': float(monto)
+                                                }
+                            
+                            # Clasificar
+                            transito_pendiente = []
+                            for ref_norm, info in tb_docs.items():
+                                if ref_norm not in cobranzas_docs:
+                                    transito_pendiente.append({
+                                        'referencia': info['referencia'],
+                                        'monto': info['monto'],
+                                        'estado': '⏳ PENDIENTE'
+                                    })
+                            
+                            transito_ya_cobrado = []
+                            for ref_norm, info in tb_docs.items():
+                                if ref_norm in cobranzas_docs:
+                                    transito_ya_cobrado.append({
+                                        'referencia': info['referencia'],
+                                        'monto': info['monto'],
+                                        'estado': '✅ YA COBRADO'
+                                    })
+                            
+                            total_pendiente = sum([x['monto'] for x in transito_pendiente])
+                            total_ya_cobrado = sum([x['monto'] for x in transito_ya_cobrado])
+                            
+                            col_a1, col_a2 = st.columns(2)
+                            
+                            with col_a1:
+                                st.metric("⏳ Pendientes de Cobro", len(transito_pendiente), delta=f"{formato_venezolano(total_pendiente)}")
+                                if transito_pendiente:
+                                    st.warning(f"⏳ {len(transito_pendiente)} transferencias pendientes")
+                                    for item in transito_pendiente[:5]:
+                                        st.write(f"- 📄 {item['referencia']}: {formato_venezolano(item['monto'])}")
+                                    if len(transito_pendiente) > 5:
+                                        st.write(f"... y {len(transito_pendiente) - 5} más")
+                                else:
+                                    st.success("✅ No hay transferencias pendientes")
+                            
+                            with col_a2:
+                                st.metric("✅ Ya Cobradas", len(transito_ya_cobrado), delta=f"{formato_venezolano(total_ya_cobrado)}")
+                                if transito_ya_cobrado:
+                                    st.success(f"✅ {len(transito_ya_cobrado)} transferencias ya cobradas")
+                                    for item in transito_ya_cobrado[:5]:
+                                        st.write(f"- 📄 {item['referencia']}: {formato_venezolano(item['monto'])}")
+                                    if len(transito_ya_cobrado) > 5:
+                                        st.write(f"... y {len(transito_ya_cobrado) - 5} más")
+                                else:
+                                    st.info("ℹ️ No hay transferencias ya cobradas")
+                            
+                            # Diagnóstico
+                            st.markdown("---")
+                            st.markdown("#### 🎯 Diagnóstico")
+                            
+                            diferencia_explicada_transito = total_pendiente + total_ya_cobrado
+                            diferencia_no_explicada_transito = abs(diff_transito_calc) - diferencia_explicada_transito
+                            
+                            st.markdown(f"""
+                            | Concepto | Monto | Explicación |
+                            |----------|-------|-------------|
+                            | **Diferencia Total** | {formato_venezolano(abs(diff_transito_calc))} | Diferencia en Tránsito |
+                            | ⏳ **Pendientes** | {formato_venezolano(total_pendiente)} | En TB pero NO en Cobranzas |
+                            | ✅ **Ya Cobradas** | {formato_venezolano(total_ya_cobrado)} | En TB y en Cobranzas |
+                            | **Diferencia Explicada** | {formato_venezolano(diferencia_explicada_transito)} | Suma de pendientes + cobradas |
+                            | **Diferencia NO Explicada** | {formato_venezolano(diferencia_no_explicada_transito)} | ⚠️ Requiere revisión |
+                            """)
+                            
+                            if abs(diferencia_no_explicada_transito) < 0.01:
+                                st.success("✅ **¡DIFERENCIA EXPLICADA COMPLETAMENTE!**")
+                            else:
+                                st.error(f"❌ **DIFERENCIA NO EXPLICADA:** {formato_venezolano(diferencia_no_explicada_transito)} Bs.")
+                    
+                    # Botón para cerrar vistas de Tránsito
+                    if st.button("🔒 Cerrar todas las vistas de Tránsito", width='stretch'):
+                        st.session_state['mostrar_transito_analisis'] = False
+                        st.session_state['mostrar_transito_tb'] = False
+                        st.rerun()
+                        
                 except Exception as e:
-                    pass
-                
-                # Extraer notas de crédito
-                notas_credito_docs = {}
-                if tiene_notas_cliente:
-                    try:
-                        df_nc_clean = ProcesadorArchivos._limpiar_columnas(df_notas_cliente)
+                    st.error(f"❌ Error en el análisis de transferencias: {str(e)}")
+                    import traceback
+                    st.code(traceback.format_exc())
+        
+        st.markdown("---")
+        
+        # ============================================================
+        # 🔥 TRAZABILIDAD DE CUENTAS POR COBRAR (MEJORADO)
+        # ============================================================
+        st.markdown("### 🔍 Trazabilidad de Cuentas por Cobrar")
+        st.caption("Análisis detallado: CxC Anterior + Facturación - Cobranzas - NC Clientes = CxC Calculado vs CxC Reportado")
+        
+        # Mostrar el cálculo paso a paso
+        st.markdown("#### 📊 Paso a paso del cálculo")
+        
+        col_c1, col_c2, col_c3, col_c4, col_c5, col_c6 = st.columns(6)
+        
+        with col_c1:
+            st.metric("💰 CxC Anterior", formato_venezolano(cx_c_anterior))
+        with col_c2:
+            st.metric("📊 Facturación", formato_venezolano(facturacion))
+        with col_c3:
+            st.metric("💰 Cobranzas", formato_venezolano(cobranzas))
+        with col_c4:
+            st.metric("📝 NC Clientes", formato_venezolano(notas_credito_cliente))
+        with col_c5:
+            st.metric("📊 CxC Calculado", formato_venezolano(cx_c_calculado))
+        with col_c6:
+            st.metric("📄 CxC Reportado", formato_venezolano(cx_c_reportado) if cx_c_reportado is not None else "N/A")
+        
+        # Verificar si hay diferencia
+        diff_cxc_calc = safe_number(cx_c_calculado) - safe_number(cx_c_reportado) if cx_c_reportado is not None else 0
+        
+        if abs(diff_cxc_calc) < 0.01:
+            st.success("✅ **¡CONCILIACIÓN PERFECTA!** El CxC Calculado coincide con el CxC Reportado.")
+        else:
+            st.error(f"⚠️ **DIFERENCIA DETECTADA:** {formato_venezolano(abs(diff_cxc_calc))} Bs. de diferencia")
+            
+            # Botones para análisis
+            st.markdown("---")
+            col_btn_cxc1, col_btn_cxc2, col_btn_cxc3 = st.columns(3)
+            
+            with col_btn_cxc1:
+                if st.button("🔴 Ver Cobranzas Duplicadas", width='stretch', key="btn_cxc_duplicadas_tab2"):
+                    st.session_state['mostrar_cxc_duplicadas'] = not st.session_state.get('mostrar_cxc_duplicadas', False)
+            
+            with col_btn_cxc2:
+                if st.button("📝 Ver Notas de Crédito", width='stretch', key="btn_cxc_nc_tab2"):
+                    st.session_state['mostrar_cxc_nc'] = not st.session_state.get('mostrar_cxc_nc', False)
+            
+            with col_btn_cxc3:
+                if st.button("📊 Ver Análisis Completo", width='stretch', key="btn_cxc_completo_tab2"):
+                    st.session_state['mostrar_cxc_completo'] = not st.session_state.get('mostrar_cxc_completo', False)
+            
+            if st.session_state.get('mostrar_cxc_duplicadas', False) or st.session_state.get('mostrar_cxc_nc', False) or st.session_state.get('mostrar_cxc_completo', False):
+                try:
+                    import re
+                    import os
+                    from datetime import timedelta
+                    from config import RUTA_ARCHIVOS
+                    
+                    tiene_cobranzas = 'df_cobranzas' in locals() and df_cobranzas is not None
+                    tiene_notas_cliente = 'df_notas_cliente' in locals() and df_notas_cliente is not None
+                    
+                    # Extraer cobranzas actuales
+                    cobranzas_actual_docs = {}
+                    if tiene_cobranzas:
+                        df_cob_clean = ProcesadorArchivos._limpiar_columnas(df_cobranzas)
                         
-                        idx_nc = None
-                        for idx, row in df_nc_clean.iterrows():
+                        idx_cob = None
+                        for idx, row in df_cob_clean.iterrows():
                             row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                            if 'nota' in row_str and 'credito' in row_str:
-                                idx_nc = idx
+                            if 'banco' in row_str and 'cuenta' in row_str and 'deposito' in row_str:
+                                idx_cob = idx
                                 break
-                        if idx_nc is None:
-                            idx_nc = ProcesadorArchivos._encontrar_fila_datos(df_nc_clean, ['nota', 'credito', 'monto'])
+                        if idx_cob is None:
+                            idx_cob = ProcesadorArchivos._encontrar_fila_datos(df_cob_clean, ['banco', 'deposito', 'monto'])
                         
-                        if idx_nc is not None and idx_nc >= 0 and idx_nc < len(df_nc_clean):
-                            df_datos = df_nc_clean.iloc[idx_nc:].reset_index(drop=True)
+                        if idx_cob is not None and idx_cob >= 0 and idx_cob < len(df_cob_clean):
+                            df_datos = df_cob_clean.iloc[idx_cob:].reset_index(drop=True)
                             if len(df_datos) > 0:
                                 header_row = df_datos.iloc[0]
                                 new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
                                 df_datos.columns = new_cols
-                                df_nc_clean = df_datos.iloc[1:].reset_index(drop=True)
+                                df_cob_clean = df_datos.iloc[1:].reset_index(drop=True)
                         
-                        col_ref_nc = ProcesadorArchivos._buscar_columna(df_nc_clean, 'documento', 'nota', 'nro', 'referencia')
-                        col_monto_nc = ProcesadorArchivos._buscar_columna(df_nc_clean, 'monto', 'total', 'importe')
-                        col_cliente_nc = ProcesadorArchivos._buscar_columna(df_nc_clean, 'cliente', 'nombre', 'rif')
+                        col_ref_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'deposito', 'nro', 'referencia', 'documento')
+                        col_monto_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'monto', 'total', 'importe')
+                        col_cliente_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'cliente', 'nombre', 'rif', 'cedula')
                         
-                        if col_ref_nc and col_monto_nc:
-                            for idx, row in df_nc_clean.iterrows():
-                                ref = str(row[col_ref_nc]).strip()
-                                monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_nc])
+                        if col_ref_cob and col_monto_cob:
+                            for idx, row in df_cob_clean.iterrows():
+                                ref = str(row[col_ref_cob]).strip()
+                                monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_cob])
                                 if ref and ref != 'nan' and ref != 'None' and monto:
                                     ref_norm = re.sub(r'[^0-9]', '', ref)
                                     if ref_norm:
                                         cliente = ''
-                                        if col_cliente_nc:
+                                        if col_cliente_cob:
                                             try:
-                                                cliente_val = str(row[col_cliente_nc]).strip()
+                                                cliente_val = str(row[col_cliente_cob]).strip()
                                                 if cliente_val and cliente_val != 'nan' and cliente_val != 'None':
                                                     cliente = cliente_val
                                             except:
                                                 pass
                                         
-                                        notas_credito_docs[ref_norm] = {
+                                        cobranzas_actual_docs[ref_norm] = {
                                             'referencia': ref,
                                             'monto': float(monto),
                                             'cliente': cliente
                                         }
+                    
+                    # Extraer cobranzas del día anterior
+                    cobranzas_anterior_docs = {}
+                    try:
+                        empresa_clean = re.sub(r'[^\w\-_]', '_', st.session_state.empresa_activa)
+                        fecha_ant_str = (pd.Timestamp(fecha_procesar) - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+                        filename_ant = f"cobranzas_{empresa_clean}_{fecha_ant_str}.xlsx"
+                        filepath_ant = os.path.join(RUTA_ARCHIVOS, filename_ant)
+                        
+                        if os.path.exists(filepath_ant):
+                            df_cob_ant = pd.read_excel(filepath_ant)
+                            df_cob_ant_clean = ProcesadorArchivos._limpiar_columnas(df_cob_ant)
+                            
+                            idx_cob_ant = None
+                            for idx, row in df_cob_ant_clean.iterrows():
+                                row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                                if 'banco' in row_str and 'cuenta' in row_str and 'deposito' in row_str:
+                                    idx_cob_ant = idx
+                                    break
+                            if idx_cob_ant is None:
+                                idx_cob_ant = ProcesadorArchivos._encontrar_fila_datos(df_cob_ant_clean, ['banco', 'deposito', 'monto'])
+                            
+                            if idx_cob_ant is not None and idx_cob_ant >= 0 and idx_cob_ant < len(df_cob_ant_clean):
+                                df_datos = df_cob_ant_clean.iloc[idx_cob_ant:].reset_index(drop=True)
+                                if len(df_datos) > 0:
+                                    header_row = df_datos.iloc[0]
+                                    new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
+                                    df_datos.columns = new_cols
+                                    df_cob_ant_clean = df_datos.iloc[1:].reset_index(drop=True)
+                            
+                            col_ref_cob_ant = ProcesadorArchivos._buscar_columna(df_cob_ant_clean, 'deposito', 'nro', 'referencia', 'documento')
+                            col_monto_cob_ant = ProcesadorArchivos._buscar_columna(df_cob_ant_clean, 'monto', 'total', 'importe')
+                            
+                            if col_ref_cob_ant and col_monto_cob_ant:
+                                for idx, row in df_cob_ant_clean.iterrows():
+                                    ref = str(row[col_ref_cob_ant]).strip()
+                                    monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_cob_ant])
+                                    if ref and ref != 'nan' and ref != 'None' and monto:
+                                        ref_norm = re.sub(r'[^0-9]', '', ref)
+                                        if ref_norm:
+                                            cobranzas_anterior_docs[ref_norm] = {
+                                                'referencia': ref,
+                                                'monto': float(monto)
+                                            }
                     except Exception as e:
                         pass
-                
-                # Mostrar Cobranzas Duplicadas
-                if st.session_state.get('mostrar_cxc_duplicadas', False):
-                    with st.expander("🔴 Cobranzas Duplicadas", expanded=True):
-                        cobranzas_duplicadas = []
-                        for ref_norm, info in cobranzas_actual_docs.items():
-                            if ref_norm in cobranzas_anterior_docs:
-                                cobranzas_duplicadas.append({
-                                    'referencia': info['referencia'],
-                                    'monto_actual': info['monto'],
-                                    'monto_anterior': cobranzas_anterior_docs[ref_norm]['monto'],
-                                    'cliente': info.get('cliente', 'No identificado'),
-                                    'estado': '🔴 DUPLICADA'
-                                })
-                        
-                        if cobranzas_duplicadas:
-                            df_dup = pd.DataFrame(cobranzas_duplicadas)
-                            total_dup = sum([x['monto_actual'] for x in cobranzas_duplicadas])
-                            st.metric("💰 Total Duplicado", formato_venezolano(total_dup))
-                            st.dataframe(df_dup, width='stretch')
-                            st.error(f"❌ **{len(cobranzas_duplicadas)} cobranzas duplicadas encontradas**")
-                        else:
-                            st.success("✅ No hay cobranzas duplicadas")
-                
-                # Mostrar Notas de Crédito
-                if st.session_state.get('mostrar_cxc_nc', False):
-                    with st.expander("📝 Notas de Crédito", expanded=True):
-                        if notas_credito_docs:
-                            df_nc = pd.DataFrame(list(notas_credito_docs.values()))
-                            total_nc = sum([x['monto'] for x in notas_credito_docs.values()])
-                            st.metric("💰 Total Notas de Crédito", formato_venezolano(total_nc))
-                            st.dataframe(df_nc, width='stretch')
-                            st.info(f"📝 {len(notas_credito_docs)} notas de crédito encontradas")
-                        else:
-                            st.info("ℹ️ No hay notas de crédito")
-                
-                # Mostrar Análisis Completo
-                if st.session_state.get('mostrar_cxc_completo', False):
-                    with st.expander("📊 Análisis Completo de CxC", expanded=True):
-                        # Clasificar
-                        cobranzas_duplicadas = []
-                        for ref_norm, info in cobranzas_actual_docs.items():
-                            if ref_norm in cobranzas_anterior_docs:
-                                cobranzas_duplicadas.append(info)
-                        
-                        cobranzas_nuevas = []
-                        for ref_norm, info in cobranzas_actual_docs.items():
-                            if ref_norm not in cobranzas_anterior_docs:
-                                cobranzas_nuevas.append(info)
-                        
-                        cobranzas_rezagadas = []
-                        for ref_norm, info in cobranzas_anterior_docs.items():
-                            if ref_norm not in cobranzas_actual_docs:
-                                cobranzas_rezagadas.append(info)
-                        
-                        total_duplicadas = sum([x['monto'] for x in cobranzas_duplicadas])
-                        total_nuevas = sum([x['monto'] for x in cobranzas_nuevas])
-                        total_rezagadas = sum([x['monto'] for x in cobranzas_rezagadas])
-                        total_nc = sum([x['monto'] for x in notas_credito_docs.values()])
-                        
-                        col_a1, col_a2, col_a3 = st.columns(3)
-                        
-                        with col_a1:
-                            st.metric("🔴 Duplicadas", len(cobranzas_duplicadas), delta=f"{formato_venezolano(total_duplicadas)}")
-                        with col_a2:
-                            st.metric("🆕 Nuevas", len(cobranzas_nuevas), delta=f"{formato_venezolano(total_nuevas)}")
-                        with col_a3:
-                            st.metric("✅ Rezagadas", len(cobranzas_rezagadas), delta=f"{formato_venezolano(total_rezagadas)}")
-                        
-                        st.metric("📝 Notas de Crédito", len(notas_credito_docs), delta=f"{formato_venezolano(total_nc)}")
-                        
-                        # Diagnóstico
-                        st.markdown("---")
-                        st.markdown("#### 🎯 Diagnóstico")
-                        
-                        diferencia_explicada_cxc = total_duplicadas + total_rezagadas + total_nc
-                        diferencia_no_explicada_cxc = abs(diff_cxc_calc) - diferencia_explicada_cxc
-                        
-                        st.markdown(f"""
-                        | Concepto | Monto | Explicación |
-                        |----------|-------|-------------|
-                        | **Diferencia Total** | {formato_venezolano(abs(diff_cxc_calc))} | Diferencia en CxC |
-                        | 🔴 **Duplicadas** | {formato_venezolano(total_duplicadas)} | Cobranzas que ya estaban en día anterior |
-                        | ✅ **Rezagadas** | {formato_venezolano(total_rezagadas)} | Cobranzas que ya no están en día actual |
-                        | 📝 **Notas de Crédito** | {formato_venezolano(total_nc)} | NC aplicadas que afectan CxC |
-                        | **Diferencia Explicada** | {formato_venezolano(diferencia_explicada_cxc)} | Suma de diferencias |
-                        | **Diferencia NO Explicada** | {formato_venezolano(diferencia_no_explicada_cxc)} | ⚠️ Requiere revisión |
-                        """)
-                        
-                        if abs(diferencia_no_explicada_cxc) < 0.01:
-                            st.success("✅ **¡DIFERENCIA EXPLICADA COMPLETAMENTE!**")
-                        else:
-                            st.error(f"❌ **DIFERENCIA NO EXPLICADA:** {formato_venezolano(diferencia_no_explicada_cxc)} Bs.")
-                
-                # Botón para cerrar vistas de CxC
-                if st.button("🔒 Cerrar todas las vistas de CxC", width='stretch'):
-                    st.session_state['mostrar_cxc_duplicadas'] = False
-                    st.session_state['mostrar_cxc_nc'] = False
-                    st.session_state['mostrar_cxc_completo'] = False
-                    st.rerun()
                     
+                    # Extraer notas de crédito
+                    notas_credito_docs = {}
+                    if tiene_notas_cliente:
+                        try:
+                            df_nc_clean = ProcesadorArchivos._limpiar_columnas(df_notas_cliente)
+                            
+                            idx_nc = None
+                            for idx, row in df_nc_clean.iterrows():
+                                row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                                if 'nota' in row_str and 'credito' in row_str:
+                                    idx_nc = idx
+                                    break
+                            if idx_nc is None:
+                                idx_nc = ProcesadorArchivos._encontrar_fila_datos(df_nc_clean, ['nota', 'credito', 'monto'])
+                            
+                            if idx_nc is not None and idx_nc >= 0 and idx_nc < len(df_nc_clean):
+                                df_datos = df_nc_clean.iloc[idx_nc:].reset_index(drop=True)
+                                if len(df_datos) > 0:
+                                    header_row = df_datos.iloc[0]
+                                    new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
+                                    df_datos.columns = new_cols
+                                    df_nc_clean = df_datos.iloc[1:].reset_index(drop=True)
+                            
+                            col_ref_nc = ProcesadorArchivos._buscar_columna(df_nc_clean, 'documento', 'nota', 'nro', 'referencia')
+                            col_monto_nc = ProcesadorArchivos._buscar_columna(df_nc_clean, 'monto', 'total', 'importe')
+                            col_cliente_nc = ProcesadorArchivos._buscar_columna(df_nc_clean, 'cliente', 'nombre', 'rif')
+                            
+                            if col_ref_nc and col_monto_nc:
+                                for idx, row in df_nc_clean.iterrows():
+                                    ref = str(row[col_ref_nc]).strip()
+                                    monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_nc])
+                                    if ref and ref != 'nan' and ref != 'None' and monto:
+                                        ref_norm = re.sub(r'[^0-9]', '', ref)
+                                        if ref_norm:
+                                            cliente = ''
+                                            if col_cliente_nc:
+                                                try:
+                                                    cliente_val = str(row[col_cliente_nc]).strip()
+                                                    if cliente_val and cliente_val != 'nan' and cliente_val != 'None':
+                                                        cliente = cliente_val
+                                                except:
+                                                    pass
+                                            
+                                            notas_credito_docs[ref_norm] = {
+                                                'referencia': ref,
+                                                'monto': float(monto),
+                                                'cliente': cliente
+                                            }
+                        except Exception as e:
+                            pass
+                    
+                    # Mostrar Cobranzas Duplicadas
+                    if st.session_state.get('mostrar_cxc_duplicadas', False):
+                        with st.expander("🔴 Cobranzas Duplicadas", expanded=True):
+                            cobranzas_duplicadas = []
+                            for ref_norm, info in cobranzas_actual_docs.items():
+                                if ref_norm in cobranzas_anterior_docs:
+                                    cobranzas_duplicadas.append({
+                                        'referencia': info['referencia'],
+                                        'monto_actual': info['monto'],
+                                        'monto_anterior': cobranzas_anterior_docs[ref_norm]['monto'],
+                                        'cliente': info.get('cliente', 'No identificado'),
+                                        'estado': '🔴 DUPLICADA'
+                                    })
+                            
+                            if cobranzas_duplicadas:
+                                df_dup = pd.DataFrame(cobranzas_duplicadas)
+                                total_dup = sum([x['monto_actual'] for x in cobranzas_duplicadas])
+                                st.metric("💰 Total Duplicado", formato_venezolano(total_dup))
+                                st.dataframe(df_dup, use_container_width=True)
+                                st.error(f"❌ **{len(cobranzas_duplicadas)} cobranzas duplicadas encontradas**")
+                            else:
+                                st.success("✅ No hay cobranzas duplicadas")
+                    
+                    # Mostrar Notas de Crédito
+                    if st.session_state.get('mostrar_cxc_nc', False):
+                        with st.expander("📝 Notas de Crédito", expanded=True):
+                            if notas_credito_docs:
+                                df_nc = pd.DataFrame(list(notas_credito_docs.values()))
+                                total_nc = sum([x['monto'] for x in notas_credito_docs.values()])
+                                st.metric("💰 Total Notas de Crédito", formato_venezolano(total_nc))
+                                st.dataframe(df_nc, use_container_width=True)
+                                st.info(f"📝 {len(notas_credito_docs)} notas de crédito encontradas")
+                            else:
+                                st.info("ℹ️ No hay notas de crédito")
+                    
+                    # Mostrar Análisis Completo
+                    if st.session_state.get('mostrar_cxc_completo', False):
+                        with st.expander("📊 Análisis Completo de CxC", expanded=True):
+                            # Clasificar
+                            cobranzas_duplicadas = []
+                            for ref_norm, info in cobranzas_actual_docs.items():
+                                if ref_norm in cobranzas_anterior_docs:
+                                    cobranzas_duplicadas.append(info)
+                            
+                            cobranzas_nuevas = []
+                            for ref_norm, info in cobranzas_actual_docs.items():
+                                if ref_norm not in cobranzas_anterior_docs:
+                                    cobranzas_nuevas.append(info)
+                            
+                            cobranzas_rezagadas = []
+                            for ref_norm, info in cobranzas_anterior_docs.items():
+                                if ref_norm not in cobranzas_actual_docs:
+                                    cobranzas_rezagadas.append(info)
+                            
+                            total_duplicadas = sum([x['monto'] for x in cobranzas_duplicadas])
+                            total_nuevas = sum([x['monto'] for x in cobranzas_nuevas])
+                            total_rezagadas = sum([x['monto'] for x in cobranzas_rezagadas])
+                            total_nc = sum([x['monto'] for x in notas_credito_docs.values()])
+                            
+                            col_a1, col_a2, col_a3 = st.columns(3)
+                            
+                            with col_a1:
+                                st.metric("🔴 Duplicadas", len(cobranzas_duplicadas), delta=f"{formato_venezolano(total_duplicadas)}")
+                            with col_a2:
+                                st.metric("🆕 Nuevas", len(cobranzas_nuevas), delta=f"{formato_venezolano(total_nuevas)}")
+                            with col_a3:
+                                st.metric("✅ Rezagadas", len(cobranzas_rezagadas), delta=f"{formato_venezolano(total_rezagadas)}")
+                            
+                            st.metric("📝 Notas de Crédito", len(notas_credito_docs), delta=f"{formato_venezolano(total_nc)}")
+                            
+                            # Diagnóstico
+                            st.markdown("---")
+                            st.markdown("#### 🎯 Diagnóstico")
+                            
+                            diferencia_explicada_cxc = total_duplicadas + total_rezagadas + total_nc
+                            diferencia_no_explicada_cxc = abs(diff_cxc_calc) - diferencia_explicada_cxc
+                            
+                            st.markdown(f"""
+                            | Concepto | Monto | Explicación |
+                            |----------|-------|-------------|
+                            | **Diferencia Total** | {formato_venezolano(abs(diff_cxc_calc))} | Diferencia en CxC |
+                            | 🔴 **Duplicadas** | {formato_venezolano(total_duplicadas)} | Cobranzas que ya estaban en día anterior |
+                            | ✅ **Rezagadas** | {formato_venezolano(total_rezagadas)} | Cobranzas que ya no están en día actual |
+                            | 📝 **Notas de Crédito** | {formato_venezolano(total_nc)} | NC aplicadas que afectan CxC |
+                            | **Diferencia Explicada** | {formato_venezolano(diferencia_explicada_cxc)} | Suma de diferencias |
+                            | **Diferencia NO Explicada** | {formato_venezolano(diferencia_no_explicada_cxc)} | ⚠️ Requiere revisión |
+                            """)
+                            
+                            if abs(diferencia_no_explicada_cxc) < 0.01:
+                                st.success("✅ **¡DIFERENCIA EXPLICADA COMPLETAMENTE!**")
+                            else:
+                                st.error(f"❌ **DIFERENCIA NO EXPLICADA:** {formato_venezolano(diferencia_no_explicada_cxc)} Bs.")
+                    
+                    # Botón para cerrar vistas de CxC
+                    if st.button("🔒 Cerrar todas las vistas de CxC", width='stretch'):
+                        st.session_state['mostrar_cxc_duplicadas'] = False
+                        st.session_state['mostrar_cxc_nc'] = False
+                        st.session_state['mostrar_cxc_completo'] = False
+                        st.rerun()
+                        
+                except Exception as e:
+                    st.error(f"❌ Error en el análisis de CxC: {str(e)}")
+                    import traceback
+                    st.code(traceback.format_exc())
+        
+        st.markdown("---")
+        
+        # ============================================================
+        # 📦 TRAZABILIDAD DE INVENTARIO - PRODUCTO POR PRODUCTO (MEJORADO)
+        # ============================================================
+        st.markdown("### 📦 Trazabilidad de Inventario - Producto por Producto")
+        st.caption("Análisis detallado: Inventario Inicial - Ventas (Costo) = Inventario Esperado vs Inventario Reportado")
+        
+        # --- ANÁLISIS DE INVENTARIO (PRODUCTO POR PRODUCTO) ---
+        if 'df_inv_ant' in locals() and df_inv_ant is not None and 'df_inv_rep' in locals() and df_inv_rep is not None:
+            try:
+                # Cargar detalle de inventario anterior y actual
+                inv_prev = ProcesadorArchivos.cargar_detalle_inventario(df_inv_ant)
+                inv_curr = ProcesadorArchivos.cargar_detalle_inventario(df_inv_rep)
+                
+                if inv_prev is not None and inv_curr is not None:
+                    # Cargar utilidades (costo de facturación) si está disponible
+                    util_df = None
+                    if 'df_costo' in locals() and df_costo is not None:
+                        util_df = ProcesadorArchivos.cargar_detalle_utilidad(df_costo)
+                    
+                    # Diccionarios para búsqueda rápida
+                    inv_prev_dict = inv_prev.set_index('Producto').to_dict('index')
+                    inv_curr_dict = inv_curr.set_index('Producto').to_dict('index')
+                    util_dict = util_df.set_index('Cod_Producto').to_dict('index') if util_df is not None else {}
+                    
+                    # Obtener todos los productos
+                    all_prods = set(inv_prev_dict.keys()).union(set(inv_curr_dict.keys()))
+                    
+                    # Listas para almacenar resultados
+                    diferencias = []
+                    total_inicial = 0
+                    total_ventas = 0
+                    total_esperado_valor = 0
+                    total_reportado_valor = 0
+                    
+                    for p in all_prods:
+                        p_prev = inv_prev_dict.get(p, {'Cantidad': 0.0, 'Precio/Unidad': 0.0, 'Total(*)': 0.0, 'Descrip_Clean': 'N/A'})
+                        p_curr = inv_curr_dict.get(p, {'Cantidad': 0.0, 'Precio/Unidad': 0.0, 'Total(*)': 0.0, 'Descrip_Clean': 'N/A'})
+                        u_row = util_dict.get(p, {'Cantidad': 0.0, 'Costo_Total': 0.0, 'Producto_Original': 'N/A'})
+                        
+                        # Datos del inventario anterior
+                        qty_prev = p_prev['Cantidad']
+                        price_prev = p_prev['Precio/Unidad']
+                        val_prev = p_prev['Total(*)']
+                        desc = p_curr['Descrip_Clean'] if p_curr['Descrip_Clean'] != 'N/A' else (p_prev['Descrip_Clean'] if p_prev['Descrip_Clean'] != 'N/A' else u_row['Producto_Original'])
+                        
+                        # Datos del inventario actual
+                        qty_curr = p_curr['Cantidad']
+                        price_curr = p_curr['Precio/Unidad']
+                        val_curr = p_curr['Total(*)']
+                        
+                        # Datos de ventas
+                        qty_sold = u_row['Cantidad']
+                        cost_sold = u_row['Costo_Total']
+                        
+                        # Cálculos de trazabilidad
+                        expected_qty = qty_prev - qty_sold
+                        expected_val = val_prev - cost_sold
+                        qty_diff = qty_curr - expected_qty
+                        val_diff = val_curr - expected_val
+                        
+                        # Acumular totales
+                        total_inicial += val_prev
+                        total_ventas += cost_sold
+                        total_esperado_valor += expected_val
+                        total_reportado_valor += val_curr
+                        
+                        # Determinar el estado del producto
+                        estado = "✅ OK"
+                        if abs(qty_diff) > 0.01 and abs(val_diff) > 0.01:
+                            estado = "🔴 FALTANTE" if qty_diff < 0 else "🟢 SOBRANTE"
+                        elif abs(qty_diff) > 0.01:
+                            estado = "🟡 DIF. CANTIDAD"
+                        elif abs(val_diff) > 0.01:
+                            estado = "🟠 DIF. PRECIO"
+                        
+                        # Mostrar productos con diferencias o movimientos
+                        if abs(qty_sold) > 0.01 or abs(qty_diff) > 0.01 or abs(val_diff) > 0.01 or abs(price_curr - price_prev) > 0.01:
+                            efecto_precio = (price_curr - price_prev) * qty_curr if qty_curr > 0 else 0
+                            
+                            diferencias.append({
+                                'Código': p,
+                                'Descripción': desc[:40],
+                                'Estado': estado,
+                                'Q. Anterior': qty_prev,
+                                'Vendido': qty_sold,
+                                'Q. Esperada': expected_qty,
+                                'Q. Reportada': qty_curr,
+                                'Dif. Cantidad': qty_diff,
+                                'Precio Ant.': price_prev,
+                                'Precio Nuevo': price_curr,
+                                'Efecto Precio': efecto_precio,
+                                'Dif. Valor': val_diff
+                            })
+                    
+                    # ============================================================
+                    # SECCIÓN 1: KPIS Y RESUMEN DE TOTALES (SIEMPRE VISIBLE)
+                    # ============================================================
+                    st.markdown("---")
+                    st.markdown("#### 📊 Resumen de Totales de Inventario")
+                    
+                    col_kpi_inv1, col_kpi_inv2, col_kpi_inv3, col_kpi_inv4 = st.columns(4)
+                    
+                    with col_kpi_inv1:
+                        st.metric("📦 Inventario Inicial", formato_venezolano(total_inicial))
+                    with col_kpi_inv2:
+                        st.metric("📊 Costo de Ventas", formato_venezolano(total_ventas))
+                    with col_kpi_inv3:
+                        st.metric("📋 Inventario Esperado", formato_venezolano(total_esperado_valor))
+                    with col_kpi_inv4:
+                        st.metric("📄 Inventario Reportado", formato_venezolano(total_reportado_valor))
+                    
+                    # Diferencia total destacada
+                    diff_total_inv = total_reportado_valor - total_esperado_valor
+                    if abs(diff_total_inv) < 0.01:
+                        st.success(f"✅ **Diferencia Total:** {formato_venezolano(diff_total_inv)} Bs. (¡Conciliación perfecta!)")
+                    elif diff_total_inv > 0:
+                        st.warning(f"⚠️ **Sobrante de inventario:** {formato_venezolano(diff_total_inv)} Bs.")
+                    else:
+                        st.error(f"❌ **Faltante de inventario:** {formato_venezolano(diff_total_inv)} Bs.")
+                    
+                    # ============================================================
+                    # SECCIÓN 2: ESTADÍSTICAS RÁPIDAS (SIEMPRE VISIBLE)
+                    # ============================================================
+                    st.markdown("---")
+                    st.markdown("#### 📈 Estadísticas de Productos")
+                    
+                    col_est1, col_est2, col_est3, col_est4 = st.columns(4)
+                    
+                    with col_est1:
+                        st.metric("📦 Total Productos", len(diferencias))
+                    with col_est2:
+                        ok_count = len([d for d in diferencias if d['Estado'] == '✅ OK'])
+                        st.metric("✅ Productos OK", ok_count, delta=f"{ok_count}/{len(diferencias)}")
+                    with col_est3:
+                        warning_count = len([d for d in diferencias if d['Estado'] != '✅ OK'])
+                        st.metric("⚠️ Con Diferencias", warning_count, delta=f"{warning_count}/{len(diferencias)}")
+                    with col_est4:
+                        total_unidades = sum([d['Vendido'] for d in diferencias])
+                        st.metric("📊 Total Ventas (Unid.)", f"{total_unidades:,.0f}")
+                    
+                    # ============================================================
+                    # SECCIÓN 3: BOTONES PARA EXPLORAR DETALLES
+                    # ============================================================
+                    st.markdown("---")
+                    st.markdown("#### 🔍 Explorar Detalles de Inventario")
+                    
+                    col_btn1, col_btn2, col_btn3 = st.columns(3)
+                    
+                    with col_btn1:
+                        if st.button("📋 Ver Todos los Productos", width='stretch', key="btn_todos_productos_tab2"):
+                            st.session_state['mostrar_todos_productos'] = not st.session_state.get('mostrar_todos_productos', False)
+                    
+                    with col_btn2:
+                        if st.button("⚠️ Solo Productos con Diferencias", width='stretch', key="btn_productos_diff_tab2"):
+                            st.session_state['mostrar_solo_diff'] = not st.session_state.get('mostrar_solo_diff', False)
+                    
+                    with col_btn3:
+                        if st.button("💰 Productos con Cambio de Precio", width='stretch', key="btn_cambio_precio_tab2"):
+                            st.session_state['mostrar_cambio_precio'] = not st.session_state.get('mostrar_cambio_precio', False)
+                    
+                    # ============================================================
+                    # SECCIÓN 4: TABLA DE PRODUCTOS (CON EXPANDER)
+                    # ============================================================
+                    st.markdown("---")
+                    
+                    # Determinar qué tabla mostrar según los botones
+                    mostrar_todos = st.session_state.get('mostrar_todos_productos', False)
+                    mostrar_solo_diff = st.session_state.get('mostrar_solo_diff', False)
+                    mostrar_cambio_precio = st.session_state.get('mostrar_cambio_precio', False)
+                    
+                    if mostrar_todos or mostrar_solo_diff or mostrar_cambio_precio:
+                        df_display = pd.DataFrame(diferencias)
+                        
+                        if mostrar_solo_diff:
+                            df_display = df_display[df_display['Estado'] != '✅ OK']
+                            titulo_tabla = f"⚠️ Productos con Diferencias ({len(df_display)})"
+                        elif mostrar_cambio_precio:
+                            cambios_precio = [d for d in diferencias if abs(d['Efecto Precio']) > 0.01]
+                            df_display = pd.DataFrame(cambios_precio)
+                            titulo_tabla = f"💰 Productos con Cambio de Precio ({len(df_display)})"
+                        else:
+                            titulo_tabla = f"📋 Todos los Productos ({len(df_display)})"
+                        
+                        if not df_display.empty:
+                            with st.expander(f"📊 {titulo_tabla}", expanded=True):
+                                df_formatted = df_display.copy()
+                                for col in ['Precio Ant.', 'Precio Nuevo', 'Efecto Precio', 'Dif. Valor']:
+                                    if col in df_formatted.columns:
+                                        df_formatted[col] = df_formatted[col].apply(formato_venezolano)
+                                
+                                df_formatted['Dif. Cantidad'] = df_formatted['Dif. Cantidad'].apply(lambda x: f"{x:.2f}")
+                                df_formatted['Q. Anterior'] = df_formatted['Q. Anterior'].apply(lambda x: f"{x:.2f}")
+                                df_formatted['Vendido'] = df_formatted['Vendido'].apply(lambda x: f"{x:.2f}")
+                                df_formatted['Q. Esperada'] = df_formatted['Q. Esperada'].apply(lambda x: f"{x:.2f}")
+                                df_formatted['Q. Reportada'] = df_formatted['Q. Reportada'].apply(lambda x: f"{x:.2f}")
+                                
+                                columnas_mostrar = ['Código', 'Descripción', 'Estado', 'Q. Anterior', 'Vendido', 'Q. Esperada', 'Q. Reportada', 'Dif. Cantidad', 'Precio Ant.', 'Precio Nuevo', 'Efecto Precio', 'Dif. Valor']
+                                columnas_existentes = [c for c in columnas_mostrar if c in df_formatted.columns]
+                                
+                                def colorear_estado(row):
+                                    estado = row['Estado']
+                                    if estado == '🔴 FALTANTE':
+                                        return ['background-color: #ffcccc;'] * len(row)
+                                    elif estado == '🟢 SOBRANTE':
+                                        return ['background-color: #ccffcc;'] * len(row)
+                                    elif estado == '🟠 DIF. PRECIO':
+                                        return ['background-color: #fff3cd;'] * len(row)
+                                    elif estado == '🟡 DIF. CANTIDAD':
+                                        return ['background-color: #fff3cd;'] * len(row)
+                                    return [''] * len(row)
+                                
+                                st.dataframe(
+                                    df_formatted[columnas_existentes].style.apply(colorear_estado, axis=1).hide(axis='index'),
+                                    use_container_width=True,
+                                    height=400
+                                )
+                                
+                                if mostrar_solo_diff or mostrar_todos:
+                                    col_res1, col_res2, col_res3 = st.columns(3)
+                                    with col_res1:
+                                        faltantes = len(df_display[df_display['Estado'] == '🔴 FALTANTE'])
+                                        st.metric("🔴 Faltantes", faltantes)
+                                    with col_res2:
+                                        sobrantes = len(df_display[df_display['Estado'] == '🟢 SOBRANTE'])
+                                        st.metric("🟢 Sobrantes", sobrantes)
+                                    with col_res3:
+                                        otras = len(df_display[~df_display['Estado'].isin(['🔴 FALTANTE', '🟢 SOBRANTE', '✅ OK'])])
+                                        st.metric("🟡 Otras Diferencias", otras)
+                        else:
+                            st.info("ℹ️ No hay productos que coincidan con el filtro seleccionado.")
+                        
+                        if st.button("🔒 Cerrar todas las vistas", width='stretch'):
+                            st.session_state['mostrar_todos_productos'] = False
+                            st.session_state['mostrar_solo_diff'] = False
+                            st.session_state['mostrar_cambio_precio'] = False
+                            st.rerun()
+                    
+                    else:
+                        st.info("👆 **Haz clic en uno de los botones arriba** para explorar el detalle de productos.")
+                    
+                    # ============================================================
+                    # SECCIÓN 5: RESUMEN DE DIFERENCIAS (SIEMPRE VISIBLE)
+                    # ============================================================
+                    if diferencias:
+                        st.markdown("---")
+                        st.markdown("#### 📊 Resumen de Diferencias de Inventario")
+                        
+                        total_faltante = sum([d['Dif. Cantidad'] for d in diferencias if d['Estado'] == '🔴 FALTANTE'])
+                        total_sobrante = sum([d['Dif. Cantidad'] for d in diferencias if d['Estado'] == '🟢 SOBRANTE'])
+                        total_efecto_precio = sum([d['Efecto Precio'] for d in diferencias if abs(d['Efecto Precio']) > 0.01])
+                        
+                        col_res1, col_res2, col_res3 = st.columns(3)
+                        
+                        with col_res1:
+                            if total_faltante < 0:
+                                st.error(f"🔴 **Faltante:** {abs(total_faltante):.2f} unidades")
+                            else:
+                                st.success(f"✅ **Faltante:** 0 unidades")
+                        
+                        with col_res2:
+                            if total_sobrante > 0:
+                                st.success(f"🟢 **Sobrante:** {total_sobrante:.2f} unidades")
+                            else:
+                                st.info("ℹ️ **Sobrante:** 0 unidades")
+                        
+                        with col_res3:
+                            if abs(total_efecto_precio) > 0.01:
+                                if total_efecto_precio > 0:
+                                    st.warning(f"📈 **Efecto Precio:** +{formato_venezolano(total_efecto_precio)} Bs.")
+                                else:
+                                    st.warning(f"📉 **Efecto Precio:** {formato_venezolano(total_efecto_precio)} Bs.")
+                            else:
+                                st.success("✅ **Efecto Precio:** 0 Bs.")
+                else:
+                    st.warning("⚠️ No se pudieron cargar los detalles de inventario. Verifica el formato de los archivos.")
             except Exception as e:
-                st.error(f"❌ Error en el análisis de CxC: {str(e)}")
+                st.error(f"❌ Error en el análisis de trazabilidad de inventario: {str(e)}")
                 import traceback
                 st.code(traceback.format_exc())
+        else:
+            st.info("📄 **Carga los archivos de Inventario (día anterior y actual) y Costo de Facturación para ver el análisis detallado de inventario.**")
+        
+        st.markdown("---")
     
-    st.markdown("---")
-    
     # ============================================================
-    # BOTONES PARA VER ARCHIVOS ORIGINALES
+    # PESTAÑA 3: ARCHIVOS FUENTE DEL DÍA
     # ============================================================
-    st.markdown("---")
-    st.markdown("#### 📂 Ver archivos originales")
-    st.caption("💡 Haz clic en los botones para ver el contenido completo de cada archivo")
-
-    archivos_verificacion = [
-        ("CxC", archivo_cxc_reportado, "Cuentas por cobrar"),
-        ("Inventario", archivo_inventario_reportado, "Inventario"),
-        ("CxP", archivo_cxp_reportado, "Cuentas por pagar"),
-        ("Tránsito", archivo_tb, "Transferencias en tránsito")
-    ]
-
-    cols = st.columns(4)
-    for col, (nombre, archivo, titulo) in zip(cols, archivos_verificacion):
-        with col:
-            if archivo and archivos_cargados.get(titulo) is not None:
-                if st.button(f"📄 Ver {nombre}", key=f"btn_{nombre}", width='stretch'):
-                    mostrar_archivo_con_formato(
-                        archivos_cargados[titulo], 
-                        archivo.name, 
-                        f"Archivo {titulo}"
-                    )
-            else:
-                st.button(f"❌ {nombre} no cargado", disabled=True, width='stretch')
-
-    # ============================================================
-    # FORMULARIO DE AJUSTES
-    # ============================================================
-    st.markdown("#### ✏️ Registrar Ajustes de Diferencias")
-
-    col_ajuste1, col_ajuste2, col_ajuste3, col_ajuste4 = st.columns(4)
-
-    with col_ajuste1:
-        ajuste_inv = st.number_input(
-            "Ajuste Inventario",
-            value=float(st.session_state.ajustes['inventario']['monto']),
-            step=1.0,
-            format="%.2f",
-            key="ajuste_inv"
-        )
-        just_inv = st.text_input(
-            "Justificación",
-            value=st.session_state.ajustes['inventario']['justificacion'],
-            placeholder="Ej: Ajuste por merma",
-            key="just_inv"
-        )
-
-    with col_ajuste2:
-        ajuste_cxc = st.number_input(
-            "Ajuste CxC",
-            value=float(st.session_state.ajustes['cx_c']['monto']),
-            step=1.0,
-            format="%.2f",
-            key="ajuste_cxc"
-        )
-        just_cxc = st.text_input(
-            "Justificación",
-            value=st.session_state.ajustes['cx_c']['justificacion'],
-            placeholder="Ej: Ajuste por cobranza no registrada",
-            key="just_cxc"
-        )
-
-    with col_ajuste3:
-        ajuste_cxp = st.number_input(
-            "Ajuste CxP",
-            value=float(st.session_state.ajustes['cx_p']['monto']),
-            step=1.0,
-            format="%.2f",
-            key="ajuste_cxp"
-        )
-        just_cxp = st.text_input(
-            "Justificación",
-            value=st.session_state.ajustes['cx_p']['justificacion'],
-            placeholder="Ej: Ajuste por factura no registrada",
-            key="just_cxp"
-        )
-
-    with col_ajuste4:
-        ajuste_transito = st.number_input(
-            "Ajuste Tránsito",
-            value=float(st.session_state.ajustes['transito']['monto']),
-            step=1.0,
-            format="%.2f",
-            key="ajuste_transito"
-        )
-        just_transito = st.text_input(
-            "Justificación",
-            value=st.session_state.ajustes['transito']['justificacion'],
-            placeholder="Ej: Ajuste por transferencia pendiente",
-            key="just_transito"
-        )
-
-    col_btn_ajuste1, col_btn_ajuste2 = st.columns(2)
-    with col_btn_ajuste1:
-        if st.button("💾 Guardar Ajustes", width='stretch'):
-            st.session_state.ajustes['inventario'] = {'monto': ajuste_inv, 'justificacion': just_inv}
-            st.session_state.ajustes['cx_c'] = {'monto': ajuste_cxc, 'justificacion': just_cxc}
-            st.session_state.ajustes['cx_p'] = {'monto': ajuste_cxp, 'justificacion': just_cxp}
-            st.session_state.ajustes['transito'] = {'monto': ajuste_transito, 'justificacion': just_transito}
-            
-            db.guardar_ajustes(
-                fecha_procesar.strftime('%Y-%m-%d'),
-                st.session_state.ajustes,
-                empresa=st.session_state.empresa_activa
+    with tab_auditoria_archivos:
+        st.markdown("### 📄 Archivos Fuente del Día")
+        st.caption("Visualización de los archivos Excel cargados, con sus estructuras y estadísticas.")
+        
+        # ============================================================
+        # BOTÓN PARA EJECUTAR AUDITORÍA
+        # ============================================================
+        st.markdown("#### 🔍 Motor de Auditoría y Trazabilidad de Errores")
+        if st.button("🔍 Ejecutar Auditoría de Trazabilidad Manual", width='stretch', key="btn_auditoria_manual_tab3"):
+            hay_err_m, fallas_m, df_c_m = ejecutar_auditoria_inteligente(
+                archivo_facturacion, archivo_cobranzas, archivo_egresos, archivo_estado_cuenta
             )
-            
-            st.success("✅ Ajustes guardados correctamente")
-            st.rerun()
-    
-    with col_btn_ajuste2:
-        if st.button("🔄 Resetear Ajustes", width='stretch'):
-            st.session_state.ajustes = {
-                'inventario': {'monto': 0.0, 'justificacion': ''},
-                'cx_c': {'monto': 0.0, 'justificacion': ''},
-                'cx_p': {'monto': 0.0, 'justificacion': ''},
-                'transito': {'monto': 0.0, 'justificacion': ''}
-            }
-            st.success("✅ Ajustes reseteados a 0")
-            st.rerun()
-
-    st.markdown("---")
-    
-    # ============================================================
-    # CIERRE DIARIO
-    # ============================================================
-    st.markdown("#### 📊 CIERRE DIARIO - Capital de Trabajo Neto")
-
-    archivos_faltantes = []
-    origen_archivos = {}
-
-    if not archivo_cxc_reportado:
-        archivos_faltantes.append("📄 Cuentas por cobrar (CxC)")
-        origen_archivos['CxC'] = "❌ NO DISPONIBLE"
-    else:
-        origen_archivos['CxC'] = "📄 " + archivo_cxc_reportado.name
-
-    if not archivo_cxp_reportado:
-        archivos_faltantes.append("📄 Cuentas por pagar (CxP)")
-        origen_archivos['CxP'] = "❌ NO DISPONIBLE"
-    else:
-        origen_archivos['CxP'] = "📄 " + archivo_cxp_reportado.name
-
-    if not archivo_inventario_reportado:
-        archivos_faltantes.append("📄 Inventario")
-        origen_archivos['Inventario'] = "❌ NO DISPONIBLE"
-    else:
-        origen_archivos['Inventario'] = "📄 " + archivo_inventario_reportado.name
-
-    if not archivo_tb:
-        archivos_faltantes.append("📄 Transferencias en tránsito (TB)")
-        origen_archivos['Tránsito'] = "❌ NO DISPONIBLE"
-    else:
-        origen_archivos['Tránsito'] = "📄 " + archivo_tb.name
-
-    origen_archivos['Bancos'] = "📄 " + archivo_estado_cuenta.name if archivo_estado_cuenta else "📄 Estado de cuenta"
-
-    if archivos_faltantes:
-        st.warning(f"""
-        ⚠️ **Faltan archivos de verificación para el Cierre Diario:**
+            st.session_state['fallas_detectadas'] = fallas_m
+            st.session_state['df_consolidado'] = df_c_m
+            st.session_state['hay_errores'] = hay_err_m
+            st.session_state['fecha_ultimo_cierre'] = "Manual (En tiempo real)"
         
-        {', '.join(archivos_faltantes)}
-        
-        **El Cierre Diario SOLO usa valores de los archivos de verificación.**
-        Carga los archivos faltantes para obtener el Capital de Trabajo Neto correcto.
-        """)
-
-    if archivo_cxc_reportado:
-        cx_c_cierre = saldos_reportados.get('Cuentas por cobrar')
-        if cx_c_cierre is None or cx_c_cierre == 0:
-            st.error("❌ **Error:** No se pudo extraer el valor de Cuentas por cobrar del archivo.")
-            cx_c_cierre = 0
-        else:
-            st.success(f"💰 CxC: **DESDE ARCHIVO** → {formato_venezolano(cx_c_cierre)}")
-    else:
-        cx_c_cierre = 0
-        st.warning(f"💰 CxC: **NO DISPONIBLE** (falta archivo) → 0,00")
-
-    if archivo_inventario_reportado:
-        inventario_cierre = saldos_reportados.get('Inventario')
-        if inventario_cierre is None or inventario_cierre == 0:
-            st.error("❌ **Error:** No se pudo extraer el valor de Inventario del archivo.")
-            inventario_cierre = 0
-        else:
-            st.success(f"📦 Inventario: **DESDE ARCHIVO** → {formato_venezolano(inventario_cierre)}")
-    else:
-        inventario_cierre = 0
-        st.warning(f"📦 Inventario: **NO DISPONIBLE** (falta archivo) → 0,00")
-
-    if archivo_cxp_reportado:
-        cx_p_cierre = saldos_reportados.get('Cuentas por pagar')
-        if cx_p_cierre is None or cx_p_cierre == 0:
-            st.error("❌ **Error:** No se pudo extraer el valor de Cuentas por pagar del archivo.")
-            cx_p_cierre = 0
-        else:
-            st.success(f"📋 CxP: **DESDE ARCHIVO** → {formato_venezolano(cx_p_cierre)}")
-    else:
-        cx_p_cierre = 0
-        st.warning(f"📋 CxP: **NO DISPONIBLE** (falta archivo) → 0,00")
-
-    if archivo_tb:
-        transito_cierre = saldos_reportados.get('Transferencias en tránsito')
-        if transito_cierre is None or transito_cierre == 0:
-            st.error("❌ **Error:** No se pudo extraer el valor de Transferencias en tránsito del archivo.")
-            transito_cierre = 0
-        else:
-            st.success(f"🔄 Tránsito: **DESDE ARCHIVO** → {formato_venezolano(transito_cierre)}")
-    else:
-        transito_cierre = 0
-        st.warning(f"🔄 Tránsito: **NO DISPONIBLE** (falta archivo) → 0,00")
-
-    bancos_cierre = saldo_final
-    st.success(f"🏦 Bancos: **DESDE ESTADO DE CUENTA** → {formato_venezolano(bancos_cierre)}")
-
-    cx_c_cierre = safe_number(cx_c_cierre)
-    inventario_cierre = safe_number(inventario_cierre)
-    bancos_cierre = safe_number(bancos_cierre)
-    cx_p_cierre = safe_number(cx_p_cierre)
-    transito_cierre = safe_number(transito_cierre)
-
-    activos_operativos = cx_c_cierre + inventario_cierre + bancos_cierre
-    pasivos_operativos = cx_p_cierre + transito_cierre
-    capital_neto = activos_operativos - pasivos_operativos
-
-    st.markdown("#### 📋 Detalle del Cierre Diario")
-
-    cierre_detalle = [
-        {"Concepto": "📦 Inventario", "Archivo Origen": origen_archivos.get('Inventario', 'NO DISPONIBLE'), "Tipo": "ACTIVO", "Monto": formato_venezolano(inventario_cierre)},
-        {"Concepto": "💰 Cuentas por cobrar", "Archivo Origen": origen_archivos.get('CxC', 'NO DISPONIBLE'), "Tipo": "ACTIVO", "Monto": formato_venezolano(cx_c_cierre)},
-        {"Concepto": "🏦 Bancos", "Archivo Origen": origen_archivos.get('Bancos', 'NO DISPONIBLE'), "Tipo": "ACTIVO", "Monto": formato_venezolano(bancos_cierre)},
-        {"Concepto": "📌 TOTAL ACTIVOS OPERATIVOS", "Archivo Origen": "Suma de activos", "Tipo": "ACTIVO_TOTAL", "Monto": formato_venezolano(activos_operativos)},
-        {"Concepto": "📋 Cuentas por pagar", "Archivo Origen": origen_archivos.get('CxP', 'NO DISPONIBLE'), "Tipo": "PASIVO", "Monto": formato_venezolano(cx_p_cierre)},
-        {"Concepto": "🔄 Transferencias en tránsito", "Archivo Origen": origen_archivos.get('Tránsito', 'NO DISPONIBLE'), "Tipo": "PASIVO", "Monto": formato_venezolano(transito_cierre)},
-        {"Concepto": "📌 TOTAL PASIVOS OPERATIVOS", "Archivo Origen": "Suma de pasivos", "Tipo": "PASIVO_TOTAL", "Monto": formato_venezolano(pasivos_operativos)},
-        {"Concepto": "🏁 CAPITAL DE TRABAJO NETO", "Archivo Origen": "Activos - Pasivos", "Tipo": "CAPITAL", "Monto": formato_venezolano(capital_neto)}
-    ]
-
-    df_cierre = pd.DataFrame(cierre_detalle)
-
-    def color_cierre_rows(row):
-        if row['Tipo'] == 'ACTIVO_TOTAL':
-            return ['background-color: #e8f5e9; font-weight: bold;'] * len(row)
-        elif row['Tipo'] == 'PASIVO_TOTAL':
-            return ['background-color: #fff3e0; font-weight: bold;'] * len(row)
-        elif row['Tipo'] == 'CAPITAL':
-            if capital_neto >= 0:
-                return ['background-color: #0f3d2e; color: white; font-weight: bold; font-size: 1.1rem;'] * len(row)
-            else:
-                return ['background-color: #3d1a1a; color: white; font-weight: bold; font-size: 1.1rem;'] * len(row)
-        elif row['Tipo'] == 'ACTIVO':
-            return ['background-color: #f1f8f4;'] * len(row)
-        elif row['Tipo'] == 'PASIVO':
-            return ['background-color: #fff8f0;'] * len(row)
-        return [''] * len(row)
-
-    styled_df = df_cierre.style.apply(color_cierre_rows, axis=1).hide(axis='index')
-    st.dataframe(styled_df, width='stretch')
-
-    with st.expander("📂 Ver origen detallado de cada archivo", expanded=False):
-        st.markdown("""
-        ### 📂 Origen de los archivos utilizados en el Cierre Diario
-        
-        | Concepto | Archivo | Estado |
-        |----------|---------|--------|
-        """)
-        
-        if archivo_cxc_reportado:
-            st.markdown(f"| 💰 Cuentas por cobrar | `{archivo_cxc_reportado.name}` | ✅ Cargado |")
-        else:
-            st.markdown("| 💰 Cuentas por cobrar | **NO CARGADO** | ❌ No disponible |")
-        
-        if archivo_inventario_reportado:
-            st.markdown(f"| 📦 Inventario | `{archivo_inventario_reportado.name}` | ✅ Cargado |")
-        else:
-            st.markdown("| 📦 Inventario | **NO CARGADO** | ❌ No disponible |")
-        
-        if archivo_cxp_reportado:
-            st.markdown(f"| 📋 Cuentas por pagar | `{archivo_cxp_reportado.name}` | ✅ Cargado |")
-        else:
-            st.markdown("| 📋 Cuentas por pagar | **NO CARGADO** | ❌ No disponible |")
-        
-        if archivo_tb:
-            st.markdown(f"| 🔄 Transferencias en tránsito | `{archivo_tb.name}` | ✅ Cargado |")
-        else:
-            st.markdown("| 🔄 Transferencias en tránsito | **NO CARGADO** | ❌ No disponible |")
-        
-        if archivo_estado_cuenta:
-            st.markdown(f"| 🏦 Bancos | `{archivo_estado_cuenta.name}` | ✅ Cargado |")
-        else:
-            st.markdown("| 🏦 Bancos | **NO CARGADO** | ❌ No disponible |")
-        
-        st.markdown("""
-        
-        ### 📌 Valores extraídos:
-        """)
-        
-        st.markdown(f"""
-        | Concepto | Valor | Origen |
-        |----------|-------|--------|
-        | Cuentas por cobrar | {formato_venezolano(cx_c_cierre)} | {origen_archivos.get('CxC', 'NO DISPONIBLE')} |
-        | Inventario | {formato_venezolano(inventario_cierre)} | {origen_archivos.get('Inventario', 'NO DISPONIBLE')} |
-        | Bancos | {formato_venezolano(bancos_cierre)} | {origen_archivos.get('Bancos', 'NO DISPONIBLE')} |
-        | Cuentas por pagar | {formato_venezolano(cx_p_cierre)} | {origen_archivos.get('CxP', 'NO DISPONIBLE')} |
-        | Transferencias en tránsito | {formato_venezolano(transito_cierre)} | {origen_archivos.get('Tránsito', 'NO DISPONIBLE')} |
-        """)
-
-    # ============================================================
-    # RESUMEN DEL CIERRE DIARIO - KPIS CORPORATIVOS
-    # ============================================================
-    st.markdown("---")
-    st.markdown("#### 📊 Resumen del Cierre Diario")
-    st.caption("💡 Haz clic en cada KPI para ver su composición detallada")
-
-    col_c1, col_c2, col_c3 = st.columns(3)
-
-    with col_c1:
-        popover_activos = f"""
-        ##### 📈 Composición de Activos Operativos
-        
-        | Concepto | Monto | Archivo Origen |
-        |----------|-------|----------------|
-        | **Cuentas por cobrar** | {formato_venezolano(cx_c_cierre)} | {'✅ Cargado' if archivo_cxc_reportado else '❌ No disponible'} |
-        | **Inventario** | {formato_venezolano(inventario_cierre)} | {'✅ Cargado' if archivo_inventario_reportado else '❌ No disponible'} |
-        | **Bancos** | {formato_venezolano(bancos_cierre)} | ✅ Estado de cuenta |
-        | **TOTAL ACTIVOS** | **{formato_venezolano(activos_operativos)}** |  |
-        
-        ✅ Valores tomados de los archivos de verificación.
-        """
-        
-        with st.popover("", width='stretch'):
-            st.markdown(popover_activos)
-            if cx_c_cierre > 0 or inventario_cierre > 0 or bancos_cierre > 0:
-                fig, ax = plt.subplots(figsize=(6, 3))
-                componentes = ['CxC', 'Inventario', 'Bancos']
-                valores = [cx_c_cierre, inventario_cierre, bancos_cierre]
-                colores = ['#3498db', '#2ecc71', '#f39c12']
-                ax.bar(componentes, valores, color=colores)
-                ax.set_title('Composición de Activos', fontsize=10, color='#0a1628')
-                ax.set_ylabel('Monto (Bs.)', color='#6a8aac')
-                ax.set_facecolor('#f8fafc')
-                plt.tight_layout()
-                st.pyplot(fig)
-        
-        st.markdown(f"""
-        <div class="kpi-card kpi-activos">
-            <div class="icon-bg">📈</div>
-            <div class="label">📈 ACTIVOS OPERATIVOS</div>
-            <div class="value">{formato_venezolano(activos_operativos)}</div>
-            <div class="sub-label">💡 Haz clic para ver detalle</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col_c2:
-        popover_pasivos = f"""
-        ##### 📉 Composición de Pasivos Operativos
-        
-        | Concepto | Monto | Archivo Origen |
-        |----------|-------|----------------|
-        | **Cuentas por pagar** | {formato_venezolano(cx_p_cierre)} | {'✅ Cargado' if archivo_cxp_reportado else '❌ No disponible'} |
-        | **Transferencias en tránsito** | {formato_venezolano(transito_cierre)} | {'✅ Cargado' if archivo_tb else '❌ No disponible'} |
-        | **TOTAL PASIVOS** | **{formato_venezolano(pasivos_operativos)}** |  |
-        
-        ✅ Valores tomados de los archivos de verificación.
-        """
-        
-        with st.popover("", width='stretch'):
-            st.markdown(popover_pasivos)
-        
-        st.markdown(f"""
-        <div class="kpi-card kpi-pasivos">
-            <div class="icon-bg">📉</div>
-            <div class="label">📉 PASIVOS OPERATIVOS</div>
-            <div class="value">{formato_venezolano(pasivos_operativos)}</div>
-            <div class="sub-label">💡 Haz clic para ver detalle</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col_c3:
-        if capital_neto >= 0:
-            clase = "kpi-capital-positivo"
-            emoji = "✅"
-        else:
-            clase = "kpi-capital-negativo"
-            emoji = "❌"
-        
-        popover_capital = f"""
-        ##### 🏁 Cálculo del Capital de Trabajo Neto
-        
-        | Concepto | Fórmula | Monto |
-        |----------|---------|-------|
-        | **Activos Operativos** | CxC + Inv. + Bancos | {formato_venezolano(activos_operativos)} |
-        | **Pasivos Operativos** | CxP + Tránsito | {formato_venezolano(pasivos_operativos)} |
-        | **CAPITAL DE TRABAJO NETO** | Activos - Pasivos | **{formato_venezolano(capital_neto)}** |
-        
-        **Ratio Activos/Pasivos:** {f"{activos_operativos / pasivos_operativos:.2f}x" if pasivos_operativos > 0 else "N/A"}
-        
-        {f"✅ Capital de Trabajo Neto POSITIVO: {formato_venezolano(capital_neto)}" if capital_neto >= 0 else f"❌ Capital de Trabajo Neto NEGATIVO: {formato_venezolano(capital_neto)}"}
-        """
-        
-        with st.popover("", width='stretch'):
-            st.markdown(popover_capital)
-        
-        st.markdown(f"""
-        <div class="kpi-card {clase}">
-            <div class="icon-bg">🏁</div>
-            <div class="label">{emoji} CAPITAL DE TRABAJO NETO</div>
-            <div class="value">{formato_venezolano(capital_neto)}</div>
-            <div class="sub-label">💡 Haz clic para ver detalle</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with st.expander("📌 Detalle del Cierre Diario", expanded=False):
-        st.markdown(f"""
-        ### 📊 Cierre Diario - {fecha_procesar.strftime('%Y-%m-%d')}
-        
-        | Concepto | Origen | Valor |
-        |----------|--------|-------|
-        | **ACTIVOS OPERATIVOS** | | |
-        | Cuentas por cobrar | {'Archivo CxC' if archivo_cxc_reportado else '❌ NO DISPONIBLE'} | {formato_venezolano(cx_c_cierre)} |
-        | Inventario | {'Archivo Inventario' if archivo_inventario_reportado else '❌ NO DISPONIBLE'} | {formato_venezolano(inventario_cierre)} |
-        | Bancos | Estado de cuenta | {formato_venezolano(bancos_cierre)} |
-        | | **Total Activos** | **{formato_venezolano(activos_operativos)}** |
-        | | | |
-        | **PASIVOS OPERATIVOS** | | |
-        | Cuentas por pagar | {'Archivo CxP' if archivo_cxp_reportado else '❌ NO DISPONIBLE'} | {formato_venezolano(cx_p_cierre)} |
-        | Transferencias en tránsito | {'Archivo TB' if archivo_tb else '❌ NO DISPONIBLE'} | {formato_venezolano(transito_cierre)} |
-        | | **Total Pasivos** | **{formato_venezolano(pasivos_operativos)}** |
-        | | | |
-        | **🏁 CAPITAL DE TRABAJO NETO** | Activos - Pasivos | **{formato_venezolano(capital_neto)}** |
-        """)
-
-        if capital_neto >= 0:
-            st.success(f"✅ Capital de Trabajo Neto POSITIVO: {formato_venezolano(capital_neto)}")
-        else:
-            st.error(f"❌ Capital de Trabajo Neto NEGATIVO: {formato_venezolano(capital_neto)}")
-
-        st.markdown("""
-        ### ⚠️ Importante
-        **El Cierre Diario utiliza EXCLUSIVAMENTE los valores de los archivos de verificación:**
-        - Cuentas por cobrar → Archivo CxC
-        - Inventario → Archivo Inventario
-        - Cuentas por pagar → Archivo CxP
-        - Transferencias en tránsito → Archivo TB
-        
-        **NO utiliza valores calculados** de facturación, cobranzas o egresos.
-        """)
-    
-    st.markdown("---")
-    
-    # ============================================================
-    # VALIDACIONES CRUZADAS
-    # ============================================================
-    st.markdown("#### ✅ Validaciones Cruzadas")
-    
-    diff_bancos = safe_number(bancos_calculado) - safe_number(saldo_final)
-    if abs(diff_bancos) > 0.01:
-        st.error(f"❌ **Bancos**: Diferencia de {formato_venezolano(abs(diff_bancos))} Bs. con el saldo final del estado de cuenta")
-    else:
-        st.success(f"✅ **Bancos**: Coincide con el saldo final del estado de cuenta")
-    
-    if cobranzas > safe_number(st.session_state.saldos['cx_c']) + facturacion:
-        st.warning(f"⚠️ **CxC**: Cobranzas ({formato_venezolano(cobranzas)}) superan saldo disponible")
-    
-    if pagos_proveedores > safe_number(st.session_state.saldos['cx_p']) + recepcion_total:
-        st.warning(f"⚠️ **CxP**: Pagos a proveedores ({formato_venezolano(pagos_proveedores)}) superan saldo disponible")
-    
-    if transito_calculado >= 0:
-        st.success(f"✅ **Transferencias**: Saldo positivo ({formato_venezolano(transito_calculado)})")
-    else:
-        st.error(f"❌ **Transferencias**: Saldo negativo ({formato_venezolano(transito_calculado)})")
-    
-    st.info(f"ℹ️ **Saldo Final Bancario Reportado**: {formato_venezolano(saldo_final)} Bs.")
-    
-    st.markdown("---")
-    
-    # ============================================================
-    # KPI - RESUMEN DEL DÍA
-    # ============================================================
-    st.markdown("#### 📊 Resumen del Día")
-    
-    capital_anterior = safe_number(st.session_state.saldos.get('capital_anterior', capital_calculado))
-    var_capital = capital_calculado - capital_anterior
-    
-    col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
-    
-    with col_kpi1:
-        st.markdown(f"""
-        <div class="kpi-card kpi-capital">
-            <div class="icon-bg">🏁</div>
-            <div class="label">🏁 CAPITAL DE TRABAJO NETO</div>
-            <div class="value">{formato_venezolano(capital_calculado)}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col_kpi2:
-        arrow = "📉" if var_capital < 0 else "📈"
-        if var_capital >= 0:
-            color_class = "kpi-capital-positivo"
-        else:
-            color_class = "kpi-capital-negativo"
-        st.markdown(f"""
-        <div class="kpi-card {color_class}">
-            <div class="icon-bg">{arrow}</div>
-            <div class="label">{arrow} VARIACIÓN DEL CAPITAL</div>
-            <div class="value">{formato_venezolano(var_capital)}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col_kpi3:
-        st.markdown(f"""
-        <div class="kpi-card kpi-capital">
-            <div class="icon-bg">🔄</div>
-            <div class="label">🔄 TRANSFERENCIAS EN TRÁNSITO</div>
-            <div class="value">{formato_venezolano(transito_calculado)}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # ============================================================
-    # BOTONES DE ACCIÓN
-    # ============================================================
-    
-    inventario_final = saldos_reportados.get('Inventario', inventario_calculado)
-    cx_c_final = saldos_reportados.get('Cuentas por cobrar', cx_c_calculado)
-    cx_p_final = saldos_reportados.get('Cuentas por pagar', cx_p_calculado)
-    transito_final = saldos_reportados.get('Transferencias en tránsito', transito_calculado)
-    bancos_final = bancos_calculado
-    
-    col_btn1, col_btn2 = st.columns(2)
-    
-    with col_btn1:
-        if st.button("💾 Guardar saldos calculados", width='stretch'):
-            saldos_guardar = {
-                'inventario': inventario_final,
-                'cx_c': cx_c_final,
-                'bancos': bancos_final,
-                'cx_p': cx_p_final,
-                'transito': transito_final,
-                'capital': capital_calculado
-            }
-            
-            # 1. Guardar saldos diarios
-            db.guardar_saldos(
-                fecha_procesar.strftime('%Y-%m-%d'),
-                saldos_guardar,
-                empresa=st.session_state.empresa_activa
+        if 'fallas_detectadas' in st.session_state and st.session_state.get('fecha_ultimo_cierre') == "Manual (En tiempo real)":
+            renderizar_modulo_auditoria(
+                st.session_state['fallas_detectadas'],
+                st.session_state['df_consolidado'],
+                st.session_state['hay_errores'],
+                "Manual (En tiempo real)",
+                usuario_info.get('nombre', 'Analista')
             )
-            
-            # 2. Guardar inconsistencias detectadas históricamente
-            fecha_str = fecha_procesar.strftime('%Y-%m-%d')
-            empresa_activa = st.session_state.empresa_activa
-            
-            try:
-                conn = sqlite3.connect(db.db_path)
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM inconsistencias WHERE fecha = ? AND empresa = ?", (fecha_str, empresa_activa))
-                conn.commit()
-                conn.close()
-            except Exception as e:
-                print(f"Error al borrar inconsistencias previas: {e}")
+        
+        st.markdown("---")
+        
+        # ============================================================
+        # VISUALIZACIÓN DE ARCHIVOS
+        # ============================================================
+        st.markdown("#### 📋 Archivos Cargados")
+        
+        # Crear tabs para cada archivo
+        archivos_tabs = list(archivos_data.keys())
+        if archivos_tabs:
+            tabs = st.tabs(archivos_tabs)
+            for tab, nombre in zip(tabs, archivos_tabs):
+                with tab:
+                    info = archivos_data[nombre]
+                    df = info['df']
+                    nombre_archivo = info['nombre']
+                    
+                    # Procesar el archivo para mostrar
+                    df_proc, stats, col_numericas = mostrar_archivo_con_formato(df, nombre_archivo, nombre)
+                    if df_proc is not None and stats is not None:
+                        renderizar_archivo_en_tab(df_proc, nombre_archivo, nombre, stats, col_numericas)
+                    else:
+                        st.warning(f"⚠️ No se pudo procesar el archivo {nombre}")
+        else:
+            st.info("ℹ️ No hay archivos cargados para visualizar.")
+        
+        # ============================================================
+        # BOTONES DE VERIFICACIÓN DE ARCHIVOS
+        # ============================================================
+        st.markdown("---")
+        st.markdown("#### 📂 Ver archivos de verificación")
 
-            if abs(diff_inv) > 0.01:
-                db.guardar_inconsistencia(
-                    fecha_str, "Inventario", inventario_calculado, 
-                    inventario_reportado if inventario_reportado is not None else 0.0, 
-                    diff_inv, f"Diferencia de inventario en el cierre: {diff_inv:.2f}",
-                    empresa=empresa_activa
-                )
-            if abs(diff_cxc) > 0.01:
-                db.guardar_inconsistencia(
-                    fecha_str, "Cuentas por cobrar", cx_c_calculado, 
-                    cx_c_reportado if cx_c_reportado is not None else 0.0, 
-                    diff_cxc, f"Diferencia de CxC en el cierre: {diff_cxc:.2f}",
-                    empresa=empresa_activa
-                )
-            if abs(diff_cxp) > 0.01:
-                db.guardar_inconsistencia(
-                    fecha_str, "Cuentas por pagar", cx_p_calculado, 
-                    cx_p_reportado if cx_p_reportado is not None else 0.0, 
-                    diff_cxp, f"Diferencia de CxP en el cierre: {diff_cxp:.2f}",
-                    empresa=empresa_activa
-                )
-            if abs(diff_transito) > 0.01:
-                db.guardar_inconsistencia(
-                    fecha_str, "Transferencias en tránsito", transito_calculado, 
-                    transito_reportado if transito_reportado is not None else 0.0, 
-                    diff_transito, f"Diferencia de Tránsito en el cierre: {diff_transito:.2f}",
-                    empresa=empresa_activa
-                )
-            if abs(diferencia_bancos) > 0.01:
-                db.guardar_inconsistencia(
-                    fecha_str, "Bancos", bancos_calculado, saldo_final, 
-                    diferencia_bancos, f"Diferencia de Bancos en el cierre vs Estado de Cuenta: {diferencia_bancos:.2f}",
-                    empresa=empresa_activa
-                )
+        archivos_verificacion = [
+            ("CxC", archivo_cxc_reportado, "Cuentas por cobrar"),
+            ("Inventario", archivo_inventario_reportado, "Inventario"),
+            ("CxP", archivo_cxp_reportado, "Cuentas por pagar"),
+            ("Tránsito", archivo_tb, "Transferencias en tránsito")
+        ]
 
-            # 3. Guardar resultado de auditoría en auditoria_memoria.db
-            from motor_auditoria import guardar_resultado_cierre, calcular_kpis
-            fallas = st.session_state.get('fallas_detectadas')
-            df_c = st.session_state.get('df_consolidado')
-            hay_err = st.session_state.get('hay_errores')
-            
-            if fallas is None or df_c is None:
-                from motor_auditoria import ejecutar_auditoria_inteligente
-                hay_err, fallas, df_c = ejecutar_auditoria_inteligente(
-                    archivo_facturacion, archivo_cobranzas, archivo_egresos, archivo_estado_cuenta
-                )
-            
-            kpis = calcular_kpis(df_c)
-            guardar_resultado_cierre(
-                hay_err, fallas, df_c, kpis, 
-                fecha=fecha_str, 
-                empresa=empresa_activa
-            )
-            
-            st.session_state.saldos['inventario'] = inventario_final
-            st.session_state.saldos['cx_c'] = cx_c_final
-            st.session_state.saldos['bancos'] = bancos_final
-            st.session_state.saldos['cx_p'] = cx_p_final
-            st.session_state.saldos['transito'] = transito_final
-            st.session_state.saldos['capital_anterior'] = capital_calculado
-            
-            st.success("✅ Saldos, inconsistencias y reporte de auditoría guardados correctamente")
-            st.rerun()
-    
-    with col_btn2:
-        if st.button("📊 Ver gráfico evolución", width='stretch'):
-            historial = db.obtener_historial_saldos_completo(30, empresa=st.session_state.empresa_activa)
-            if not historial.empty and len(historial) > 1:
-                try:
-                    historial_ordenado = historial.sort_values('fecha')
-                    
-                    fig, axes = plt.subplots(2, 1, figsize=(12, 8))
-                    
-                    axes[0].plot(historial_ordenado['fecha'], historial_ordenado['capital'], 
-                                marker='o', linewidth=2, color='#c9a84c')
-                    axes[0].set_title('Evolución del Capital de Trabajo Neto', fontsize=14, fontweight='bold', color='#0a1628')
-                    axes[0].set_xlabel('Fecha', color='#6a8aac')
-                    axes[0].set_ylabel('Capital (Bs.)', color='#6a8aac')
-                    axes[0].grid(True, alpha=0.3)
-                    axes[0].set_facecolor('#f8fafc')
-                    axes[0].tick_params(axis='x', rotation=45, colors='#6a8aac')
-                    
-                    axes[1].plot(historial_ordenado['fecha'], historial_ordenado['inventario'], 
-                                marker='s', linewidth=2, label='Inventario', color='#2ecc71')
-                    axes[1].plot(historial_ordenado['fecha'], historial_ordenado['cx_c'], 
-                                marker='^', linewidth=2, label='CxC', color='#3498db')
-                    axes[1].plot(historial_ordenado['fecha'], historial_ordenado['bancos'], 
-                                marker='d', linewidth=2, label='Bancos', color='#f39c12')
-                    axes[1].set_title('Evolución de Componentes del Capital', fontsize=14, fontweight='bold', color='#0a1628')
-                    axes[1].set_xlabel('Fecha', color='#6a8aac')
-                    axes[1].set_ylabel('Monto (Bs.)', color='#6a8aac')
-                    axes[1].legend(loc='upper left')
-                    axes[1].grid(True, alpha=0.3)
-                    axes[1].set_facecolor('#f8fafc')
-                    axes[1].tick_params(axis='x', rotation=45, colors='#6a8aac')
-                    
-                    plt.tight_layout()
-                    st.pyplot(fig)
-                except Exception as e:
-                    st.warning(f"No se pudo generar el gráfico: {str(e)}")
-            else:
-                st.info("No hay suficientes datos históricos para generar gráficos (mínimo 2 días)")
-    
+        cols = st.columns(4)
+        for col, (nombre, archivo, titulo) in zip(cols, archivos_verificacion):
+            with col:
+                if archivo and archivos_cargados.get(titulo) is not None:
+                    if st.button(f"📄 Ver {nombre}", key=f"btn_{nombre}_tab3", width='stretch'):
+                        df_verif, stats_verif, col_num_verif = mostrar_archivo_con_formato(
+                            archivos_cargados[titulo], 
+                            archivo.name, 
+                            f"Archivo {titulo}"
+                        )
+                        if df_verif is not None and stats_verif is not None:
+                            renderizar_archivo_en_tab(df_verif, archivo.name, f"Archivo {titulo}", stats_verif, col_num_verif)
+                        else:
+                            st.warning("⚠️ No se pudo procesar el archivo")
+                else:
+                    st.button(f"❌ {nombre} no cargado", disabled=True, width='stretch')
+
     # ============================================================
-    # REGLAS DE NEGOCIO
+    # REGLAS DE NEGOCIO (FUERA DE LAS PESTAÑAS)
     # ============================================================
     with st.expander("📌 Reglas de negocio aplicadas"):
         st.markdown("""
