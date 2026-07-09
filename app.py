@@ -6,6 +6,7 @@
 # 🎯 REFACTORIZADO: KPIs con función mostrar_kpi_paso_paso para mejor legibilidad
 # 📊 MEJORADO: Resúmenes con tarjetas ejecutivas en dos columnas
 # 🔄 NUEVO: Uploader Recepción Trazabilidad para trazabilidad de inventarios
+# 📦 CORREGIDO: Función mostrar_kpi_cantidades para KPIs de unidades sin formato Bs.
 
 import streamlit as st
 import pandas as pd
@@ -355,6 +356,48 @@ def mostrar_kpi_paso_paso(col, titulo, valor, icono, variante="blue"):
         </div>
         <div style="font-size: 1.5rem; font-weight: 800; color: {cfg['text']}; margin-top: 5px; font-family: 'Inter', sans-serif;">
             {valor_formateado} <span style="font-size: 0.8rem; font-weight: 500; color: #718096;">Bs.</span>
+        </div>
+    </div>
+    """
+    with col:
+        st.markdown(html, unsafe_allow_html=True)
+
+# ============================================================
+# FUNCIÓN PARA MOSTRAR KPI DE CANTIDADES (UNIDADES) - CORREGIDO
+# ============================================================
+def mostrar_kpi_cantidades(col, titulo, valor, icono, variante="blue"):
+    """
+    Genera tarjetas KPI exclusivas para cantidades físicas (unidades),
+    eliminando el formato monetario de Bolívares (Bs.).
+    """
+    mapa_colores = {
+        "blue": {"bg": "#f0f7ff", "border": "#0056b3", "text": "#0056b3"},
+        "green": {"bg": "#f0fff4", "border": "#1e7e34", "text": "#1e7e34"},
+        "red": {"bg": "#fff5f5", "border": "#c82333", "text": "#c82333"},
+        "orange": {"bg": "#fff9db", "border": "#d97706", "text": "#d97706"},
+        "purple": {"bg": "#fcf0ff", "border": "#85144b", "text": "#85144b"}
+    }
+    
+    cfg = mapa_colores.get(variante, mapa_colores["blue"])
+    # Formatear con separador de miles tradicional, sin decimales flotantes erróneos si son enteros
+    valor_formateado = f"{float(valor):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+    if valor_formateado.endswith(",00"):
+        valor_formateado = valor_formateado[:-3]  # Mostrar número entero limpio si no tiene decimales reales
+        
+    html = f"""
+    <div style="
+        background-color: {cfg['bg']};
+        border-left: 5px solid {cfg['border']};
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        margin-bottom: 15px;
+    ">
+        <div style="font-size: 0.75rem; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: 0.5px;">
+            {icono} {titulo}
+        </div>
+        <div style="font-size: 1.5rem; font-weight: 800; color: {cfg['text']}; margin-top: 5px; font-family: 'Inter', sans-serif;">
+            {valor_formateado} <span style="font-size: 0.8rem; font-weight: 500; color: #718096;">Und.</span>
         </div>
     </div>
     """
@@ -5253,7 +5296,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         
         st.markdown("---")
         
-                # ============================================================
+        # ============================================================
         # 📦 TRAZABILIDAD DE INVENTARIO - PRODUCTO POR PRODUCTO
         # ============================================================
         st.markdown("### 📦 Trazabilidad de Inventario - Producto por Producto")
@@ -5451,12 +5494,12 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     
                     col_inv_c1, col_inv_c2, col_inv_c3, col_inv_c4, col_inv_c5 = st.columns(5)
                     
-                    # 🔥 CORREGIDO: Mostrar la cantidad correcta de recepción
-                    mostrar_kpi_paso_paso(col_inv_c1, "Inv. Anterior (und)", total_inicial_cant, "📦", "blue")
-                    mostrar_kpi_paso_paso(col_inv_c2, "Ventas (und)", total_ventas_cant, "📊", "red")
-                    mostrar_kpi_paso_paso(col_inv_c3, "Recepción (und)", total_recepcion_cant, "📥", "purple")
-                    mostrar_kpi_paso_paso(col_inv_c4, "Inv. Esperado (und)", total_esperado_cant, "📋", "orange")
-                    mostrar_kpi_paso_paso(col_inv_c5, "Inv. Reportado (und)", total_reportado_cant, "📄", "green")
+                    # 🔥 CORREGIDO: Usar mostrar_kpi_cantidades en lugar de mostrar_kpi_paso_paso
+                    mostrar_kpi_cantidades(col_inv_c1, "Inv. Anterior (und)", total_inicial_cant, "📦", "blue")
+                    mostrar_kpi_cantidades(col_inv_c2, "Ventas (und)", total_ventas_cant, "📊", "red")
+                    mostrar_kpi_cantidades(col_inv_c3, "Recepción (und)", total_recepcion_cant, "📥", "purple")
+                    mostrar_kpi_cantidades(col_inv_c4, "Inv. Esperado (und)", total_esperado_cant, "📋", "orange")
+                    mostrar_kpi_cantidades(col_inv_c5, "Inv. Reportado (und)", total_reportado_cant, "📄", "green")
                     
                     # ============================================================
                     # 11. VERIFICACIÓN DE INVENTARIO POR CANTIDAD - CORREGIDO
@@ -5465,15 +5508,16 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     
                     col_v_inv_c1, col_v_inv_c2, col_v_inv_c3 = st.columns(3)
                     
-                    mostrar_kpi_paso_paso(col_v_inv_c1, "Esperado (und)", total_esperado_cant, "📋", "orange")
-                    mostrar_kpi_paso_paso(col_v_inv_c2, "Reportado (und)", total_reportado_cant, "📄", "green")
+                    # 🔥 CORREGIDO: Usar mostrar_kpi_cantidades
+                    mostrar_kpi_cantidades(col_v_inv_c1, "Esperado (und)", total_esperado_cant, "📋", "orange")
+                    mostrar_kpi_cantidades(col_v_inv_c2, "Reportado (und)", total_reportado_cant, "📄", "green")
                     
                     diff_total_cant = total_reportado_cant - total_esperado_cant
                     variante_diff_cant = "green" if abs(diff_total_cant) < 0.01 else ("red" if diff_total_cant < 0 else "orange")
                     icono_diff_cant = "✅" if abs(diff_total_cant) < 0.01 else ("⚠️" if diff_total_cant > 0 else "❌")
                     titulo_diff_cant = "Diferencia (Coincide)" if abs(diff_total_cant) < 0.01 else ("Sobrante" if diff_total_cant > 0 else "Faltante")
                     
-                    mostrar_kpi_paso_paso(col_v_inv_c3, titulo_diff_cant, diff_total_cant, icono_diff_cant, variante_diff_cant)
+                    mostrar_kpi_cantidades(col_v_inv_c3, titulo_diff_cant, diff_total_cant, icono_diff_cant, variante_diff_cant)
                     
                     # ============================================================
                     # 12. ESTADÍSTICAS DE PRODUCTOS
