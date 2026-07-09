@@ -7,6 +7,7 @@
 # 📊 MEJORADO: Resúmenes con tarjetas ejecutivas en dos columnas
 # 🔄 NUEVO: Uploader Recepción Trazabilidad para trazabilidad de inventarios
 # 📦 CORREGIDO: Función mostrar_kpi_cantidades para KPIs de unidades sin formato Bs.
+# 🔥 REFACTORIZADO: Detección de duplicados internos en Cobranzas (2026-07-09)
 
 import streamlit as st
 import pandas as pd
@@ -5007,7 +5008,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         else:
             st.error(f"⚠️ **DIFERENCIA DETECTADA:** {formato_venezolano(abs(diff_cxc_calc))} Bs. de diferencia")
             
-            # Botones para análisis
+            # ============================================================
+            # 🔥 REFACTORIZACIÓN DE CxC: DETECCIÓN DE DUPLICADOS INTERNOS
+            # ============================================================
             st.markdown("---")
             with st.expander("🔍 Análisis Detallado de Cuentas por Cobrar", expanded=False):
                 st.markdown("--- ")
@@ -5035,8 +5038,12 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         tiene_cobranzas = 'df_cobranzas' in locals() and df_cobranzas is not None
                         tiene_notas_cliente = 'df_notas_cliente' in locals() and df_notas_cliente is not None
                         
-                        # Extraer cobranzas actuales
+                        # ============================================================
+                        # 🔥 REFACTORIZACIÓN EN CALIENTE: Extraer cobranzas actuales detectando duplicados internos
+                        # ============================================================
                         cobranzas_actual_docs = {}
+                        cobranzas_duplicadas_internas = []  # Para capturar duplicados dentro del mismo archivo
+                        
                         if tiene_cobranzas:
                             df_cob_clean = ProcesadorArchivos._limpiar_columnas(df_cobranzas)
                             
@@ -5077,13 +5084,25 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                                 except:
                                                     pass
                                             
-                                            cobranzas_actual_docs[ref_norm] = {
-                                                'referencia': ref,
-                                                'monto': float(monto),
-                                                'cliente': cliente
-                                            }
+                                            # 💡 CORRECCIÓN MÁGICA: Si ya existe la referencia en el día actual, ¡Es un duplicado interno!
+                                            if ref_norm in cobranzas_actual_docs:
+                                                cobranzas_duplicadas_internas.append({
+                                                    'referencia': ref,
+                                                    'monto_actual': float(monto),
+                                                    'monto_anterior': cobranzas_actual_docs[ref_norm]['monto'],
+                                                    'cliente': cliente if cliente else cobranzas_actual_docs[ref_norm]['cliente'],
+                                                    'estado': '🔴 DUPLICADO EN ARCHIVO'
+                                                })
+                                            else:
+                                                cobranzas_actual_docs[ref_norm] = {
+                                                    'referencia': ref,
+                                                    'monto': float(monto),
+                                                    'cliente': cliente
+                                                }
                         
+                        # ============================================================
                         # Extraer cobranzas del día anterior
+                        # ============================================================
                         cobranzas_anterior_docs = {}
                         try:
                             empresa_clean = re.sub(r'[^\w\-_]', '_', st.session_state.empresa_activa)
@@ -5129,7 +5148,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         except Exception as e:
                             pass
                         
+                        # ============================================================
                         # Extraer notas de crédito
+                        # ============================================================
                         notas_credito_docs = {}
                         if tiene_notas_cliente:
                             try:
@@ -5180,30 +5201,38 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                             except Exception as e:
                                 pass
                         
-                        # Mostrar Cobranzas Duplicadas
+                        # ============================================================
+                        # MOSTRAR COBRANZAS DUPLICADAS CON LA NUEVA LÓGICA (INTERNAS + CRUZADAS)
+                        # ============================================================
                         if st.session_state.get('mostrar_cxc_duplicadas', False):
-                            with st.expander("🔴 Cobranzas Duplicadas", expanded=True):
-                                cobranzas_duplicadas = []
+                            with st.expander("🔴 Cobranzas Duplicadas Detectadas", expanded=True):
+                                # Duplicados cruzados (contra día anterior)
+                                cobranzas_duplicadas_cruzadas = []
                                 for ref_norm, info in cobranzas_actual_docs.items():
                                     if ref_norm in cobranzas_anterior_docs:
-                                        cobranzas_duplicadas.append({
+                                        cobranzas_duplicadas_cruzadas.append({
                                             'referencia': info['referencia'],
                                             'monto_actual': info['monto'],
                                             'monto_anterior': cobranzas_anterior_docs[ref_norm]['monto'],
                                             'cliente': info.get('cliente', 'No identificado'),
-                                            'estado': '🔴 DUPLICADA'
+                                            'estado': '🔴 DUPLICADA VS AYER'
                                         })
                                 
-                                if cobranzas_duplicadas:
-                                    df_dup = pd.DataFrame(cobranzas_duplicadas)
-                                    total_dup = sum([x['monto_actual'] for x in cobranzas_duplicadas])
-                                    st.metric("💰 Total Duplicado", formato_venezolano(total_dup))
+                                # Combinar ambos tipos de duplicados (de ayer y del mismo archivo)
+                                todas_duplicadas = cobranzas_duplicadas_internas + cobranzas_duplicadas_cruzadas
+                                
+                                if todas_duplicadas:
+                                    df_dup = pd.DataFrame(todas_duplicadas)
+                                    total_dup = sum([x['monto_actual'] for x in todas_duplicadas])
+                                    st.metric("💰 Total Duplicado en Auditoría", formato_venezolano(total_dup))
                                     st.dataframe(df_dup, use_container_width=True)
-                                    st.error(f"❌ **{len(cobranzas_duplicadas)} cobranzas duplicadas encontradas**")
+                                    st.error(f"❌ **Se encontraron {len(todas_duplicadas)} cobranzas duplicadas que requieren aplicar ajuste técnico.**")
                                 else:
-                                    st.success("✅ No hay cobranzas duplicadas")
+                                    st.success("✅ No hay cobranzas duplicadas en los registros de hoy.")
                         
+                        # ============================================================
                         # Mostrar Notas de Crédito
+                        # ============================================================
                         if st.session_state.get('mostrar_cxc_nc', False):
                             with st.expander("📝 Notas de Crédito", expanded=True):
                                 if notas_credito_docs:
@@ -5215,14 +5244,16 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 else:
                                     st.info("ℹ️ No hay notas de crédito")
                         
+                        # ============================================================
                         # Mostrar Análisis Completo
+                        # ============================================================
                         if st.session_state.get('mostrar_cxc_completo', False):
                             with st.expander("📊 Análisis Completo de CxC", expanded=True):
                                 # Clasificar
-                                cobranzas_duplicadas = []
+                                cobranzas_duplicadas_cruzadas = []
                                 for ref_norm, info in cobranzas_actual_docs.items():
                                     if ref_norm in cobranzas_anterior_docs:
-                                        cobranzas_duplicadas.append(info)
+                                        cobranzas_duplicadas_cruzadas.append(info)
                                 
                                 cobranzas_nuevas = []
                                 for ref_norm, info in cobranzas_actual_docs.items():
@@ -5234,18 +5265,22 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                     if ref_norm not in cobranzas_actual_docs:
                                         cobranzas_rezagadas.append(info)
                                 
-                                total_duplicadas = sum([x['monto'] for x in cobranzas_duplicadas])
+                                total_duplicadas_cruzadas = sum([x['monto'] for x in cobranzas_duplicadas_cruzadas])
+                                total_duplicadas_internas = sum([x['monto_actual'] for x in cobranzas_duplicadas_internas])
+                                total_duplicadas = total_duplicadas_cruzadas + total_duplicadas_internas
                                 total_nuevas = sum([x['monto'] for x in cobranzas_nuevas])
                                 total_rezagadas = sum([x['monto'] for x in cobranzas_rezagadas])
                                 total_nc = sum([x['monto'] for x in notas_credito_docs.values()])
                                 
-                                col_a1, col_a2, col_a3 = st.columns(3)
+                                col_a1, col_a2, col_a3, col_a4 = st.columns(4)
                                 
                                 with col_a1:
-                                    st.metric("🔴 Duplicadas", len(cobranzas_duplicadas), delta=f"{formato_venezolano(total_duplicadas)}")
+                                    st.metric("🔴 Duplicadas Cruzadas", len(cobranzas_duplicadas_cruzadas), delta=f"{formato_venezolano(total_duplicadas_cruzadas)}")
                                 with col_a2:
-                                    st.metric("🆕 Nuevas", len(cobranzas_nuevas), delta=f"{formato_venezolano(total_nuevas)}")
+                                    st.metric("🔴 Duplicadas Internas", len(cobranzas_duplicadas_internas), delta=f"{formato_venezolano(total_duplicadas_internas)}")
                                 with col_a3:
+                                    st.metric("🆕 Nuevas", len(cobranzas_nuevas), delta=f"{formato_venezolano(total_nuevas)}")
+                                with col_a4:
                                     st.metric("✅ Rezagadas", len(cobranzas_rezagadas), delta=f"{formato_venezolano(total_rezagadas)}")
                                 
                                 st.metric("📝 Notas de Crédito", len(notas_credito_docs), delta=f"{formato_venezolano(total_nc)}")
@@ -5261,7 +5296,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 | Concepto | Monto | Explicación |
                                 |----------|-------|-------------|
                                 | **Diferencia Total** | {formato_venezolano(abs(diff_cxc_calc))} | Diferencia en CxC |
-                                | 🔴 **Duplicadas** | {formato_venezolano(total_duplicadas)} | Cobranzas que ya estaban en día anterior |
+                                | 🔴 **Duplicadas Cruzadas** | {formato_venezolano(total_duplicadas_cruzadas)} | Cobranzas que ya estaban en día anterior |
+                                | 🔴 **Duplicadas Internas** | {formato_venezolano(total_duplicadas_internas)} | Cobranzas duplicadas dentro del mismo archivo |
                                 | ✅ **Rezagadas** | {formato_venezolano(total_rezagadas)} | Cobranzas que ya no están en día actual |
                                 | 📝 **Notas de Crédito** | {formato_venezolano(total_nc)} | NC aplicadas que afectan CxC |
                                 | **Diferencia Explicada** | {formato_venezolano(diferencia_explicada_cxc)} | Suma de diferencias |
@@ -5273,7 +5309,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 else:
                                     st.error(f"❌ **DIFERENCIA NO EXPLICADA:** {formato_venezolano(diferencia_no_explicada_cxc)} Bs.")
                         
+                        # ============================================================
                         # Botón para cerrar vistas de CxC
+                        # ============================================================
                         if st.button("🔒 Cerrar todas las vistas de CxC", width='stretch'):
                             st.session_state['mostrar_cxc_duplicadas'] = False
                             st.session_state['mostrar_cxc_nc'] = False
