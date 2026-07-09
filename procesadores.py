@@ -887,47 +887,82 @@ class ProcesadorArchivos:
         
         return total_recepcion, compras_credito, cantidad, promedio
     
-    # ===================== NOTAS DE CRÉDITO =====================
+    # ===================== NOTAS DE CRÉDITO - VERSION ULTRA-ROBUSTA (CORREGIDA) =====================
     
     @staticmethod
     def procesar_notas_credito(df):
         """
-        Procesa notas de crédito.
-        
-        Args:
-            df: DataFrame de pandas
-        
-        Returns:
-            tuple: (total_notas, cantidad_notas, promedio_nota)
+        Procesa el archivo de notas de crédito de clientes.
+        Detecta la cabecera real, extrae los montos (convirtiéndolos a positivo)
+        y calcula el total acumulado de forma limpia.
         """
         if df is None or df.empty:
             return 0.0, 0, 0.0
-        
-        df = ProcesadorArchivos._limpiar_columnas(df)
-        
-        monto_col = ProcesadorArchivos._buscar_columna(
-            df, 
-            'monto', 'valor', 'total', 'credito', 'importe', 'amount',
-            'nota_credito', 'monto_nota', 'abono'
-        )
-        
-        doc_col = ProcesadorArchivos._buscar_columna(
-            df, 
-            'documento', 'comprobante', 'doc', 'id', 'nro_nota', 'nota'
-        )
-        
-        total = ProcesadorArchivos._extraer_valor(df, 'monto', 'valor', 'total', 'credito')
-        if total == 0 and monto_col:
-            try:
-                total = ProcesadorArchivos._extraer_valor(df, monto_col)
-            except:
-                total = 0.0
-        
-        cantidad = df[doc_col].nunique() if doc_col else len(df)
-        
-        promedio = total / cantidad if cantidad > 0 else 0.0
-        
-        return total, cantidad, promedio
+            
+        try:
+            # 1. Limpiar columnas base
+            df = ProcesadorArchivos._limpiar_columnas(df)
+            
+            # 2. Encontrar la fila de cabecera real buscando el patrón '# Nota' o 'monto'
+            idx_inicio = 0
+            for idx, row in df.iterrows():
+                row_str = ' '.join([str(x).lower() for x in row.values if pd.notna(x)])
+                if 'nota' in row_str and 'monto' in row_str:
+                    idx_inicio = idx
+                    break
+            
+            # Reestructurar el DataFrame si la cabecera estaba abajo
+            if idx_inicio > 0 and idx_inicio < len(df):
+                header_row = df.iloc[idx_inicio]
+                new_columns = [str(col).strip() if pd.notna(col) else f'col_{i}' for i, col in enumerate(header_row)]
+                df_datos = df.iloc[idx_inicio+1:].reset_index(drop=True)
+                df_datos.columns = new_columns
+                df = df_datos
+
+            # 3. Forzar la búsqueda de la columna de montos de forma estricta
+            col_monto = None
+            for col in df.columns:
+                col_lower = str(col).lower().strip()
+                if col_lower == 'monto' or col_lower == '# nota' or 'monto' in col_lower:
+                    # Evitar columnas de impuestos
+                    if 'impuesto' not in col_lower:
+                        col_monto = col
+                        break
+            
+            # Fallback por posición si falla el nombre (en tu archivo es la columna índice 6)
+            if col_monto is None and len(df.columns) >= 7:
+                col_monto = df.columns[6]
+                
+            if not col_monto:
+                return 0.0, 0, 0.0
+
+            # 4. Sumar los valores convirtiendo los negativos a absolutos
+            total_acumulado = 0.0
+            conteo_notas = 0
+            
+            for val in df[col_monto]:
+                if pd.isna(val) or str(val).strip() == '':
+                    continue
+                
+                # Saltar filas de subtotales del reporte
+                val_str = str(val).lower()
+                if 'total' in val_str or 'sub' in val_str:
+                    continue
+                    
+                num = ProcesadorArchivos._convertir_numero_europeo(val)
+                if not pd.isna(num) and num != 0:
+                    # 💡 CLAVE: Convertimos a valor absoluto para que reste correctamente en la fórmula de CxC
+                    total_acumulado += abs(float(num))
+                    conteo_notas += 1
+            
+            promedio = total_acumulado / conteo_notas if conteo_notas > 0 else 0.0
+            
+            print(f"✅ Notas de Crédito Procesadas con Éxito: Total = {total_acumulado} | Cantidad = {conteo_notas}")
+            return float(total_acumulado), int(conteo_notas), float(promedio)
+            
+        except Exception as e:
+            print(f"❌ Error en procesar_notas_credito: {e}")
+            return 0.0, 0, 0.0
     
     # ===================== COSTO DE FACTURACIÓN - CORREGIDO =====================
     
