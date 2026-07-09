@@ -1371,13 +1371,13 @@ class ProcesadorArchivos:
             return None
 
     # ============================================================
-    # 🔥 NUEVO: PROCESAR RECEPCIÓN TRAZABILIDAD
+    # 🔥 NUEVO: PROCESAR RECEPCIÓN TRAZABILIDAD (MEJORADO)
     # ============================================================
     @staticmethod
     def procesar_recepcion_trazabilidad(df):
         """
         Procesa el archivo de Recepción Trazabilidad para extraer productos y cantidades.
-        Espera un formato similar al de Recepciones pero con enfoque en trazabilidad.
+        Busca columnas: Documento (código), Producto (descripción), Cantidad.
         Retorna un diccionario {codigo_producto: {'cantidad': float, 'producto': str}}
         
         Args:
@@ -1393,37 +1393,12 @@ class ProcesadorArchivos:
             # Limpiar columnas
             df_clean = ProcesadorArchivos._limpiar_columnas(df)
             
-            # Buscar la fila de datos (cabecera)
-            idx_inicio = ProcesadorArchivos._encontrar_fila_datos(
-                df_clean, 
-                ['código', 'producto', 'cantidad', 'compra', 'recepción', 'item', 'descripción', 'cod']
-            )
+            # DEBUG: Mostrar columnas encontradas
+            print(f"📊 Columnas en Recepción Trazabilidad: {df_clean.columns.tolist()}")
             
-            # Si no se encuentra por patrones, buscar manualmente
-            if idx_inicio == 0:
-                for idx, row in df_clean.iterrows():
-                    row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                    if any(p in row_str for p in ['compra', 'proveedor', 'recep', 'código', 'producto', 'cantidad']):
-                        idx_inicio = idx + 1
-                        break
-            
-            # Reestructurar el DataFrame si encontramos una cabecera
-            if idx_inicio > 0 and idx_inicio < len(df_clean):
-                df_datos = df_clean.iloc[idx_inicio:].reset_index(drop=True)
-                if len(df_datos) > 0:
-                    # Usar la primera fila como cabecera
-                    header_row = df_datos.iloc[0]
-                    new_columns = []
-                    for col in header_row:
-                        if pd.notna(col):
-                            new_columns.append(str(col).strip())
-                        else:
-                            new_columns.append(f'col_{len(new_columns)}')
-                    df_datos.columns = new_columns
-                    df_datos = df_datos.iloc[1:].reset_index(drop=True)
-                    df_clean = df_datos
-            
-            # Identificar columnas
+            # ============================================================
+            # 1. IDENTIFICAR COLUMNAS POR NOMBRE
+            # ============================================================
             col_codigo = None
             col_producto = None
             col_cantidad = None
@@ -1431,41 +1406,45 @@ class ProcesadorArchivos:
             for col in df_clean.columns:
                 col_lower = str(col).lower().strip()
                 
-                # Buscar columna de código
+                # Buscar columna de código (Documento, Compra, Código)
                 if col_codigo is None:
-                    if any(p in col_lower for p in ['código', 'cod', 'sku', 'item', 'producto_id', 'id']):
+                    if any(p in col_lower for p in ['documento', 'compra', 'código', 'cod', 'sku', 'id']):
                         col_codigo = col
-                    elif 'producto' in col_lower and 'desc' not in col_lower and 'cant' not in col_lower:
-                        # Si no hay columna de código específica, usar la columna de producto
-                        if col_codigo is None:
-                            col_codigo = col
+                        print(f"✅ Columna de código encontrada: '{col_codigo}'")
                 
-                # Buscar columna de descripción/producto
+                # Buscar columna de producto/descripción
                 if col_producto is None:
-                    if any(p in col_lower for p in ['descrip', 'producto', 'nombre', 'desc']):
+                    if any(p in col_lower for p in ['producto', 'descrip', 'nombre', 'desc']):
                         col_producto = col
+                        print(f"✅ Columna de producto encontrada: '{col_producto}'")
                 
                 # Buscar columna de cantidad
                 if col_cantidad is None:
                     if any(p in col_lower for p in ['cantidad', 'qty', 'unidades', 'cant']):
                         col_cantidad = col
+                        print(f"✅ Columna de cantidad encontrada: '{col_cantidad}'")
             
-            # Si no encontramos columnas específicas, buscar por posición
+            # Si no se encontraron, usar por posición
             if col_codigo is None and len(df_clean.columns) >= 1:
                 col_codigo = df_clean.columns[0]
+                print(f"⚠️ Usando primera columna como código: '{col_codigo}'")
             if col_producto is None and len(df_clean.columns) >= 2:
                 col_producto = df_clean.columns[1]
+                print(f"⚠️ Usando segunda columna como producto: '{col_producto}'")
             if col_cantidad is None and len(df_clean.columns) >= 3:
                 col_cantidad = df_clean.columns[2]
+                print(f"⚠️ Usando tercera columna como cantidad: '{col_cantidad}'")
             
             if col_codigo is None or col_cantidad is None:
-                print("No se encontraron columnas de código y cantidad en el archivo de Recepción Trazabilidad")
+                print("❌ No se encontraron columnas de código y cantidad")
                 return {}
             
-            # Extraer datos
+            # ============================================================
+            # 2. EXTRAER DATOS
+            # ============================================================
             resultado = {}
             for idx, row in df_clean.iterrows():
-                # Saltar filas vacías o que no contienen datos
+                # Saltar filas vacías
                 if pd.isna(row[col_codigo]) or (isinstance(row[col_codigo], str) and row[col_codigo].strip() == ''):
                     continue
                 
@@ -1473,19 +1452,23 @@ class ProcesadorArchivos:
                 cantidad = ProcesadorArchivos._convertir_numero_europeo(row[col_cantidad])
                 
                 if codigo and codigo != 'nan' and codigo != 'None' and cantidad and cantidad > 0:
-                    # Normalizar código (quitar ceros a la izquierda)
-                    codigo_norm = codigo.lstrip('0').strip()
+                    # Limpiar código (quitar ceros a la izquierda)
+                    codigo_limpio = codigo.lstrip('0').strip()
+                    if codigo_limpio == '':
+                        codigo_limpio = codigo
                     
                     producto = ''
                     if col_producto and not pd.isna(row[col_producto]):
                         producto = str(row[col_producto]).strip()
                     
-                    resultado[codigo_norm] = {
+                    resultado[codigo_limpio] = {
                         'cantidad': float(cantidad),
                         'producto': producto
                     }
+                    
+                    print(f"✅ Producto extraído: {codigo_limpio} - {producto} - {cantidad}")
             
-            print(f"✅ Recepción Trazabilidad: {len(resultado)} productos extraídos")
+            print(f"📊 Total de productos extraídos de Recepción Trazabilidad: {len(resultado)}")
             return resultado
             
         except Exception as e:
