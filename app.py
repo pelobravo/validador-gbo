@@ -2693,7 +2693,8 @@ with st.sidebar:
                     )
                     st.session_state['fallas_detectadas'] = fallas
                     st.session_state['df_consolidado'] = df_c
-                    st.session_state['hay_errores'] = hay_err                    st.session_state['cierre_kpis'] = calcular_kpis(df_c)
+                    st.session_state['hay_errores'] = hay_err                  
+                    st.session_state['cierre_kpis'] = calcular_kpis(df_c)
                     st.session_state['fecha_ultimo_cierre'] = "Manual (En tiempo real)"
                     
                     fallas_activas = [f for f in fallas if f['tipo'] in ['ROJA', 'AMARILLA', 'NARANJA']]
