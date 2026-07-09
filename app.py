@@ -5240,7 +5240,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         
         st.markdown("---")
         
-       # ============================================================
+# ============================================================
 # 📦 TRAZABILIDAD DE INVENTARIO - PRODUCTO POR PRODUCTO (MEJORADO)
 # ============================================================
 st.markdown("### 📦 Trazabilidad de Inventario - Producto por Producto")
