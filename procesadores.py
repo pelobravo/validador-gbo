@@ -1369,3 +1369,127 @@ class ProcesadorArchivos:
         except Exception as e:
             print(f"Error al cargar detalle de utilidad: {e}")
             return None
+
+    # ============================================================
+    # 🔥 NUEVO: PROCESAR RECEPCIÓN TRAZABILIDAD
+    # ============================================================
+    @staticmethod
+    def procesar_recepcion_trazabilidad(df):
+        """
+        Procesa el archivo de Recepción Trazabilidad para extraer productos y cantidades.
+        Espera un formato similar al de Recepciones pero con enfoque en trazabilidad.
+        Retorna un diccionario {codigo_producto: {'cantidad': float, 'producto': str}}
+        
+        Args:
+            df: DataFrame de pandas del archivo de Recepción Trazabilidad
+            
+        Returns:
+            dict: Diccionario con código de producto como clave y {'cantidad': float, 'producto': str} como valor
+        """
+        if df is None or df.empty:
+            return {}
+        
+        try:
+            # Limpiar columnas
+            df_clean = ProcesadorArchivos._limpiar_columnas(df)
+            
+            # Buscar la fila de datos (cabecera)
+            idx_inicio = ProcesadorArchivos._encontrar_fila_datos(
+                df_clean, 
+                ['código', 'producto', 'cantidad', 'compra', 'recepción', 'item', 'descripción', 'cod']
+            )
+            
+            # Si no se encuentra por patrones, buscar manualmente
+            if idx_inicio == 0:
+                for idx, row in df_clean.iterrows():
+                    row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
+                    if any(p in row_str for p in ['compra', 'proveedor', 'recep', 'código', 'producto', 'cantidad']):
+                        idx_inicio = idx + 1
+                        break
+            
+            # Reestructurar el DataFrame si encontramos una cabecera
+            if idx_inicio > 0 and idx_inicio < len(df_clean):
+                df_datos = df_clean.iloc[idx_inicio:].reset_index(drop=True)
+                if len(df_datos) > 0:
+                    # Usar la primera fila como cabecera
+                    header_row = df_datos.iloc[0]
+                    new_columns = []
+                    for col in header_row:
+                        if pd.notna(col):
+                            new_columns.append(str(col).strip())
+                        else:
+                            new_columns.append(f'col_{len(new_columns)}')
+                    df_datos.columns = new_columns
+                    df_datos = df_datos.iloc[1:].reset_index(drop=True)
+                    df_clean = df_datos
+            
+            # Identificar columnas
+            col_codigo = None
+            col_producto = None
+            col_cantidad = None
+            
+            for col in df_clean.columns:
+                col_lower = str(col).lower().strip()
+                
+                # Buscar columna de código
+                if col_codigo is None:
+                    if any(p in col_lower for p in ['código', 'cod', 'sku', 'item', 'producto_id', 'id']):
+                        col_codigo = col
+                    elif 'producto' in col_lower and 'desc' not in col_lower and 'cant' not in col_lower:
+                        # Si no hay columna de código específica, usar la columna de producto
+                        if col_codigo is None:
+                            col_codigo = col
+                
+                # Buscar columna de descripción/producto
+                if col_producto is None:
+                    if any(p in col_lower for p in ['descrip', 'producto', 'nombre', 'desc']):
+                        col_producto = col
+                
+                # Buscar columna de cantidad
+                if col_cantidad is None:
+                    if any(p in col_lower for p in ['cantidad', 'qty', 'unidades', 'cant']):
+                        col_cantidad = col
+            
+            # Si no encontramos columnas específicas, buscar por posición
+            if col_codigo is None and len(df_clean.columns) >= 1:
+                col_codigo = df_clean.columns[0]
+            if col_producto is None and len(df_clean.columns) >= 2:
+                col_producto = df_clean.columns[1]
+            if col_cantidad is None and len(df_clean.columns) >= 3:
+                col_cantidad = df_clean.columns[2]
+            
+            if col_codigo is None or col_cantidad is None:
+                print("No se encontraron columnas de código y cantidad en el archivo de Recepción Trazabilidad")
+                return {}
+            
+            # Extraer datos
+            resultado = {}
+            for idx, row in df_clean.iterrows():
+                # Saltar filas vacías o que no contienen datos
+                if pd.isna(row[col_codigo]) or (isinstance(row[col_codigo], str) and row[col_codigo].strip() == ''):
+                    continue
+                
+                codigo = str(row[col_codigo]).strip()
+                cantidad = ProcesadorArchivos._convertir_numero_europeo(row[col_cantidad])
+                
+                if codigo and codigo != 'nan' and codigo != 'None' and cantidad and cantidad > 0:
+                    # Normalizar código (quitar ceros a la izquierda)
+                    codigo_norm = codigo.lstrip('0').strip()
+                    
+                    producto = ''
+                    if col_producto and not pd.isna(row[col_producto]):
+                        producto = str(row[col_producto]).strip()
+                    
+                    resultado[codigo_norm] = {
+                        'cantidad': float(cantidad),
+                        'producto': producto
+                    }
+            
+            print(f"✅ Recepción Trazabilidad: {len(resultado)} productos extraídos")
+            return resultado
+            
+        except Exception as e:
+            print(f"❌ Error en procesar_recepcion_trazabilidad: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
