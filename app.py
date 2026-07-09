@@ -5541,7 +5541,7 @@ else:
 
 st.markdown("---")
     
-    # ============================================================
+# ============================================================
 # PESTAÑA 3: ARCHIVOS FUENTE DEL DÍA
 # ============================================================
 with tab_auditoria_archivos:
@@ -5659,21 +5659,6 @@ with tab_auditoria_archivos:
         **NO se utilizan valores calculados** para el Cierre Diario.
         """)
 
-    else:
-    # --- MÓDULO VISUAL PASIVO DE AUDITORÍA (ÚLTIMO CIERRE DEL BOT) ---
-    existe_c, fecha_c, hay_err_c, fallas_c, df_c_c, kpis_c = cargar_ultimo_cierre()
-    if existe_c:
-        st.markdown("---")
-        st.markdown("#### 🤖 Cierre Diario Automático (Procesado por el Bot)")
-        renderizar_modulo_auditoria(
-            fallas_c,
-            df_c_c,
-            hay_err_c,
-            f"Bot Nocturno - {fecha_c}",
-            usuario_info.get('nombre', 'Analista')
-        )
-        st.markdown("---")
-        
     st.info("👈 Carga los archivos obligatorios del día en la barra lateral para comenzar la validación")
     st.info("📌 **Archivos obligatorios:** Facturación, Cobranzas, Egresos iPago y Estado de Cuenta")
     st.info("ℹ️ **Archivos opcionales:** Recepción de mercancía, Notas de crédito, Costo de facturación")
