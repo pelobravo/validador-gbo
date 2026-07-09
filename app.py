@@ -3051,30 +3051,43 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     else:
         st.info("ℹ️ No se cargó archivo de Recepción. Se usará valor 0,00 para inventario.")
     
-    # ============================================================
-    # RECEPCIÓN TRAZABILIDAD (NUEVO - Para trazabilidad de inventarios)
-    # ============================================================
-    df_recepciones_traz = None
-    recepcion_traz_data = {}
+# ============================================================
+# RECEPCIÓN TRAZABILIDAD (NUEVO - Para trazabilidad de inventarios)
+# ============================================================
+df_recepciones_traz = None
+recepcion_traz_data = {}
 
-    if archivo_recepciones_trazabilidad:
-        try:
-            df_recepciones_traz = pd.read_excel(archivo_recepciones_trazabilidad)
-            archivos_data['Recepción Trazabilidad'] = {'df': df_recepciones_traz, 'nombre': archivo_recepciones_trazabilidad.name}
-            
-            # Procesar el archivo de Recepción Trazabilidad para extraer productos y cantidades
-            recepcion_traz_data = ProcesadorArchivos.procesar_recepcion_trazabilidad(df_recepciones_traz)
-            
-            if recepcion_traz_data:
-                st.success(f"✅ Recepción Trazabilidad procesada: {len(recepcion_traz_data)} productos registrados")
-            else:
-                st.warning("⚠️ No se pudieron extraer datos del archivo de Recepción Trazabilidad")
-        except Exception as e:
-            st.warning(f"⚠️ Error procesando Recepción Trazabilidad: {str(e)}")
-            df_recepciones_traz = None
-            recepcion_traz_data = {}
-    else:
-        st.info("ℹ️ No se cargó archivo de Recepción Trazabilidad. La trazabilidad de inventarios por producto usará solo ventas.")
+if archivo_recepciones_trazabilidad:
+    try:
+        df_recepciones_traz = pd.read_excel(archivo_recepciones_trazabilidad)
+        archivos_data['Recepción Trazabilidad'] = {'df': df_recepciones_traz, 'nombre': archivo_recepciones_trazabilidad.name}
+        
+        # 🔥 MOSTRAR VISTA PREVIA DEL ARCHIVO
+        st.write("📄 **Vista previa del archivo de Recepción Trazabilidad:**")
+        st.dataframe(df_recepciones_traz.head(10))
+        
+        # Procesar el archivo de Recepción Trazabilidad para extraer productos y cantidades
+        recepcion_traz_data = ProcesadorArchivos.procesar_recepcion_trazabilidad(df_recepciones_traz)
+        
+        # 🔥 MOSTRAR LO QUE SE EXTRAJO
+        if recepcion_traz_data:
+            st.success(f"✅ Recepción Trazabilidad procesada: {len(recepcion_traz_data)} productos registrados")
+            st.write("📊 **Datos extraídos:**")
+            # Mostrar los primeros 5 productos
+            items = list(recepcion_traz_data.items())[:5]
+            for codigo, info in items:
+                st.write(f"- Código: {codigo} → Cantidad: {info['cantidad']} | Producto: {info.get('producto', 'N/A')}")
+        else:
+            st.warning("⚠️ No se pudieron extraer datos del archivo de Recepción Trazabilidad")
+            st.info("💡 Verifica que el archivo tenga columnas: Código/Producto/Cantidad")
+    except Exception as e:
+        st.warning(f"⚠️ Error procesando Recepción Trazabilidad: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
+        df_recepciones_traz = None
+        recepcion_traz_data = {}
+else:
+    st.info("ℹ️ No se cargó archivo de Recepción Trazabilidad. La trazabilidad de inventarios por producto usará solo ventas.")
     
     # ============================================================
     # COSTO DE FACTURACIÓN - DEBE EXTRAER DE COLUMNA E
