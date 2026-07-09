@@ -5241,82 +5241,127 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         st.markdown("---")
         
 # ============================================================
-# 📦 TRAZABILIDAD DE INVENTARIO - PRODUCTO POR PRODUCTO (MEJORADO)
+# 📦 TRAZABILIDAD DE INVENTARIO - PRODUCTO POR PRODUCTO
 # ============================================================
 st.markdown("### 📦 Trazabilidad de Inventario - Producto por Producto")
-st.caption("Análisis detallado: Inventario Inicial - Ventas (Costo) = Inventario Esperado vs Inventario Reportado")
+st.caption("Análisis detallado: Inventario Anterior - Ventas + Recepción = Inventario Esperado vs Inventario Reportado")
 
-# --- ANÁLISIS DE INVENTARIO (PRODUCTO POR PRODUCTO) ---
-if 'df_inv_ant' in locals() and df_inv_ant is not None and 'df_inv_rep' in locals() and df_inv_rep is not None:
+# Verificar si tenemos los archivos necesarios
+tiene_inv_ant = 'df_inv_ant' in locals() and df_inv_ant is not None
+tiene_inv_rep = 'df_inv_rep' in locals() and df_inv_rep is not None
+tiene_costo = 'df_costo' in locals() and df_costo is not None
+tiene_rec_traz = 'df_recepciones_traz' in locals() and df_recepciones_traz is not None
+
+if tiene_inv_ant and tiene_inv_rep:
     try:
-        # Cargar detalle de inventario anterior y actual
+        # ============================================================
+        # 1. CARGAR DATOS DE INVENTARIO ANTERIOR Y ACTUAL
+        # ============================================================
         inv_prev = ProcesadorArchivos.cargar_detalle_inventario(df_inv_ant)
         inv_curr = ProcesadorArchivos.cargar_detalle_inventario(df_inv_rep)
         
         if inv_prev is not None and inv_curr is not None:
-            # Cargar utilidades (costo de facturación) si está disponible
+            # ============================================================
+            # 2. CARGAR COSTO DE FACTURACIÓN (VENTAS)
+            # ============================================================
             util_df = None
-            if 'df_costo' in locals() and df_costo is not None:
+            if tiene_costo:
                 util_df = ProcesadorArchivos.cargar_detalle_utilidad(df_costo)
             
-            # Obtener recepciones de trazabilidad (si están disponibles)
-            recepciones_traz = recepcion_traz_data if 'recepcion_traz_data' in locals() and recepcion_traz_data else {}
+            # ============================================================
+            # 3. CARGAR RECEPCIÓN TRAZABILIDAD (COMPRAS DEL DÍA)
+            # ============================================================
+            recepciones_traz = {}
+            if tiene_rec_traz:
+                recepciones_traz = ProcesadorArchivos.procesar_recepcion_trazabilidad(df_recepciones_traz)
+                st.success(f"✅ Recepción Trazabilidad cargada: {len(recepciones_traz)} productos")
+            else:
+                st.info("ℹ️ No se cargó archivo de Recepción Trazabilidad. Solo se usarán ventas para el cálculo.")
             
-            # Diccionarios para búsqueda rápida
+            # ============================================================
+            # 4. DICCIONARIOS PARA BÚSQUEDA RÁPIDA
+            # ============================================================
             inv_prev_dict = inv_prev.set_index('Producto').to_dict('index')
             inv_curr_dict = inv_curr.set_index('Producto').to_dict('index')
             util_dict = util_df.set_index('Cod_Producto').to_dict('index') if util_df is not None else {}
             
-            # Obtener todos los productos
+            # ============================================================
+            # 5. OBTENER TODOS LOS PRODUCTOS
+            # ============================================================
             all_prods = set(inv_prev_dict.keys()).union(set(inv_curr_dict.keys()))
             
-            # Listas para almacenar resultados
+            # ============================================================
+            # 6. VARIABLES PARA ACUMULAR TOTALES
+            # ============================================================
             diferencias = []
-            total_inicial = 0
-            total_ventas = 0
-            total_recepcion_traz = 0
-            total_esperado_valor = 0
-            total_reportado_valor = 0
+            total_inicial_valor = 0.0
+            total_ventas_valor = 0.0
+            total_recepcion_valor = 0.0
+            total_esperado_valor = 0.0
+            total_reportado_valor = 0.0
             
+            total_inicial_cant = 0.0
+            total_ventas_cant = 0.0
+            total_recepcion_cant = 0.0
+            total_esperado_cant = 0.0
+            total_reportado_cant = 0.0
+            
+            # ============================================================
+            # 7. PROCESAR PRODUCTO POR PRODUCTO
+            # ============================================================
             for p in all_prods:
+                # Obtener datos de inventario anterior
                 p_prev = inv_prev_dict.get(p, {'Cantidad': 0.0, 'Precio/Unidad': 0.0, 'Total(*)': 0.0, 'Descrip_Clean': 'N/A'})
+                
+                # Obtener datos de inventario actual (reportado)
                 p_curr = inv_curr_dict.get(p, {'Cantidad': 0.0, 'Precio/Unidad': 0.0, 'Total(*)': 0.0, 'Descrip_Clean': 'N/A'})
+                
+                # Obtener datos de ventas (costo de facturación)
                 u_row = util_dict.get(p, {'Cantidad': 0.0, 'Costo_Total': 0.0, 'Producto_Original': 'N/A'})
                 
-                # Datos del inventario anterior
+                # Obtener datos de recepción trazabilidad
+                qty_recepcion_traz = 0.0
+                if p in recepciones_traz:
+                    qty_recepcion_traz = recepciones_traz[p]['cantidad']
+                
+                # --- VALORES ---
                 qty_prev = p_prev['Cantidad']
                 price_prev = p_prev['Precio/Unidad']
                 val_prev = p_prev['Total(*)']
-                desc = p_curr['Descrip_Clean'] if p_curr['Descrip_Clean'] != 'N/A' else (p_prev['Descrip_Clean'] if p_prev['Descrip_Clean'] != 'N/A' else u_row['Producto_Original'])
                 
-                # Datos del inventario actual
                 qty_curr = p_curr['Cantidad']
                 price_curr = p_curr['Precio/Unidad']
                 val_curr = p_curr['Total(*)']
                 
-                # Datos de ventas
                 qty_sold = u_row['Cantidad']
                 cost_sold = u_row['Costo_Total']
                 
-                # Datos de recepción trazabilidad
-                qty_recepcion_traz = 0.0
-                if p in recepciones_traz:
-                    qty_recepcion_traz = recepciones_traz[p]['cantidad']
-                    total_recepcion_traz += qty_recepcion_traz * price_prev
+                desc = p_curr['Descrip_Clean'] if p_curr['Descrip_Clean'] != 'N/A' else (p_prev['Descrip_Clean'] if p_prev['Descrip_Clean'] != 'N/A' else u_row['Producto_Original'])
                 
-                # Cálculos de trazabilidad incluyendo recepción
-                expected_qty = qty_prev - qty_sold + qty_recepcion_traz
+                # --- CÁLCULOS POR VALOR (Financiero) ---
+                # Inventario Esperado = Inventario Anterior - Costo de Ventas + Recepción (valor)
                 expected_val = val_prev - cost_sold + (qty_recepcion_traz * price_prev)
-                qty_diff = qty_curr - expected_qty
                 val_diff = val_curr - expected_val
                 
-                # Acumular totales
-                total_inicial += val_prev
-                total_ventas += cost_sold
+                # --- CÁLCULOS POR CANTIDAD (Trazabilidad) ---
+                # Inventario Esperado (cantidad) = Inv. Anterior - Ventas + Recepción Trazabilidad
+                expected_qty = qty_prev - qty_sold + qty_recepcion_traz
+                qty_diff = qty_curr - expected_qty
+                
+                # --- ACUMULAR TOTALES ---
+                total_inicial_valor += val_prev
+                total_ventas_valor += cost_sold
+                total_recepcion_valor += qty_recepcion_traz * price_prev
                 total_esperado_valor += expected_val
                 total_reportado_valor += val_curr
                 
-                # Determinar el estado del producto
+                total_inicial_cant += qty_prev
+                total_ventas_cant += qty_sold
+                total_recepcion_cant += qty_recepcion_traz
+                total_esperado_cant += expected_qty
+                total_reportado_cant += qty_curr
+                
+                # --- DETERMINAR ESTADO DEL PRODUCTO ---
                 estado = "✅ OK"
                 if abs(qty_diff) > 0.01 and abs(val_diff) > 0.01:
                     estado = "🔴 FALTANTE" if qty_diff < 0 else "🟢 SOBRANTE"
@@ -5325,7 +5370,7 @@ if 'df_inv_ant' in locals() and df_inv_ant is not None and 'df_inv_rep' in local
                 elif abs(val_diff) > 0.01:
                     estado = "🟠 DIF. PRECIO"
                 
-                # Mostrar productos con diferencias o movimientos
+                # --- GUARDAR SOLO PRODUCTOS CON MOVIMIENTO O DIFERENCIA ---
                 if abs(qty_sold) > 0.01 or abs(qty_diff) > 0.01 or abs(val_diff) > 0.01 or abs(price_curr - price_prev) > 0.01:
                     efecto_precio = (price_curr - price_prev) * qty_curr if qty_curr > 0 else 0
                     
@@ -5335,7 +5380,7 @@ if 'df_inv_ant' in locals() and df_inv_ant is not None and 'df_inv_rep' in local
                         'Estado': estado,
                         'Q. Anterior': qty_prev,
                         'Vendido': qty_sold,
-                        'Recepción Traz': qty_recepcion_traz,
+                        'Recepción': qty_recepcion_traz,
                         'Q. Esperada': expected_qty,
                         'Q. Reportada': qty_curr,
                         'Dif. Cantidad': qty_diff,
@@ -5346,22 +5391,22 @@ if 'df_inv_ant' in locals() and df_inv_ant is not None and 'df_inv_rep' in local
                     })
             
             # ============================================================
-            # 🔥 SECCIÓN 1: KPIS PASO A PASO (NUEVO ESTILO)
+            # 8. SECCIÓN 1: KPIS PASO A PASO - POR VALOR (FINANCIERO)
             # ============================================================
-            st.markdown("#### 📊 Paso a paso del cálculo de Inventario")
+            st.markdown("#### 📊 Paso a paso del cálculo de Inventario (VALORES)")
             
             col_inv1, col_inv2, col_inv3, col_inv4, col_inv5 = st.columns(5)
             
-            mostrar_kpi_paso_paso(col_inv1, "Inventario Anterior", total_inicial, "📦", "blue")
-            mostrar_kpi_paso_paso(col_inv2, "Costo de Ventas", total_ventas, "📊", "red")
-            mostrar_kpi_paso_paso(col_inv3, "Recepción Traz.", total_recepcion_traz, "📥", "purple")
-            mostrar_kpi_paso_paso(col_inv4, "Inventario Esperado", total_esperado_valor, "📋", "orange")
-            mostrar_kpi_paso_paso(col_inv5, "Inventario Reportado", total_reportado_valor, "📄", "green")
+            mostrar_kpi_paso_paso(col_inv1, "Inv. Anterior (valor)", total_inicial_valor, "📦", "blue")
+            mostrar_kpi_paso_paso(col_inv2, "Costo de Ventas", total_ventas_valor, "📊", "red")
+            mostrar_kpi_paso_paso(col_inv3, "Recepción (valor)", total_recepcion_valor, "📥", "purple")
+            mostrar_kpi_paso_paso(col_inv4, "Inv. Esperado", total_esperado_valor, "📋", "orange")
+            mostrar_kpi_paso_paso(col_inv5, "Inv. Reportado", total_reportado_valor, "📄", "green")
             
             # ============================================================
-            # ✅ VERIFICACIÓN DE INVENTARIO
+            # 9. VERIFICACIÓN DE INVENTARIO POR VALOR
             # ============================================================
-            st.markdown("#### ✅ Verificación de Inventario")
+            st.markdown("#### ✅ Verificación de Inventario (VALORES)")
             
             col_v_inv1, col_v_inv2, col_v_inv3 = st.columns(3)
             
@@ -5369,15 +5414,46 @@ if 'df_inv_ant' in locals() and df_inv_ant is not None and 'df_inv_rep' in local
             mostrar_kpi_paso_paso(col_v_inv2, "Inventario Reportado", total_reportado_valor, "📄", "green")
             
             # Alerta de color dinámica para la tarjeta de diferencia
-            diff_total_inv = total_reportado_valor - total_esperado_valor
-            variante_diff_inv = "green" if abs(diff_total_inv) < 0.01 else ("red" if diff_total_inv < 0 else "orange")
-            icono_diff_inv = "✅" if abs(diff_total_inv) < 0.01 else ("⚠️" if diff_total_inv > 0 else "❌")
-            titulo_diff_inv = "Diferencia (Coincide)" if abs(diff_total_inv) < 0.01 else ("Sobrante" if diff_total_inv > 0 else "Faltante")
+            diff_total_valor = total_reportado_valor - total_esperado_valor
+            variante_diff_valor = "green" if abs(diff_total_valor) < 0.01 else ("red" if diff_total_valor < 0 else "orange")
+            icono_diff_valor = "✅" if abs(diff_total_valor) < 0.01 else ("⚠️" if diff_total_valor > 0 else "❌")
+            titulo_diff_valor = "Diferencia (Coincide)" if abs(diff_total_valor) < 0.01 else ("Sobrante" if diff_total_valor > 0 else "Faltante")
             
-            mostrar_kpi_paso_paso(col_v_inv3, titulo_diff_inv, diff_total_inv, icono_diff_inv, variante_diff_inv)
+            mostrar_kpi_paso_paso(col_v_inv3, titulo_diff_valor, diff_total_valor, icono_diff_valor, variante_diff_valor)
             
             # ============================================================
-            # SECCIÓN 2: ESTADÍSTICAS RÁPIDAS (SIEMPRE VISIBLE)
+            # 10. KPIS PASO A PASO - POR CANTIDAD (TRAZABILIDAD)
+            # ============================================================
+            st.markdown("---")
+            st.markdown("#### 📊 Paso a paso del cálculo de Inventario (CANTIDADES - Trazabilidad)")
+            
+            col_inv_c1, col_inv_c2, col_inv_c3, col_inv_c4, col_inv_c5 = st.columns(5)
+            
+            mostrar_kpi_paso_paso(col_inv_c1, "Inv. Anterior (und)", total_inicial_cant, "📦", "blue")
+            mostrar_kpi_paso_paso(col_inv_c2, "Ventas (und)", total_ventas_cant, "📊", "red")
+            mostrar_kpi_paso_paso(col_inv_c3, "Recepción (und)", total_recepcion_cant, "📥", "purple")
+            mostrar_kpi_paso_paso(col_inv_c4, "Inv. Esperado (und)", total_esperado_cant, "📋", "orange")
+            mostrar_kpi_paso_paso(col_inv_c5, "Inv. Reportado (und)", total_reportado_cant, "📄", "green")
+            
+            # ============================================================
+            # 11. VERIFICACIÓN DE INVENTARIO POR CANTIDAD
+            # ============================================================
+            st.markdown("#### ✅ Verificación de Inventario (CANTIDADES)")
+            
+            col_v_inv_c1, col_v_inv_c2, col_v_inv_c3 = st.columns(3)
+            
+            mostrar_kpi_paso_paso(col_v_inv_c1, "Esperado (und)", total_esperado_cant, "📋", "orange")
+            mostrar_kpi_paso_paso(col_v_inv_c2, "Reportado (und)", total_reportado_cant, "📄", "green")
+            
+            diff_total_cant = total_reportado_cant - total_esperado_cant
+            variante_diff_cant = "green" if abs(diff_total_cant) < 0.01 else ("red" if diff_total_cant < 0 else "orange")
+            icono_diff_cant = "✅" if abs(diff_total_cant) < 0.01 else ("⚠️" if diff_total_cant > 0 else "❌")
+            titulo_diff_cant = "Diferencia (Coincide)" if abs(diff_total_cant) < 0.01 else ("Sobrante" if diff_total_cant > 0 else "Faltante")
+            
+            mostrar_kpi_paso_paso(col_v_inv_c3, titulo_diff_cant, diff_total_cant, icono_diff_cant, variante_diff_cant)
+            
+            # ============================================================
+            # 12. ESTADÍSTICAS DE PRODUCTOS
             # ============================================================
             st.markdown("---")
             st.markdown("#### 📈 Estadísticas de Productos")
@@ -5394,10 +5470,10 @@ if 'df_inv_ant' in locals() and df_inv_ant is not None and 'df_inv_rep' in local
                 st.metric("⚠️ Con Diferencias", warning_count, delta=f"{warning_count}/{len(diferencias)}")
             with col_est4:
                 total_unidades = sum([d['Vendido'] for d in diferencias])
-                st.metric("📊 Total Ventas (Unid.)", f"{total_unidades:,.0f}")
+                st.metric("📊 Total Ventas (Und.)", f"{total_unidades:,.0f}")
             
             # ============================================================
-            # SECCIÓN 3: BOTONES PARA EXPLORAR DETALLES
+            # 13. BOTONES PARA EXPLORAR DETALLES
             # ============================================================
             st.markdown("---")
             st.markdown("#### 🔍 Explorar Detalles de Inventario")
@@ -5417,11 +5493,10 @@ if 'df_inv_ant' in locals() and df_inv_ant is not None and 'df_inv_rep' in local
                     st.session_state['mostrar_cambio_precio'] = not st.session_state.get('mostrar_cambio_precio', False)
             
             # ============================================================
-            # SECCIÓN 4: TABLA DE PRODUCTOS (CON EXPANDER)
+            # 14. TABLA DE PRODUCTOS
             # ============================================================
             st.markdown("---")
             
-            # Determinar qué tabla mostrar según los botones
             mostrar_todos = st.session_state.get('mostrar_todos_productos', False)
             mostrar_solo_diff = st.session_state.get('mostrar_solo_diff', False)
             mostrar_cambio_precio = st.session_state.get('mostrar_cambio_precio', False)
@@ -5449,11 +5524,11 @@ if 'df_inv_ant' in locals() and df_inv_ant is not None and 'df_inv_rep' in local
                         df_formatted['Dif. Cantidad'] = df_formatted['Dif. Cantidad'].apply(lambda x: f"{x:.2f}")
                         df_formatted['Q. Anterior'] = df_formatted['Q. Anterior'].apply(lambda x: f"{x:.2f}")
                         df_formatted['Vendido'] = df_formatted['Vendido'].apply(lambda x: f"{x:.2f}")
-                        df_formatted['Recepción Traz'] = df_formatted['Recepción Traz'].apply(lambda x: f"{x:.2f}")
+                        df_formatted['Recepción'] = df_formatted['Recepción'].apply(lambda x: f"{x:.2f}")
                         df_formatted['Q. Esperada'] = df_formatted['Q. Esperada'].apply(lambda x: f"{x:.2f}")
                         df_formatted['Q. Reportada'] = df_formatted['Q. Reportada'].apply(lambda x: f"{x:.2f}")
                         
-                        columnas_mostrar = ['Código', 'Descripción', 'Estado', 'Q. Anterior', 'Vendido', 'Recepción Traz', 'Q. Esperada', 'Q. Reportada', 'Dif. Cantidad', 'Precio Ant.', 'Precio Nuevo', 'Efecto Precio', 'Dif. Valor']
+                        columnas_mostrar = ['Código', 'Descripción', 'Estado', 'Q. Anterior', 'Vendido', 'Recepción', 'Q. Esperada', 'Q. Reportada', 'Dif. Cantidad', 'Precio Ant.', 'Precio Nuevo', 'Efecto Precio', 'Dif. Valor']
                         columnas_existentes = [c for c in columnas_mostrar if c in df_formatted.columns]
                         
                         def colorear_estado(row):
@@ -5493,12 +5568,11 @@ if 'df_inv_ant' in locals() and df_inv_ant is not None and 'df_inv_rep' in local
                     st.session_state['mostrar_solo_diff'] = False
                     st.session_state['mostrar_cambio_precio'] = False
                     st.rerun()
-            
             else:
                 st.info("👆 **Haz clic en uno de los botones arriba** para explorar el detalle de productos.")
             
             # ============================================================
-            # SECCIÓN 5: RESUMEN DE DIFERENCIAS (SIEMPRE VISIBLE)
+            # 15. RESUMEN DE DIFERENCIAS
             # ============================================================
             if diferencias:
                 st.markdown("---")
@@ -5537,10 +5611,13 @@ if 'df_inv_ant' in locals() and df_inv_ant is not None and 'df_inv_rep' in local
         import traceback
         st.code(traceback.format_exc())
 else:
-    st.info("📄 **Carga los archivos de Inventario (día anterior y actual) y Costo de Facturación para ver el análisis detallado de inventario.**")
+    st.info("📄 **Carga los siguientes archivos para ver el análisis detallado de inventario:**")
+    st.info("- 📦 **Inventario Anterior** (día anterior)")
+    st.info("- 📄 **Inventario Reportado** (día actual)")
+    st.info("- 📈 **Costo de Facturación** (opcional, para ventas)")
+    st.info("- 📥 **Recepción Trazabilidad** (opcional, para compras)")
 
 st.markdown("---")
-    
 # ============================================================
 # PESTAÑA 3: ARCHIVOS FUENTE DEL DÍA
 # ============================================================
