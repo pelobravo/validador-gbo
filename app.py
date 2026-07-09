@@ -5634,7 +5634,7 @@ st.markdown("---")
 # ============================================================
 # PESTAÑA 3: ARCHIVOS FUENTE DEL DÍA
 # ============================================================
-with tab_auditoria_archivos:
+    with tab_auditoria_archivos:
     st.markdown("### 📄 Archivos Fuente del Día")
     st.caption("Visualización de los archivos Excel cargados, con sus estructuras y estadísticas.")
     
