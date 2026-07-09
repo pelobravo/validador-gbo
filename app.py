@@ -3,6 +3,7 @@
 # 🤖 INTEGRACIÓN CON DEEPSEEK API
 # 🎨 MEJORADO: Uploaders en parte superior, KPIs con tarjetas, botón Limpiar al pie
 # 📋 REORGANIZADO: Estructura con pestañas (Resumen, Conciliación, Archivos)
+# 🎯 REFACTORIZADO: KPIs con función mostrar_kpi_paso_paso para mejor legibilidad
 
 import streamlit as st
 import pandas as pd
@@ -317,6 +318,45 @@ def formato_venezolano_desde_str(valor_str):
         return float(valor_str)
     except (ValueError, TypeError):
         return 0
+
+# ============================================================
+# FUNCIÓN PARA MOSTRAR KPI PASO A PASO (NUEVA)
+# ============================================================
+def mostrar_kpi_paso_paso(col, titulo, valor, icono, variante="blue"):
+    """
+    Genera tarjetas KPI corporativas consistentes y visibles para el panel principal.
+    Variantes disponibles: blue, green, red, orange, purple
+    """
+    mapa_colores = {
+        "blue": {"bg": "#f0f7ff", "border": "#0056b3", "text": "#0056b3"},
+        "green": {"bg": "#f0fff4", "border": "#1e7e34", "text": "#1e7e34"},
+        "red": {"bg": "#fff5f5", "border": "#c82333", "text": "#c82333"},
+        "orange": {"bg": "#fff9db", "border": "#d97706", "text": "#d97706"},
+        "purple": {"bg": "#fcf0ff", "border": "#85144b", "text": "#85144b"}
+    }
+    
+    cfg = mapa_colores.get(variante, mapa_colores["blue"])
+    valor_formateado = formato_venezolano(valor)
+    
+    html = f"""
+    <div style="
+        background-color: {cfg['bg']};
+        border-left: 5px solid {cfg['border']};
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        margin-bottom: 15px;
+    ">
+        <div style="font-size: 0.75rem; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: 0.5px;">
+            {icono} {titulo}
+        </div>
+        <div style="font-size: 1.5rem; font-weight: 800; color: {cfg['text']}; margin-top: 5px; font-family: 'Inter', sans-serif;">
+            {valor_formateado} <span style="font-size: 0.8rem; font-weight: 500; color: #718096;">Bs.</span>
+        </div>
+    </div>
+    """
+    with col:
+        st.markdown(html, unsafe_allow_html=True)
 
 # ============================================================
 # FUNCIÓN PARA MOSTRAR ARCHIVO CON FORMATO (MODIFICADA - SIN AUTO-RENDERIZADO)
@@ -3279,14 +3319,11 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         st.markdown("#### 📊 Detalle del cálculo de Bancos")
         
         col_b1, col_b2, col_b3, col_b4 = st.columns(4)
-        with col_b1:
-            st.metric("🏦 Saldo Inicial (estado de cuenta)", formato_venezolano(saldo_inicial_bancos))
-        with col_b2:
-            st.metric("📈 Ingresos (estado de cuenta)", formato_venezolano(total_ingresos))
-        with col_b3:
-            st.metric("📉 Egresos (estado de cuenta)", formato_venezolano(total_egresos_banco))
-        with col_b4:
-            st.metric("🏁 Bancos calculado", formato_venezolano(bancos_calculado))
+        
+        mostrar_kpi_paso_paso(col_b1, "Saldo Inicial (E/C)", saldo_inicial_bancos, "🏦", "blue")
+        mostrar_kpi_paso_paso(col_b2, "Ingresos (E/C)", total_ingresos, "📈", "green")
+        mostrar_kpi_paso_paso(col_b3, "Egresos (E/C)", total_egresos_banco, "📉", "red")
+        mostrar_kpi_paso_paso(col_b4, "Bancos Calculado", bancos_calculado, "🏁", "orange")
         
         # Verificar contra el saldo final del estado de cuenta
         st.markdown("#### ✅ Verificación con Estado de Cuenta")
@@ -4250,16 +4287,11 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         
         col_p1, col_p2, col_p3, col_p4, col_p5 = st.columns(5)
         
-        with col_p1:
-            st.metric("📋 CxP Anterior", formato_venezolano(cx_p_anterior))
-        with col_p2:
-            st.metric("📦 Recepciones", formato_venezolano(recepcion_total))
-        with col_p3:
-            st.metric("💰 Pagos Proveedores", formato_venezolano(pagos_proveedores))
-        with col_p4:
-            st.metric("📊 CxP Calculado", formato_venezolano(cx_p_calculado))
-        with col_p5:
-            st.metric("📄 CxP Reportado", formato_venezolano(cx_p_reportado) if cx_p_reportado is not None else "N/A")
+        mostrar_kpi_paso_paso(col_p1, "CxP Anterior", cx_p_anterior, "📋", "blue")
+        mostrar_kpi_paso_paso(col_p2, "Recepciones", recepcion_total, "📦", "purple")
+        mostrar_kpi_paso_paso(col_p3, "Pagos Proveedores", pagos_proveedores, "💰", "orange")
+        mostrar_kpi_paso_paso(col_p4, "CxP Calculado", cx_p_calculado, "📊", "green")
+        mostrar_kpi_paso_paso(col_p5, "CxP Reportado", cx_p_reportado if cx_p_reportado is not None else 0, "📄", "blue")
         
         # Verificar si hay diferencia
         diff_cxp_calc = safe_number(cx_p_calculado) - safe_number(cx_p_reportado) if cx_p_reportado is not None else 0
@@ -4608,16 +4640,11 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         
         col_t1, col_t2, col_t3, col_t4, col_t5 = st.columns(5)
         
-        with col_t1:
-            st.metric("🔄 Tránsito Anterior", formato_venezolano(transito_anterior))
-        with col_t2:
-            st.metric("📈 Total Ingresos", formato_venezolano(total_ingresos))
-        with col_t3:
-            st.metric("💰 Cobranzas", formato_venezolano(cobranzas))
-        with col_t4:
-            st.metric("📊 Tránsito Calculado", formato_venezolano(transito_calculado))
-        with col_t5:
-            st.metric("📄 Tránsito Reportado", formato_venezolano(transito_reportado) if transito_reportado is not None else "N/A")
+        mostrar_kpi_paso_paso(col_t1, "Tránsito Anterior", transito_anterior, "🔄", "blue")
+        mostrar_kpi_paso_paso(col_t2, "Total Ingresos", total_ingresos, "📈", "green")
+        mostrar_kpi_paso_paso(col_t3, "Cobranzas", cobranzas, "💰", "orange")
+        mostrar_kpi_paso_paso(col_t4, "Tránsito Calculado", transito_calculado, "📊", "purple")
+        mostrar_kpi_paso_paso(col_t5, "Tránsito Reportado", transito_reportado if transito_reportado is not None else 0, "📄", "blue")
         
         # Verificar si hay diferencia
         diff_transito_calc = safe_number(transito_calculado) - safe_number(transito_reportado) if transito_reportado is not None else 0
@@ -4823,18 +4850,12 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         
         col_c1, col_c2, col_c3, col_c4, col_c5, col_c6 = st.columns(6)
         
-        with col_c1:
-            st.metric("💰 CxC Anterior", formato_venezolano(cx_c_anterior))
-        with col_c2:
-            st.metric("📊 Facturación", formato_venezolano(facturacion))
-        with col_c3:
-            st.metric("💰 Cobranzas", formato_venezolano(cobranzas))
-        with col_c4:
-            st.metric("📝 NC Clientes", formato_venezolano(notas_credito_cliente))
-        with col_c5:
-            st.metric("📊 CxC Calculado", formato_venezolano(cx_c_calculado))
-        with col_c6:
-            st.metric("📄 CxC Reportado", formato_venezolano(cx_c_reportado) if cx_c_reportado is not None else "N/A")
+        mostrar_kpi_paso_paso(col_c1, "CxC Anterior", cx_c_anterior, "💰", "blue")
+        mostrar_kpi_paso_paso(col_c2, "Facturación", facturacion, "📊", "green")
+        mostrar_kpi_paso_paso(col_c3, "Cobranzas", cobranzas, "💰", "orange")
+        mostrar_kpi_paso_paso(col_c4, "NC Clientes", notas_credito_cliente, "📝", "red")
+        mostrar_kpi_paso_paso(col_c5, "CxC Calculado", cx_c_calculado, "📊", "purple")
+        mostrar_kpi_paso_paso(col_c6, "CxC Reportado", cx_c_reportado if cx_c_reportado is not None else 0, "📄", "blue")
         
         # Verificar si hay diferencia
         diff_cxc_calc = safe_number(cx_c_calculado) - safe_number(cx_c_reportado) if cx_c_reportado is not None else 0
