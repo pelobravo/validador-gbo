@@ -3318,20 +3318,17 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     st.markdown("---")
     
     # ============================================================
-    # 🔥 SALDO DEL ESTADO DE CUENTA
+    # 🔥 SALDO DEL ESTADO DE CUENTA - MODIFICADO CON mostrar_kpi_paso_paso
     # ============================================================
     st.markdown("#### 📊 Saldo del Estado de Cuenta")
     st.caption("💡 Este es el saldo que viene del archivo de estado de cuenta")
 
     col_ec1, col_ec2, col_ec3, col_ec4 = st.columns(4)
-    with col_ec1:
-        st.metric("🏦 Saldo Inicial", formato_venezolano(saldo_inicial_bancos))
-    with col_ec2:
-        st.metric("📈 Ingresos", formato_venezolano(total_ingresos))
-    with col_ec3:
-        st.metric("📉 Egresos", formato_venezolano(total_egresos_banco))
-    with col_ec4:
-        st.metric("🏁 Saldo Final", formato_venezolano(saldo_final))
+
+    mostrar_kpi_paso_paso(col_ec1, "Saldo Inicial", saldo_inicial_bancos, "🏦", "blue")
+    mostrar_kpi_paso_paso(col_ec2, "Ingresos", total_ingresos, "📈", "green")
+    mostrar_kpi_paso_paso(col_ec3, "Egresos", total_egresos_banco, "📉", "red")
+    mostrar_kpi_paso_paso(col_ec4, "Saldo Final", saldo_final, "🏁", "orange")
 
     st.markdown("---")
     
@@ -3387,21 +3384,23 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         mostrar_kpi_paso_paso(col_b3, "Egresos (E/C)", total_egresos_banco, "📉", "red")
         mostrar_kpi_paso_paso(col_b4, "Bancos Calculado", bancos_calculado, "🏁", "orange")
         
-        # Verificar contra el saldo final del estado de cuenta
+        # ============================================================
+        # ✅ VERIFICACIÓN CON ESTADO DE CUENTA - MODIFICADO CON mostrar_kpi_paso_paso
+        # ============================================================
         st.markdown("#### ✅ Verificación con Estado de Cuenta")
-        
+
         col_v1, col_v2, col_v3 = st.columns(3)
-        with col_v1:
-            st.metric("📋 Saldo Final (Estado de Cuenta)", formato_venezolano(saldo_final))
-        with col_v2:
-            st.metric("📊 Bancos Calculado", formato_venezolano(bancos_calculado))
-        with col_v3:
-            diferencia_bancos = bancos_calculado - saldo_final
-            if abs(diferencia_bancos) < 0.01:
-                st.metric("✅ Diferencia", "0,00", delta="✅ Coincide")
-            else:
-                st.metric("⚠️ Diferencia", formato_venezolano(diferencia_bancos), delta=f"{'📈' if diferencia_bancos > 0 else '📉'} {formato_venezolano(abs(diferencia_bancos))}")
-                st.warning(f"⚠️ Hay una diferencia de {formato_venezolano(diferencia_bancos)} entre el Bancos calculado y el saldo final del estado de cuenta.")
+
+        mostrar_kpi_paso_paso(col_v1, "Saldo Final (Estado de Cuenta)", saldo_final, "📋", "blue")
+        mostrar_kpi_paso_paso(col_v2, "Bancos Calculado", bancos_calculado, "📊", "orange")
+
+        # Alerta de color dinámica para la tarjeta de diferencia
+        diferencia_bancos = bancos_calculado - saldo_final
+        variante_diff = "green" if abs(diferencia_bancos) < 0.01 else "red"
+        icono_diff = "✅" if abs(diferencia_bancos) < 0.01 else "⚠️"
+        titulo_diff = "Diferencia (Coincide)" if abs(diferencia_bancos) < 0.01 else "Diferencia (Descuadrado)"
+
+        mostrar_kpi_paso_paso(col_v3, titulo_diff, diferencia_bancos, icono_diff, variante_diff)
         
         st.info(f"ℹ️ **Saldo Inicial Bancario (desde estado de cuenta):** {formato_venezolano(saldo_inicial_bancos)} Bs.")
         
