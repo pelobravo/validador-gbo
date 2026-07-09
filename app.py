@@ -4,6 +4,7 @@
 # 🎨 MEJORADO: Uploaders en parte superior, KPIs con tarjetas, botón Limpiar al pie
 # 📋 REORGANIZADO: Estructura con pestañas (Resumen, Conciliación, Archivos)
 # 🎯 REFACTORIZADO: KPIs con función mostrar_kpi_paso_paso para mejor legibilidad
+# 📊 MEJORADO: Resúmenes con tarjetas ejecutivas en dos columnas
 
 import streamlit as st
 import pandas as pd
@@ -3240,18 +3241,79 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     }
     st.dataframe(pd.DataFrame(mov_data), use_container_width=True, hide_index=True)
     
-    st.info(f"""
-    📊 **Resumen de Egresos iPago:**
-    - 🏪 Proveedores de Mercancía: {formato_venezolano(pagos_proveedores)}
-    - 📦 Otros Gastos: {formato_venezolano(pagos_gastos)}
-    - 📌 Total Egresos: {formato_venezolano(total_egresos)}
-    
-    📊 **Resumen del Estado de Cuenta:**
-    - 💰 Saldo Inicial: {formato_venezolano(saldo_inicial_bancos)}
-    - 📈 Ingresos (Créditos): {formato_venezolano(total_ingresos)}
-    - 📉 Egresos (Débitos): {formato_venezolano(total_egresos_banco)}
-    - 🏁 Saldo Final: {formato_venezolano(saldo_final)}
-    """)
+    # ============================================================
+    # 📊 RESUMEN DE EGRESOS Y ESTADO DE CUENTA - TARJETAS EJECUTIVAS
+    # ============================================================
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Crear dos grandes columnas para separar los dos resúmenes del día
+    col_res_izq, col_res_der = st.columns(2)
+
+    with col_res_izq:
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(180deg, #ffffff 0%, #f4f7fa 100%);
+            border: 1px solid #e2e8f0;
+            border-top: 4px solid #0056b3;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+            height: 100%;
+        ">
+            <h5 style="color: #0a1628; margin-top: 0; font-weight: 700; font-size: 0.95rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
+                📊 Resumen de Egresos iPago
+            </h5>
+            <div style="display: flex; justify-content: space-between; margin-top: 12px; font-size: 0.85rem;">
+                <span style="color: #4a5568;">🏪 Proveedores de Mercancía:</span>
+                <span style="font-weight: 700; color: #1a202c;">{formato_venezolano(pagos_proveedores)} Bs.</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.85rem;">
+                <span style="color: #4a5568;">📦 Otros Gastos:</span>
+                <span style="font-weight: 700; color: #1a202c;">{formato_venezolano(pagos_gastos)} Bs.</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 12px; padding-top: 8px; border-top: 1px dashed #cbd5e1; font-size: 0.9rem; font-weight: 700;">
+                <span style="color: #0056b3;">📌 Total Egresos iPago:</span>
+                <span style="color: #0056b3;">{formato_venezolano(total_egresos)} Bs.</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_res_der:
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(180deg, #ffffff 0%, #f4f7fa 100%);
+            border: 1px solid #e2e8f0;
+            border-top: 4px solid #1e7e34;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+            height: 100%;
+        ">
+            <h5 style="color: #0a1628; margin-top: 0; font-weight: 700; font-size: 0.95rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
+                🏦 Resumen del Estado de Cuenta
+            </h5>
+            <div style="display: flex; justify-content: space-between; margin-top: 12px; font-size: 0.85rem;">
+                <span style="color: #4a5568;">💰 Saldo Inicial:</span>
+                <span style="font-weight: 700; color: {'#c82333' if saldo_inicial_bancos < 0 else '#1e7e34'};">
+                    {formato_venezolano(saldo_inicial_bancos)} Bs.
+                </span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.85rem;">
+                <span style="color: #4a5568;">📈 Ingresos (Créditos):</span>
+                <span style="font-weight: 700; color: #1e7e34;">+{formato_venezolano(total_ingresos)} Bs.</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.85rem;">
+                <span style="color: #4a5568;">📉 Egresos (Débitos):</span>
+                <span style="font-weight: 700; color: #c82333;">-{formato_venezolano(total_egresos_banco)} Bs.</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 12px; padding-top: 8px; border-top: 1px dashed #cbd5e1; font-size: 0.9rem; font-weight: 700;">
+                <span style="color: #1e7e34;">🏁 Saldo Final de Banco:</span>
+                <span style="color: #1e7e34;">{formato_venezolano(saldo_final)} Bs.</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
     
     st.markdown("---")
     
