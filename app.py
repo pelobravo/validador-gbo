@@ -8,6 +8,7 @@
 # 🔄 NUEVO: Uploader Recepción Trazabilidad para trazabilidad de inventarios
 # 📦 CORREGIDO: Función mostrar_kpi_cantidades para KPIs de unidades sin formato Bs.
 # 🔥 REFACTORIZADO: Detección de duplicados internos en Cobranzas (2026-07-09)
+# 🆕 AGREGADO: Uploaders para Cobranzas Anterior y Tránsito Anterior (Trazabilidad histórica)
 
 import streamlit as st
 import pandas as pd
@@ -183,6 +184,9 @@ archivo_cxp_anterior = None
 archivo_inventario_reportado = None
 archivo_inventario_anterior = None
 archivo_tb = None
+# 🆕 NUEVAS VARIABLES PARA TRAZABILIDAD CONTRA EL DÍA ANTERIOR
+archivo_cobranzas_anterior = None
+archivo_transito_anterior = None
 fecha_procesar = datetime.now()
 
 st.set_page_config(
@@ -2467,12 +2471,18 @@ with st.container():
     with col_u13:
         archivo_costo_facturacion = st.file_uploader("📈 Costo Facturación", type=["xlsx", "xls"], key="costo_fact_top")
     with col_u14:
-        archivo_inventario_anterior = st.file_uploader("📦 Inventario Anterior", type=["xlsx", "xls"], key="inv_ant_top")  # <--- NUEVO
+        archivo_inventario_anterior = st.file_uploader("📦 Inventario Anterior", type=["xlsx", "xls"], key="inv_ant_top")
     with col_u15:
         archivo_cxp_anterior = st.file_uploader("📄 CxP Día Anterior", type=["xlsx", "xls"], key="cxp_ant_top")
     with col_u16:
-        # Espacio disponible para futuros archivos
-        st.write("")
+        # 🆕 AGREGADOS: Nuevos Uploaders de trazabilidad histórica
+        archivo_cobranzas_anterior = st.file_uploader("💰 Cobranzas Día Anterior", type=["xlsx", "xls"], key="cob_ant_top")
+
+    # Añadimos una quinta fila o expandimos abajo para el de tránsito histórico
+    st.markdown("#### 🔄 Trazabilidad de Saldos Históricos")
+    col_u17, col_u18, col_u19, col_u20 = st.columns(4)
+    with col_u17:
+        archivo_transito_anterior = st.file_uploader("🔄 Tránsito Día Anterior", type=["xlsx", "xls"], key="transito_ant_top")
     
     st.markdown("---")
 # ============================================================
@@ -2904,6 +2914,10 @@ archivo_cxp_anterior = obtener_archivo_historico_o_subido(archivo_cxp_anterior, 
 archivo_inventario_reportado = obtener_archivo_historico_o_subido(archivo_inventario_reportado, "inventario_reportado")
 archivo_inventario_anterior = obtener_archivo_historico_o_subido(archivo_inventario_anterior, "inventario_anterior")
 archivo_tb = obtener_archivo_historico_o_subido(archivo_tb, "tb")
+
+# 🆕 RESOLUCIÓN DE LOS NUEVOS UPLOADERS HISTÓRICOS
+archivo_cobranzas_anterior = obtener_archivo_historico_o_subido(archivo_cobranzas_anterior, "cobranzas_anterior")
+archivo_transito_anterior = obtener_archivo_historico_o_subido(archivo_transito_anterior, "transito_anterior")
 
 # ============================================================
 # INTERFAZ PRINCIPAL
