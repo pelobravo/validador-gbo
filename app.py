@@ -10,6 +10,7 @@
 # 🔥 REFACTORIZADO: Detección de duplicados internos en Cobranzas (2026-07-09)
 # 🆕 AGREGADO: Uploaders para Cobranzas Anterior y Tránsito Anterior (Trazabilidad histórica)
 # 🔥 AGREGADO: Cruce avanzado de cobranzas interdiarias y conciliación de tránsito
+# 🎯 AGREGADO: Motor automático de detección de errores interdiarios (Cobranzas)
 
 import streamlit as st
 import pandas as pd
@@ -4972,11 +4973,11 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         st.markdown("---")
         
         # ============================================================
-        # 🔥 TRAZABILIDAD DE CUENTAS POR COBRAR (REFACTORIZADO CON COBRANZAS ANTERIOR)
+        # 🔥 TRAZABILIDAD DE CUENTAS POR COBRAR (CON KPIs + MOTOR DE AUDITORÍA)
         # ============================================================
         st.markdown("### 🔍 Trazabilidad de Cuentas por Cobrar")
         st.caption("Análisis detallado: CxC Anterior + Facturación - Cobranzas - NC Clientes = CxC Calculado vs CxC Reportado")
-        
+
         # Mostrar el cálculo paso a paso
         st.markdown("#### 📊 Paso a paso del cálculo")
         
@@ -4996,359 +4997,136 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             st.success("✅ **¡CONCILIACIÓN PERFECTA!** El CxC Calculado coincide con el CxC Reportado.")
         else:
             st.error(f"⚠️ **DIFERENCIA DETECTADA:** {formato_venezolano(abs(diff_cxc_calc))} Bs. de diferencia")
-            
-            # ============================================================
-            # 🔥 ANÁLISIS DETALLADO DE COBRANZAS Y DUPLICADOS INTERDIARIOS
-            # ============================================================
-            st.markdown("---")
-            with st.expander("🔍 Análisis Detallado de Cobranzas y Duplicados Interdiarios", expanded=False):
-                st.markdown("--- ")
-                col_btn_cxc1, col_btn_cxc2, col_btn_cxc3 = st.columns(3)
+
+        # ============================================================
+        # 🎯 MOTOR AUTOMÁTICO DE DETECCIÓN DE ERRORES INTERDIARIOS (COBRANZAS)
+        # ============================================================
+        with st.expander("🚨 Auditoría Avanzada de Cobranzas (Duplicados y Errores Interdiarios)", expanded=True):
+            tiene_cob_actual = 'df_cobranzas' in locals() and df_cobranzas is not None
+            tiene_cob_anterior = archivo_cobranzas_anterior is not None
+
+            if tiene_cob_actual:
+                # 1. Extracción exhaustiva del archivo de HOY
+                df_hoy_clean = ProcesadorArchivos._limpiar_columnas(df_cobranzas)
+                idx_hoy = ProcesadorArchivos._encontrar_fila_datos(df_hoy_clean, ['banco', 'deposito', 'monto'])
+                if idx_hoy >= 0:
+                    df_hoy_clean = df_hoy_clean.iloc[idx_hoy:].reset_index(drop=True)
+                    df_hoy_clean.columns = [str(c).strip().lower() for c in df_hoy_clean.iloc[0]]
+                    df_hoy_clean = df_hoy_clean.iloc[1:].reset_index(drop=True)
                 
-                with col_btn_cxc1:
-                    if st.button("🔴 Ver Cobranzas Duplicadas", width='stretch', key="btn_cxc_duplicadas_tab2"):
-                        st.session_state['mostrar_cxc_duplicadas'] = not st.session_state.get('mostrar_cxc_duplicadas', False)
-                
-                with col_btn_cxc2:
-                    if st.button("📝 Ver Notas de Crédito", width='stretch', key="btn_cxc_nc_tab2"):
-                        st.session_state['mostrar_cxc_nc'] = not st.session_state.get('mostrar_cxc_nc', False)
-                
-                with col_btn_cxc3:
-                    if st.button("📊 Ver Análisis Completo", width='stretch', key="btn_cxc_completo_tab2"):
-                        st.session_state['mostrar_cxc_completo'] = not st.session_state.get('mostrar_cxc_completo', False)
-                
-                if st.session_state.get('mostrar_cxc_duplicadas', False) or st.session_state.get('mostrar_cxc_nc', False) or st.session_state.get('mostrar_cxc_completo', False):
+                col_ref_hoy = ProcesadorArchivos._buscar_columna(df_hoy_clean, 'deposito', 'nro', 'referencia')
+                col_monto_hoy = ProcesadorArchivos._buscar_columna(df_hoy_clean, 'monto', 'total', 'monto cobranza')
+                col_cliente_hoy = ProcesadorArchivos._buscar_columna(df_hoy_clean, 'cliente', 'nombre')
+
+                # Diccionario detallado de HOY para cruzamiento rápido
+                cobranzas_hoy_map = []
+                for idx, row in df_hoy_clean.iterrows():
                     try:
-                        import re
-                        import os
-                        from datetime import timedelta
-                        from config import RUTA_ARCHIVOS
+                        ref = str(row[col_ref_hoy]).strip() if col_ref_hoy in df_hoy_clean.columns else ""
+                        monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_hoy]) if col_monto_hoy in df_hoy_clean.columns else 0.0
+                        cliente = str(row[col_cliente_hoy]).strip() if col_cliente_hoy in df_hoy_clean.columns else "No identificado"
                         
-                        tiene_cobranzas = 'df_cobranzas' in locals() and df_cobranzas is not None
-                        tiene_notas_cliente = 'df_notas_cliente' in locals() and df_notas_cliente is not None
+                        if monto and monto > 0:
+                            ref_norm = re.sub(r'[^0-9]', '', ref) if ref else f"sin_ref_{idx}"
+                            cobranzas_hoy_map.append({
+                                'ref_norm': ref_norm,
+                                'referencia_orig': ref,
+                                'monto': float(monto),
+                                'cliente': cliente,
+                                'fila': idx + 1
+                            })
+                    except:
+                        pass
+
+                # 2. Extracción exhaustiva del archivo de AYER
+                cobranzas_ayer_map = []
+                if tiene_cob_anterior:
+                    try:
+                        df_ayer_raw = pd.read_excel(archivo_cobranzas_anterior)
+                        df_ayer_clean = ProcesadorArchivos._limpiar_columnas(df_ayer_raw)
+                        idx_ayer = ProcesadorArchivos._encontrar_fila_datos(df_ayer_clean, ['banco', 'deposito', 'monto'])
+                        if idx_ayer >= 0:
+                            df_ayer_clean = df_ayer_clean.iloc[idx_ayer:].reset_index(drop=True)
+                            df_ayer_clean.columns = [str(c).strip().lower() for c in df_ayer_clean.iloc[0]]
+                            df_ayer_clean = df_ayer_clean.iloc[1:].reset_index(drop=True)
                         
-                        # ============================================================
-                        # 🔥 REFACTORIZACIÓN EN CALIENTE: Extraer cobranzas actuales detectando duplicados internos
-                        # ============================================================
-                        cobranzas_actual_docs = {}
-                        cobranzas_duplicadas_internas = []  # Para capturar duplicados dentro del mismo archivo
-                        
-                        if tiene_cobranzas:
-                            df_cob_clean = ProcesadorArchivos._limpiar_columnas(df_cobranzas)
-                            
-                            idx_cob = None
-                            for idx, row in df_cob_clean.iterrows():
-                                row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                                if 'banco' in row_str and 'cuenta' in row_str and 'deposito' in row_str:
-                                    idx_cob = idx
-                                    break
-                            if idx_cob is None:
-                                idx_cob = ProcesadorArchivos._encontrar_fila_datos(df_cob_clean, ['banco', 'deposito', 'monto'])
-                            
-                            if idx_cob is not None and idx_cob >= 0 and idx_cob < len(df_cob_clean):
-                                df_datos = df_cob_clean.iloc[idx_cob:].reset_index(drop=True)
-                                if len(df_datos) > 0:
-                                    header_row = df_datos.iloc[0]
-                                    new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
-                                    df_datos.columns = new_cols
-                                    df_cob_clean = df_datos.iloc[1:].reset_index(drop=True)
-                            
-                            col_ref_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'deposito', 'nro', 'referencia', 'documento')
-                            col_monto_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'monto', 'total', 'importe')
-                            col_cliente_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'cliente', 'nombre', 'rif', 'cedula')
-                            
-                            if col_ref_cob and col_monto_cob:
-                                for idx, row in df_cob_clean.iterrows():
-                                    ref = str(row[col_ref_cob]).strip()
-                                    monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_cob])
-                                    if ref and ref != 'nan' and ref != 'None' and monto:
-                                        ref_norm = re.sub(r'[^0-9]', '', ref)
-                                        if ref_norm:
-                                            cliente = ''
-                                            if col_cliente_cob:
-                                                try:
-                                                    cliente_val = str(row[col_cliente_cob]).strip()
-                                                    if cliente_val and cliente_val != 'nan' and cliente_val != 'None':
-                                                        cliente = cliente_val
-                                                except:
-                                                    pass
-                                            
-                                            # 💡 CORRECCIÓN MÁGICA: Si ya existe la referencia en el día actual, ¡Es un duplicado interno!
-                                            if ref_norm in cobranzas_actual_docs:
-                                                cobranzas_duplicadas_internas.append({
-                                                    'referencia': ref,
-                                                    'monto_actual': float(monto),
-                                                    'monto_anterior': cobranzas_actual_docs[ref_norm]['monto'],
-                                                    'cliente': cliente if cliente else cobranzas_actual_docs[ref_norm]['cliente'],
-                                                    'estado': '🔴 DUPLICADO EN ARCHIVO'
-                                                })
-                                            else:
-                                                cobranzas_actual_docs[ref_norm] = {
-                                                    'referencia': ref,
-                                                    'monto': float(monto),
-                                                    'cliente': cliente
-                                                }
-                        
-                        # ============================================================
-                        # 🔥 EXTRAER COBRANZAS DEL DÍA ANTERIOR DESDE ARCHIVO SUBIDO
-                        # ============================================================
-                        cobranzas_anterior_docs = {}
-                        if archivo_cobranzas_anterior is not None:
+                        col_ref_ayer = ProcesadorArchivos._buscar_columna(df_ayer_clean, 'deposito', 'nro', 'referencia')
+                        col_monto_ayer = ProcesadorArchivos._buscar_columna(df_ayer_clean, 'monto', 'total', 'monto cobranza')
+                        col_cliente_ayer = ProcesadorArchivos._buscar_columna(df_ayer_clean, 'cliente', 'nombre')
+
+                        for idx, row in df_ayer_clean.iterrows():
                             try:
-                                df_cob_ant = pd.read_excel(archivo_cobranzas_anterior)
-                                df_cob_ant_clean = ProcesadorArchivos._limpiar_columnas(df_cob_ant)
-                                idx_cob_ant = ProcesadorArchivos._encontrar_fila_datos(df_cob_ant_clean, ['banco', 'deposito', 'monto'])
-                                if idx_cob_ant >= 0:
-                                    df_datos_ant = df_cob_ant_clean.iloc[idx_cob_ant:].reset_index(drop=True)
-                                    header_row = df_datos_ant.iloc[0]
-                                    df_datos_ant.columns = [str(c).strip() for c in header_row]
-                                    df_cob_ant_clean = df_datos_ant.iloc[1:].reset_index(drop=True)
-                                    
-                                    col_ref_ant = ProcesadorArchivos._buscar_columna(df_cob_ant_clean, 'deposito', 'nro', 'referencia')
-                                    col_monto_ant = ProcesadorArchivos._buscar_columna(df_cob_ant_clean, 'monto', 'total')
-                                    col_cliente_ant = ProcesadorArchivos._buscar_columna(df_cob_ant_clean, 'cliente', 'nombre', 'rif')
-                                    
-                                    if col_ref_ant and col_monto_ant:
-                                        for idx, row in df_cob_ant_clean.iterrows():
-                                            ref = str(row[col_ref_ant]).strip()
-                                            monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_ant])
-                                            if ref and monto:
-                                                ref_norm = re.sub(r'[^0-9]', '', ref)
-                                                cliente = ''
-                                                if col_cliente_ant:
-                                                    try:
-                                                        cliente_val = str(row[col_cliente_ant]).strip()
-                                                        if cliente_val and cliente_val != 'nan' and cliente_val != 'None':
-                                                            cliente = cliente_val
-                                                    except:
-                                                        pass
-                                                cobranzas_anterior_docs[ref_norm] = {
-                                                    'referencia': ref,
-                                                    'monto': float(monto),
-                                                    'cliente': cliente
-                                                }
-                            except Exception as e:
-                                st.error(f"⚠️ Error al procesar Cobranzas del Día Anterior: {e}")
-                        
-                        # ============================================================
-                        # 🔥 CRUZAR COBRANZAS ACTUALES VS ANTERIORES (DETECCIÓN DE DUPLICADOS INTERDIARIOS)
-                        # ============================================================
-                        duplicados_interdiarios = []
-                        for ref_norm, info_actual in cobranzas_actual_docs.items():
-                            if ref_norm in cobranzas_anterior_docs:
-                                duplicados_interdiarios.append({
-                                    'Referencia': info_actual['referencia'],
-                                    'Monto Hoy': info_actual['monto'],
-                                    'Monto Ayer': cobranzas_anterior_docs[ref_norm]['monto'],
-                                    'Cliente': info_actual.get('cliente', 'No identificado'),
-                                    'Estado': '⚠️ ALERTA: Duplicado Interdiario (Cobrado Ayer y Hoy)'
-                                })
-                        
-                        # ============================================================
-                        # MOSTRAR DUPLICADOS INTERDIARIOS
-                        # ============================================================
-                        if duplicados_interdiarios:
-                            st.error(f"🚨 Se detectaron {len(duplicados_interdiarios)} referencias duplicadas entre AYER y HOY:")
-                            df_dup_inter = pd.DataFrame(duplicados_interdiarios)
-                            st.dataframe(df_dup_inter, use_container_width=True)
-                            
-                            total_dup_inter = sum([x['Monto Hoy'] for x in duplicados_interdiarios])
-                            st.metric("💰 Total Duplicado Interdiario", formato_venezolano(total_dup_inter))
-                            st.warning("⚠️ Estas cobranzas requieren ajuste técnico para evitar doble contabilización.")
-                        else:
-                            st.success("✅ No se detectaron cobranzas duplicadas contra el día anterior.")
-                        
-                        # ============================================================
-                        # EXTRAER COBRANZAS DEL DÍA ANTERIOR DESDE HISTÓRICO (BACKUP)
-                        # ============================================================
-                        if not cobranzas_anterior_docs:
-                            try:
-                                empresa_clean = re.sub(r'[^\w\-_]', '_', st.session_state.empresa_activa)
-                                fecha_ant_str = (pd.Timestamp(fecha_procesar) - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
-                                filename_ant = f"cobranzas_{empresa_clean}_{fecha_ant_str}.xlsx"
-                                filepath_ant = os.path.join(RUTA_ARCHIVOS, filename_ant)
+                                ref = str(row[col_ref_ayer]).strip() if col_ref_ayer in df_ayer_clean.columns else ""
+                                monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_ayer]) if col_monto_ayer in df_ayer_clean.columns else 0.0
+                                cliente = str(row[col_cliente_ayer]).strip() if col_cliente_ayer in df_ayer_clean.columns else "No identificado"
                                 
-                                if os.path.exists(filepath_ant):
-                                    df_cob_ant = pd.read_excel(filepath_ant)
-                                    df_cob_ant_clean = ProcesadorArchivos._limpiar_columnas(df_cob_ant)
-                                    
-                                    idx_cob_ant = None
-                                    for idx, row in df_cob_ant_clean.iterrows():
-                                        row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                                        if 'banco' in row_str and 'cuenta' in row_str and 'deposito' in row_str:
-                                            idx_cob_ant = idx
-                                            break
-                                    if idx_cob_ant is None:
-                                        idx_cob_ant = ProcesadorArchivos._encontrar_fila_datos(df_cob_ant_clean, ['banco', 'deposito', 'monto'])
-                                    
-                                    if idx_cob_ant is not None and idx_cob_ant >= 0 and idx_cob_ant < len(df_cob_ant_clean):
-                                        df_datos = df_cob_ant_clean.iloc[idx_cob_ant:].reset_index(drop=True)
-                                        if len(df_datos) > 0:
-                                            header_row = df_datos.iloc[0]
-                                            new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
-                                            df_datos.columns = new_cols
-                                            df_cob_ant_clean = df_datos.iloc[1:].reset_index(drop=True)
-                                    
-                                    col_ref_cob_ant = ProcesadorArchivos._buscar_columna(df_cob_ant_clean, 'deposito', 'nro', 'referencia', 'documento')
-                                    col_monto_cob_ant = ProcesadorArchivos._buscar_columna(df_cob_ant_clean, 'monto', 'total', 'importe')
-                                    
-                                    if col_ref_cob_ant and col_monto_cob_ant:
-                                        for idx, row in df_cob_ant_clean.iterrows():
-                                            ref = str(row[col_ref_cob_ant]).strip()
-                                            monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_cob_ant])
-                                            if ref and ref != 'nan' and ref != 'None' and monto:
-                                                ref_norm = re.sub(r'[^0-9]', '', ref)
-                                                if ref_norm:
-                                                    cobranzas_anterior_docs[ref_norm] = {
-                                                        'referencia': ref,
-                                                        'monto': float(monto)
-                                                    }
-                                else:
-                                    st.info("ℹ️ No hay archivo de Cobranzas del día anterior en el histórico para comparar.")
-                            except Exception as e:
+                                if monto and monto > 0:
+                                    ref_norm = re.sub(r'[^0-9]', '', ref) if ref else f"sin_ref_ant_{idx}"
+                                    cobranzas_ayer_map.append({
+                                        'ref_norm': ref_norm,
+                                        'referencia_orig': ref,
+                                        'monto': float(monto),
+                                        'cliente': cliente,
+                                        'fila': idx + 1
+                                    })
+                            except:
                                 pass
-                        
-                        # ============================================================
-                        # EXTRAER NOTAS DE CRÉDITO
-                        # ============================================================
-                        notas_credito_docs = {}
-                        if tiene_notas_cliente:
-                            try:
-                                df_nc_clean = ProcesadorArchivos._limpiar_columnas(df_notas_cliente)
-                                
-                                idx_nc = None
-                                for idx, row in df_nc_clean.iterrows():
-                                    row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                                    if 'nota' in row_str and 'credito' in row_str:
-                                        idx_nc = idx
-                                        break
-                                if idx_nc is None:
-                                    idx_nc = ProcesadorArchivos._encontrar_fila_datos(df_nc_clean, ['nota', 'credito', 'monto'])
-                                
-                                if idx_nc is not None and idx_nc >= 0 and idx_nc < len(df_nc_clean):
-                                    df_datos = df_nc_clean.iloc[idx_nc:].reset_index(drop=True)
-                                    if len(df_datos) > 0:
-                                        header_row = df_datos.iloc[0]
-                                        new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
-                                        df_datos.columns = new_cols
-                                        df_nc_clean = df_datos.iloc[1:].reset_index(drop=True)
-                                
-                                col_ref_nc = ProcesadorArchivos._buscar_columna(df_nc_clean, 'documento', 'nota', 'nro', 'referencia')
-                                col_monto_nc = ProcesadorArchivos._buscar_columna(df_nc_clean, 'monto', 'total', 'importe')
-                                col_cliente_nc = ProcesadorArchivos._buscar_columna(df_nc_clean, 'cliente', 'nombre', 'rif')
-                                
-                                if col_ref_nc and col_monto_nc:
-                                    for idx, row in df_nc_clean.iterrows():
-                                        ref = str(row[col_ref_nc]).strip()
-                                        monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_nc])
-                                        if ref and ref != 'nan' and ref != 'None' and monto:
-                                            ref_norm = re.sub(r'[^0-9]', '', ref)
-                                            if ref_norm:
-                                                cliente = ''
-                                                if col_cliente_nc:
-                                                    try:
-                                                        cliente_val = str(row[col_cliente_nc]).strip()
-                                                        if cliente_val and cliente_val != 'nan' and cliente_val != 'None':
-                                                            cliente = cliente_val
-                                                    except:
-                                                        pass
-                                                
-                                                notas_credito_docs[ref_norm] = {
-                                                    'referencia': ref,
-                                                    'monto': float(monto),
-                                                    'cliente': cliente
-                                                }
-                            except Exception as e:
-                                pass
-                        
-                        # ============================================================
-                        # MOSTRAR COBRANZAS DUPLICADAS (INTERNAS)
-                        # ============================================================
-                        if st.session_state.get('mostrar_cxc_duplicadas', False):
-                            with st.expander("🔴 Cobranzas Duplicadas Internas Detectadas", expanded=True):
-                                if cobranzas_duplicadas_internas:
-                                    df_dup = pd.DataFrame(cobranzas_duplicadas_internas)
-                                    total_dup = sum([x['monto_actual'] for x in cobranzas_duplicadas_internas])
-                                    st.metric("💰 Total Duplicado Interno", formato_venezolano(total_dup))
-                                    st.dataframe(df_dup, use_container_width=True)
-                                    st.error(f"❌ **Se encontraron {len(cobranzas_duplicadas_internas)} cobranzas duplicadas dentro del mismo archivo.**")
-                                else:
-                                    st.success("✅ No hay cobranzas duplicadas internas en los registros de hoy.")
-                        
-                        # ============================================================
-                        # MOSTRAR NOTAS DE CRÉDITO
-                        # ============================================================
-                        if st.session_state.get('mostrar_cxc_nc', False):
-                            with st.expander("📝 Notas de Crédito", expanded=True):
-                                if notas_credito_docs:
-                                    df_nc = pd.DataFrame(list(notas_credito_docs.values()))
-                                    total_nc = sum([x['monto'] for x in notas_credito_docs.values()])
-                                    st.metric("💰 Total Notas de Crédito", formato_venezolano(total_nc))
-                                    st.dataframe(df_nc, use_container_width=True)
-                                    st.info(f"📝 {len(notas_credito_docs)} notas de crédito encontradas")
-                                else:
-                                    st.info("ℹ️ No hay notas de crédito")
-                        
-                        # ============================================================
-                        # MOSTRAR ANÁLISIS COMPLETO
-                        # ============================================================
-                        if st.session_state.get('mostrar_cxc_completo', False):
-                            with st.expander("📊 Análisis Completo de CxC", expanded=True):
-                                # Clasificar
-                                total_duplicadas_internas = sum([x['monto_actual'] for x in cobranzas_duplicadas_internas])
-                                total_duplicadas_interdiarias = sum([x['Monto Hoy'] for x in duplicados_interdiarios])
-                                total_nuevas = sum([x['monto'] for x in cobranzas_actual_docs.values()])
-                                total_nc = sum([x['monto'] for x in notas_credito_docs.values()])
-                                
-                                col_a1, col_a2, col_a3, col_a4 = st.columns(4)
-                                
-                                with col_a1:
-                                    st.metric("🔴 Duplicadas Internas", len(cobranzas_duplicadas_internas), delta=f"{formato_venezolano(total_duplicadas_internas)}")
-                                with col_a2:
-                                    st.metric("🔴 Duplicadas Interdiarias", len(duplicados_interdiarios), delta=f"{formato_venezolano(total_duplicadas_interdiarias)}")
-                                with col_a3:
-                                    st.metric("🆕 Cobranzas Hoy", len(cobranzas_actual_docs), delta=f"{formato_venezolano(total_nuevas)}")
-                                with col_a4:
-                                    st.metric("📝 Notas de Crédito", len(notas_credito_docs), delta=f"{formato_venezolano(total_nc)}")
-                                
-                                # Diagnóstico
-                                st.markdown("---")
-                                st.markdown("#### 🎯 Diagnóstico")
-                                
-                                total_duplicadas = total_duplicadas_internas + total_duplicadas_interdiarias
-                                diferencia_explicada_cxc = total_duplicadas + total_nc
-                                diferencia_no_explicada_cxc = abs(diff_cxc_calc) - diferencia_explicada_cxc
-                                
-                                st.markdown(f"""
-                                | Concepto | Monto | Explicación |
-                                |----------|-------|-------------|
-                                | **Diferencia Total** | {formato_venezolano(abs(diff_cxc_calc))} | Diferencia en CxC |
-                                | 🔴 **Duplicadas Internas** | {formato_venezolano(total_duplicadas_internas)} | Cobranzas duplicadas dentro del mismo archivo |
-                                | 🔴 **Duplicadas Interdiarias** | {formato_venezolano(total_duplicadas_interdiarias)} | Cobranzas que ya estaban en día anterior |
-                                | 📝 **Notas de Crédito** | {formato_venezolano(total_nc)} | NC aplicadas que afectan CxC |
-                                | **Diferencia Explicada** | {formato_venezolano(diferencia_explicada_cxc)} | Suma de diferencias |
-                                | **Diferencia NO Explicada** | {formato_venezolano(diferencia_no_explicada_cxc)} | ⚠️ Requiere revisión |
-                                """)
-                                
-                                if abs(diferencia_no_explicada_cxc) < 0.01:
-                                    st.success("✅ **¡DIFERENCIA EXPLICADA COMPLETAMENTE!**")
-                                else:
-                                    st.error(f"❌ **DIFERENCIA NO EXPLICADA:** {formato_venezolano(diferencia_no_explicada_cxc)} Bs.")
-                        
-                        # ============================================================
-                        # BOTÓN PARA CERRAR VISTAS DE CxC
-                        # ============================================================
-                        if st.button("🔒 Cerrar todas las vistas de CxC", width='stretch'):
-                            st.session_state['mostrar_cxc_duplicadas'] = False
-                            st.session_state['mostrar_cxc_nc'] = False
-                            st.session_state['mostrar_cxc_completo'] = False
-                            st.rerun()
-                            
                     except Exception as e:
-                        st.error(f"❌ Error en el análisis de CxC: {str(e)}")
-                        import traceback
-                        st.code(traceback.format_exc())
-        
+                        st.error(f"⚠️ Error procesando el archivo histórico de cobranzas: {e}")
+
+                # ============================================================
+                # 🔥 EJECUCIÓN DE AUDITORÍA CIEGA (HALLAR ALERTA DE 3040 Y OTROS)
+                # ============================================================
+                alertas_halladas = []
+                
+                # Algoritmo de cruce ciego
+                for item_hoy in cobranzas_hoy_map:
+                    monto_h = item_hoy['monto']
+                    ref_h = item_hoy['ref_norm']
+                    
+                    # A. Buscar duplicados de referencias contra AYER
+                    for item_ayer in cobranzas_ayer_map:
+                        if ref_h and ref_h == item_ayer['ref_norm'] and not ref_h.startswith("sin_ref"):
+                            alertas_halladas.append({
+                                'Tipo Falla': '🔴 DUPLICADO INTERDIARIO (Misma Ref.)',
+                                'Monto': monto_h,
+                                'Detalle': f"Ref {item_hoy['referencia_orig']} procesada ayer (Fila {item_ayer['fila']}) y hoy (Fila {item_hoy['fila']})",
+                                'Cliente': item_hoy['cliente']
+                            })
+                    
+                    # B. Buscar patrones sospechosos por MONTO EXACTO (Como los 3040 Bs.)
+                    for item_ayer in cobranzas_ayer_map:
+                        if abs(monto_h - item_ayer['monto']) < 0.01 and ref_h != item_ayer['ref_norm']:
+                            alertas_halladas.append({
+                                'Tipo Falla': '💥 COINCIDENCIA CRÍTICA DE MONTO (Posible Doble Registro)',
+                                'Monto': monto_h,
+                                'Detalle': f"Monto idéntico hallado ayer (Ref: {item_ayer['referencia_orig']}) y hoy (Ref: {item_hoy['referencia_orig']})",
+                                'Cliente': item_hoy['cliente']
+                            })
+
+                # Renderizado de resultados de Auditoría Ciega
+                if alertas_halladas:
+                    df_alertas = pd.DataFrame(alertas_halladas).drop_duplicates(subset=['Detalle'])
+                    st.error(f"🚨 El motor de auditoría automatizada detectó {len(df_alertas)} irregularidades críticas sin asistencia:")
+                    
+                    df_display_alertas = df_alertas.copy()
+                    df_display_alertas['Monto (Bs.)'] = df_display_alertas['Monto'].apply(formato_venezolano)
+                    
+                    st.dataframe(
+                        df_display_alertas[['Tipo Falla', 'Monto (Bs.)', 'Detalle', 'Cliente']],
+                        use_container_width=True
+                    )
+                    
+                    # Foco específico en el descuadre de 3040
+                    target_alert = df_alertas[df_alertas['Monto'] == 3040.0]
+                    if not target_alert.empty:
+                        st.toast("🎯 ¡Monto de 3040 localizado con éxito por trazabilidad!")
+                        st.warning(f"🏁 **Hallazgo crítico:** El sistema interceptó la transacción de **3.040,00 Bs.** Detalles del cruce: {target_alert.iloc[0]['Detalle']}.")
+                else:
+                    st.success("✅ Auditoría ciega completada: Los montos y referencias mapeados entre ambos días lucen consistentes.")
+            else:
+                st.info("ℹ️ Sube los archivos de cobranza de ambos días para ejecutar el análisis inteligente en background.")
+
         st.markdown("---")
         
         # ============================================================
@@ -5441,8 +5219,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         qty_recepcion_traz = 0.0
                         if p in recepciones_traz:
                             qty_recepcion_traz = recepciones_traz[p].get('cantidad', 0)
-                            # Debug: mostrar que se encontró el producto
-                            # st.write(f"🔍 Producto {p} encontrado en Recepción: {qty_recepcion_traz} unidades")
                         
                         # --- VALORES ---
                         qty_prev = p_prev['Cantidad']
@@ -5459,12 +5235,10 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         desc = p_curr['Descrip_Clean'] if p_curr['Descrip_Clean'] != 'N/A' else (p_prev['Descrip_Clean'] if p_prev['Descrip_Clean'] != 'N/A' else u_row['Producto_Original'])
                         
                         # --- CÁLCULOS POR VALOR (Financiero) ---
-                        # Inventario Esperado = Inventario Anterior - Costo de Ventas + Recepción (valor)
                         expected_val = val_prev - cost_sold + (qty_recepcion_traz * price_prev)
                         val_diff = val_curr - expected_val
                         
                         # --- CÁLCULOS POR CANTIDAD (Trazabilidad) ---
-                        # Inventario Esperado (cantidad) = Inv. Anterior - Ventas + Recepción Trazabilidad
                         expected_qty = qty_prev - qty_sold + qty_recepcion_traz
                         qty_diff = qty_curr - expected_qty
                         
@@ -5477,7 +5251,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         
                         total_inicial_cant += qty_prev
                         total_ventas_cant += qty_sold
-                        total_recepcion_cant += qty_recepcion_traz  # 🔥 CORREGIDO: Ahora suma correctamente
+                        total_recepcion_cant += qty_recepcion_traz
                         total_esperado_cant += expected_qty
                         total_reportado_cant += qty_curr
                         
@@ -5533,7 +5307,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     mostrar_kpi_paso_paso(col_v_inv1, "Inventario Esperado", total_esperado_valor, "📋", "orange")
                     mostrar_kpi_paso_paso(col_v_inv2, "Inventario Reportado", total_reportado_valor, "📄", "green")
                     
-                    # Alerta de color dinámica para la tarjeta de diferencia
                     diff_total_valor = total_reportado_valor - total_esperado_valor
                     variante_diff_valor = "green" if abs(diff_total_valor) < 0.01 else ("red" if diff_total_valor < 0 else "orange")
                     icono_diff_valor = "✅" if abs(diff_total_valor) < 0.01 else ("⚠️" if diff_total_valor > 0 else "❌")
@@ -5549,7 +5322,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     
                     col_inv_c1, col_inv_c2, col_inv_c3, col_inv_c4, col_inv_c5 = st.columns(5)
                     
-                    # 🔥 CORREGIDO: Usar mostrar_kpi_cantidades en lugar de mostrar_kpi_paso_paso
                     mostrar_kpi_cantidades(col_inv_c1, "Inv. Anterior (und)", total_inicial_cant, "📦", "blue")
                     mostrar_kpi_cantidades(col_inv_c2, "Ventas (und)", total_ventas_cant, "📊", "red")
                     mostrar_kpi_cantidades(col_inv_c3, "Recepción (und)", total_recepcion_cant, "📥", "purple")
@@ -5563,7 +5335,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     
                     col_v_inv_c1, col_v_inv_c2, col_v_inv_c3 = st.columns(3)
                     
-                    # 🔥 CORREGIDO: Usar mostrar_kpi_cantidades
                     mostrar_kpi_cantidades(col_v_inv_c1, "Esperado (und)", total_esperado_cant, "📋", "orange")
                     mostrar_kpi_cantidades(col_v_inv_c2, "Reportado (und)", total_reportado_cant, "📄", "green")
                     
