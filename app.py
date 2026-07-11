@@ -5513,6 +5513,124 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
 
         st.markdown("---")
 
+        # ============================================================
+        # 🔄 MOTOR DE TRAZABILIDAD EN VIVO: TRÁNSITO VS COBRANZAS DEL DÍA
+        # ============================================================
+        with st.expander("🔄 Auditoría de Transferencias en Tránsito (Cruce con Cobranzas del Día)", expanded=True):
+            tiene_cob_hoy = 'df_cobranzas' in locals() and df_cobranzas is not None
+            tiene_banco_hoy = 'df_estado_cuenta' in locals() and df_estado_cuenta is not None
+
+            if tiene_cob_hoy and tiene_banco_hoy:
+                # 1. Extracción de Cobranzas del día (asegurando lectura de todo, incluso si estaba oculto)
+                df_cob_clean = ProcesadorArchivos._limpiar_columnas(df_cobranzas)
+                idx_cob = ProcesadorArchivos._encontrar_fila_datos(df_cob_clean, ['banco', 'deposito', 'monto'])
+                if idx_cob >= 0:
+                    df_cob_clean = df_cob_clean.iloc[idx_cob:].reset_index(drop=True)
+                    df_cob_clean.columns = [str(c).strip().lower() for c in df_cob_clean.iloc[0]]
+                    df_cob_clean = df_cob_clean.iloc[1:].reset_index(drop=True)
+                
+                col_ref_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'deposito', 'nro', 'referencia')
+                col_monto_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'monto', 'total', 'monto cobranza')
+
+                cobranzas_dia_map = {}
+                cobranzas_duplicadas_internas = []
+
+                for idx, row in df_cob_clean.iterrows():
+                    ref = str(row[col_ref_cob]).strip() if col_ref_cob in df_cob_clean.columns else ""
+                    monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_cob]) if col_monto_cob in df_cob_clean.columns else 0.0
+                    
+                    if monto and monto > 0:
+                        ref_norm = re.sub(r'[^0-9]', '', ref) if ref else f"oculto_cob_{idx}"
+                        # Detectar duplicados internos en el mismo archivo (incluso en celdas que estaban ocultas)
+                        if ref_norm in cobranzas_dia_map:
+                            cobranzas_duplicadas_internas.append({
+                                'Referencia': ref,
+                                'Monto': monto,
+                                'Fila Excel': idx + 1,
+                                'Detalle': '⚠️ Referencia duplicada dentro del mismo archivo de Cobranzas'
+                            })
+                        else:
+                            cobranzas_dia_map[ref_norm] = {'monto': float(monto), 'fila': idx + 1, 'orig': ref}
+
+                # 2. Extracción del Estado de Cuenta / TB del día
+                df_banco_clean = ProcesadorArchivos._limpiar_columnas(df_estado_cuenta)
+                idx_banco = ProcesadorArchivos._encontrar_fila_datos(df_banco_clean, ['fecha', 'referencia', 'descrip'])
+                if idx_banco >= 0:
+                    df_banco_clean = df_banco_clean.iloc[idx_banco:].reset_index(drop=True)
+                    df_banco_clean.columns = [str(c).strip().lower() for c in df_banco_clean.iloc[0]]
+                    df_banco_clean = df_banco_clean.iloc[1:].reset_index(drop=True)
+
+                col_ref_ban = ProcesadorArchivos._buscar_columna(df_banco_clean, 'referencia', 'nro', 'documento')
+                col_credito_ban = ProcesadorArchivos._buscar_columna(df_banco_clean, 'credito', 'monto', 'ingreso')
+
+                banco_dia_map = {}
+                for idx, row in df_banco_clean.iterrows():
+                    ref_b = str(row[col_ref_ban]).strip() if col_ref_ban in df_banco_clean.columns else ""
+                    monto_b = ProcesadorArchivos._convertir_numero_europeo(row[col_credito_ban]) if col_credito_ban in df_banco_clean.columns else 0.0
+                    
+                    if monto_b and monto_b > 0:
+                        ref_b_norm = re.sub(r'[^0-9]', '', ref_b) if ref_b else f"oculto_ban_{idx}"
+                        banco_dia_map[ref_b_norm] = {'monto': float(monto_b), 'fila': idx + 1, 'orig': ref_b}
+
+                # ============================================================
+                # 🎯 CRUCE CIEGO DE TRAZABILIDAD (Mismo Día)
+                # ============================================================
+                discrepancias_transito = []
+
+                # A. Reportar los duplicados internos primero
+                for dup in cobranzas_duplicadas_internas:
+                    discrepancias_transito.append({
+                        'Tipo Falla': '🔴 DUPLICADO INTERNO (Cobranzas)',
+                        'Monto': dup['Monto'],
+                        'Detalle': dup['Detalle'] + f" (Fila {dup['Fila Excel']})",
+                        'Estatus': 'Crítico'
+                    })
+
+                # B. Cruzar Cobranzas vs Banco (Buscar diferencias de montos o faltantes)
+                for ref_norm, info_cob in cobranzas_dia_map.items():
+                    if ref_norm in banco_dia_map:
+                        monto_banco = banco_dia_map[ref_norm]['monto']
+                        diff_monto = info_cob['monto'] - monto_banco
+                        if abs(diff_monto) > 0.01:
+                            discrepancias_transito.append({
+                                'Tipo Falla': '💥 DIFERENCIA DE MONTO (Tránsito)',
+                                'Monto': info_cob['monto'],
+                                'Detalle': f"Ref {info_cob['orig']}: Registrado en Cobranzas por {formato_venezolano(info_cob['monto'])} pero ingresó al Banco por {formato_venezolano(monto_banco)} (Dif: {formato_venezolano(diff_monto)})",
+                                'Estatus': 'Naranja'
+                            })
+                    else:
+                        # Está en cobranzas pero no ha caído en el banco (Verdadero Tránsito)
+                        discrepancias_transito.append({
+                            'Tipo Falla': '⏳ TRANSFERENCIA EN TRÁNSITO',
+                            'Monto': info_cob['monto'],
+                            'Detalle': f"Ref {info_cob['orig']} (Fila {info_cob['fila']}): Reportada en Cobranzas pero NO figura en el Estado de Cuenta de hoy.",
+                            'Estatus': 'Amarilla'
+                        })
+
+                # C. Banco vs Cobranzas (Ingresos al banco no registrados por el analista)
+                for ref_norm, info_ban in banco_dia_map.items():
+                    if ref_norm not in cobranzas_dia_map and not ref_norm.startswith("oculto"):
+                        discrepancias_transito.append({
+                            'Tipo Falla': '🔎 INGRESO BANCO NO REGISTRADO',
+                            'Monto': info_ban['monto'],
+                            'Detalle': f"Ref {info_ban['orig']} (Fila {info_ban['fila']}): Dinero cayó en el banco por {formato_venezolano(info_ban['monto'])} pero el analista NO lo metió en Cobranzas.",
+                            'Estatus': 'Roja'
+                        })
+
+                # Renderizar alertas del Tránsito del día
+                if discrepancies_df := pd.DataFrame(discrepancias_transito):
+                    if not discrepancies_df.empty:
+                        st.error(f"🚨 Se detectaron {len(discrepancias_transito)} inconsistencias en la conciliación de tránsito del día:")
+                        discrepancies_df['Monto (Bs.)'] = discrepancies_df['Monto'].apply(formato_venezolano)
+                        st.dataframe(
+                            discrepancies_df[['Tipo Falla', 'Monto (Bs.)', 'Detalle', 'Estatus']],
+                            use_container_width=True
+                        )
+                    else:
+                        st.success("✅ ¡Conciliación de Tránsito perfecta! Todo lo reportado en cobranzas cuadra con los ingresos del banco.")
+            else:
+                st.info("ℹ️ Carga los archivos obligatorios de **Cobranzas** y **Estado de Cuenta** para ejecutar el cruce automático de tránsito.")
+
 # ============================================================
 # PESTAÑA 3: ARCHIVOS FUENTE DEL DÍA
 # ============================================================
