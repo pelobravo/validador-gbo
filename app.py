@@ -11,6 +11,7 @@
 # 🆕 AGREGADO: Uploaders para Cobranzas Anterior y Tránsito Anterior (Trazabilidad histórica)
 # 🔥 AGREGADO: Cruce avanzado de cobranzas interdiarias y conciliación de tránsito
 # 🎯 AGREGADO: Motor automático de detección de errores interdiarios (Cobranzas)
+# 🚨 NUEVO: Auditoría de seguridad para detectar transferencias en TB ya aplicadas en Cobranzas
 
 import streamlit as st
 import pandas as pd
@@ -4819,8 +4820,11 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 tiene_banco_hoy = 'df_estado_cuenta' in locals() and df_estado_cuenta is not None
                 tiene_tb_hoy = 'df_tb' in locals() and df_tb is not None
 
-                if tiene_cob_hoy and tiene_banco_hoy and tiene_tb_hoy:
-                    # --- 1. PARSEO DE COBRANZAS DEL DÍA ---
+                # ============================================================
+                # 🚨 AUDITORÍA DE SEGURIDAD: TRANSFERENCIAS EN TB YA APLICADAS
+                # ============================================================
+                if tiene_cob_hoy and tiene_tb_hoy:
+                    # --- 1. EXTRAER COBRANZAS DEL DÍA (APLICADAS A CLIENTES) ---
                     df_cob_clean = ProcesadorArchivos._limpiar_columnas(df_cobranzas)
                     idx_cob = ProcesadorArchivos._encontrar_fila_datos(df_cob_clean, ['banco', 'deposito', 'monto'])
                     if idx_cob >= 0:
@@ -4837,11 +4841,16 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         ref = str(row[col_ref_cob]).strip() if col_ref_cob in df_cob_clean.columns else ""
                         monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_cob]) if col_monto_cob in df_cob_clean.columns else 0.0
                         cliente = str(row[col_cliente_cob]).strip() if col_cliente_cob in df_cob_clean.columns else "No identificado"
+                        
+                        # Evitar celdas vacías o filas de totales (nan)
+                        if ref.lower() in ['nan', 'none', ''] or not ref:
+                            continue
+                            
                         if monto and monto > 0:
-                            ref_norm = re.sub(r'[^0-9]', '', ref) if ref else f"cob_row_{idx}"
+                            ref_norm = re.sub(r'[^0-9]', '', ref)
                             cobranzas_dia_map[ref_norm] = {'monto': float(monto), 'fila': idx + 1, 'orig': ref, 'cliente': cliente}
 
-                    # --- 2. PARSEO DE TB.XLXX (TRÁNSITO REPORTADO) ---
+                    # --- 2. EXTRAER MOVIMIENTOS EN TB (TRÁNSITO REPORTADO) ---
                     df_tb_clean = ProcesadorArchivos._limpiar_columnas(df_tb)
                     idx_tb = ProcesadorArchivos._encontrar_fila_datos(df_tb_clean, ['cuenta', 'referencia', 'monto'])
                     if idx_tb >= 0:
@@ -4856,11 +4865,87 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     for idx, row in df_tb_clean.iterrows():
                         ref_t = str(row[col_ref_tb]).strip() if col_ref_tb in df_tb_clean.columns else ""
                         monto_t = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_tb]) if col_monto_tb in df_tb_clean.columns else 0.0
+                        
+                        if ref_t.lower() in ['nan', 'none', ''] or not ref_t:
+                            continue
+                            
                         if monto_t and monto_t > 0:
-                            ref_t_norm = re.sub(r'[^0-9]', '', ref_t) if ref_t else f"tb_row_{idx}"
+                            ref_t_norm = re.sub(r'[^0-9]', '', ref_t)
                             tb_dia_map[ref_t_norm] = {'monto': float(monto_t), 'fila': idx + 1, 'orig': ref_t}
 
-                    # --- 3. PARSEO DE BANCO (ESTADO DE CUENTA) ---
+                    # --- 3. CRUCE DE AUDITORÍA DE ERRORES DE ANALISTAS ---
+                    errores_analistas = []
+                    
+                    for ref_norm, info_tb in tb_dia_map.items():
+                        # Si el dinero sigue listado en TB, pero resulta que YA está en el archivo de Cobranzas...
+                        if ref_norm in cobranzas_dia_map:
+                            info_cob = cobranzas_dia_map[ref_norm]
+                            errores_analistas.append({
+                                "Referencia Única": info_tb['orig'],
+                                "Monto Afectado (Bs.)": formato_venezolano(info_tb['monto']),
+                                "Ubicación en TB": f"Fila Excel {info_tb['fila']}",
+                                "Ubicación en Cobranzas": f"Fila Excel {info_cob['fila']}",
+                                "Cliente Identificado": info_cob['cliente'],
+                                "Explicación Detallada": f"❌ Error Crítico de Cierre: Esta transferencia ya fue identificada y aplicada al cliente en Cobranzas (Fila {info_cob['fila']}), pero la analista la mantuvo por descuido en el archivo TB.xlsx (Fila {info_tb['fila']}). Esto está restando {formato_venezolano(info_tb['monto'])} Bs. de tu Capital de Trabajo de forma duplicada."
+                            })
+
+                    # --- 4. RENDERIZADO DE HALLAZGOS CONTABLES ---
+                    if errores_analistas:
+                        st.error(f"🚨 ¡Atención! Se detectaron {len(errores_analistas)} errores operativos de analistas afectando directamente tu Capital:")
+                        df_err = pd.DataFrame(errores_analistas)
+                        
+                        # Tabla ejecutiva resumen
+                        st.dataframe(df_err[["Referencia Única", "Monto Afectado (Bs.)", "Cliente Identificado", "Ubicación en TB", "Ubicación en Cobranzas"]], use_container_width=True, hide_index=True)
+                        
+                        # Bloque narrativo explicativo caso por caso
+                        st.markdown("#### 📋 Diagnóstico Explicativo para Ajustes:")
+                        for err in errores_analistas:
+                            st.markdown(f"* **📄 Ref: {err['Referencia Única']}** | {err['Explicación Detallada']}")
+                            
+                        total_recuperable = sum([float(re.sub(r'[^0-9.,]', '', x['Monto Afectado (Bs.)']).replace('.', '').replace(',', '.')) for x in errores_analistas])
+                        st.warning(f"📈 **Impacto en Capital:** Si eliminas estos movimientos duplicados del archivo TB, tu Capital de Trabajo Neto aumentará automáticamente en **+{formato_venezolano(total_recuperable)} Bs.**")
+                    else:
+                        st.success("✅ Saneamiento de TB correcto: Ninguno de los movimientos listados en Tránsito se repite en las Cobranzas aplicadas de hoy.")
+                else:
+                    st.info("ℹ️ Sube los archivos de Cobranzas y TB.xlsx para verificar si existen conciliaciones duplicadas que afecten el capital.")
+
+                # --- CONTINUAR CON EL ANÁLISIS TRADICIONAL DE TRÁNSITO (Cruce Cobranzas vs Banco) ---
+                if tiene_cob_hoy and tiene_banco_hoy:
+                    st.markdown("---")
+                    st.markdown("#### 🏦 Cruce Automático: Cobranzas vs Estado de Cuenta")
+                    
+                    # --- 1. Extraer Cobranzas del día ---
+                    df_cob_clean = ProcesadorArchivos._limpiar_columnas(df_cobranzas)
+                    idx_cob = ProcesadorArchivos._encontrar_fila_datos(df_cob_clean, ['banco', 'deposito', 'monto'])
+                    if idx_cob >= 0:
+                        df_cob_clean = df_cob_clean.iloc[idx_cob:].reset_index(drop=True)
+                        df_cob_clean.columns = [str(c).strip().lower() for c in df_cob_clean.iloc[0]]
+                        df_cob_clean = df_cob_clean.iloc[1:].reset_index(drop=True)
+                    
+                    col_ref_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'deposito', 'nro', 'referencia')
+                    col_monto_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'monto', 'total', 'monto cobranza')
+
+                    cobranzas_dia_map = {}
+                    cobranzas_duplicadas_internas = []
+
+                    for idx, row in df_cob_clean.iterrows():
+                        ref = str(row[col_ref_cob]).strip() if col_ref_cob in df_cob_clean.columns else ""
+                        monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_cob]) if col_monto_cob in df_cob_clean.columns else 0.0
+                        
+                        if monto and monto > 0:
+                            ref_norm = re.sub(r'[^0-9]', '', ref) if ref else f"oculto_cob_{idx}"
+                            # Detectar duplicados internos en el mismo archivo
+                            if ref_norm in cobranzas_dia_map:
+                                cobranzas_duplicadas_internas.append({
+                                    'Referencia': ref,
+                                    'Monto': monto,
+                                    'Fila Excel': idx + 1,
+                                    'Detalle': '⚠️ Referencia duplicada dentro del mismo archivo de Cobranzas'
+                                })
+                            else:
+                                cobranzas_dia_map[ref_norm] = {'monto': float(monto), 'fila': idx + 1, 'orig': ref}
+
+                    # --- 2. Extraer el Estado de Cuenta ---
                     df_banco_clean = ProcesadorArchivos._limpiar_columnas(df_estado_cuenta)
                     idx_banco = ProcesadorArchivos._encontrar_fila_datos(df_banco_clean, ['fecha', 'referencia', 'descrip'])
                     if idx_banco >= 0:
@@ -4875,74 +4960,68 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     for idx, row in df_banco_clean.iterrows():
                         ref_b = str(row[col_ref_ban]).strip() if col_ref_ban in df_banco_clean.columns else ""
                         monto_b = ProcesadorArchivos._convertir_numero_europeo(row[col_credito_ban]) if col_credito_ban in df_banco_clean.columns else 0.0
+                        
                         if monto_b and monto_b > 0:
-                            ref_b_norm = re.sub(r'[^0-9]', '', ref_b) if ref_b else f"ban_row_{idx}"
+                            ref_b_norm = re.sub(r'[^0-9]', '', ref_b) if ref_b else f"oculto_ban_{idx}"
                             banco_dia_map[ref_b_norm] = {'monto': float(monto_b), 'fila': idx + 1, 'orig': ref_b}
 
-                    # --- 4. ANALISIS CRUZADO EXPLICATIVO ---
-                    st.markdown("### 📋 Desglose Analítico de la Diferencia de Tránsito")
-                    
-                    explicaciones_encontradas = []
-                    
-                    # Buscar conciliaciones directas y brechas
+                    # --- 3. Cruce Ciego de Trazabilidad (Mismo Día) ---
+                    discrepancias_transito = []
+
+                    # A. Reportar los duplicados internos primero
+                    for dup in cobranzas_duplicadas_internas:
+                        discrepancias_transito.append({
+                            'Tipo Falla': '🔴 DUPLICADO INTERNO (Cobranzas)',
+                            'Monto': dup['Monto'],
+                            'Detalle': dup['Detalle'] + f" (Fila {dup['Fila Excel']})",
+                            'Estatus': 'Crítico'
+                        })
+
+                    # B. Cruzar Cobranzas vs Banco (Buscar diferencias de montos o faltantes)
                     for ref_norm, info_cob in cobranzas_dia_map.items():
-                        # Caso A: Está en Cobranzas y está en el archivo TB (En espera legítimo)
-                        if ref_norm in tb_dia_map:
-                            monto_tb = tb_dia_map[ref_norm]['monto']
-                            if abs(info_cob['monto'] - monto_tb) < 0.01:
-                                # Conciliado correctamente en espera - no se reporta como diferencia
-                                pass
-                            else:
-                                explicaciones_encontradas.append({
-                                    "Referencia": info_cob['orig'],
-                                    "Monto Cobranza": info_cob['monto'],
-                                    "Monto en TB": monto_tb,
-                                    "Causa del Descuadre": f"❌ Diferencia de monto en la misma transferencia. Registrado por el analista como {formato_venezolano(info_cob['monto'])} Bs., pero en el archivo TB figura como {formato_venezolano(monto_tb)} Bs.",
-                                    "Tipo": "Diferencia"
+                        if ref_norm in banco_dia_map:
+                            monto_banco = banco_dia_map[ref_norm]['monto']
+                            diff_monto = info_cob['monto'] - monto_banco
+                            if abs(diff_monto) > 0.01:
+                                discrepancias_transito.append({
+                                    'Tipo Falla': '💥 DIFERENCIA DE MONTO (Tránsito)',
+                                    'Monto': info_cob['monto'],
+                                    'Detalle': f"Ref {info_cob['orig']}: Registrado en Cobranzas por {formato_venezolano(info_cob['monto'])} pero ingresó al Banco por {formato_venezolano(monto_banco)} (Dif: {formato_venezolano(diff_monto)})",
+                                    'Estatus': 'Naranja'
                                 })
                         else:
-                            # Caso B: Está en cobranzas pero NO se anexó al reporte de TB de los analistas
-                            explicaciones_encontradas.append({
-                                "Referencia": info_cob['orig'],
-                                "Monto Cobranza": info_cob['monto'],
-                                "Monto en TB": 0.0,
-                                "Causa del Descuadre": f"⚠️ Documento Omitido en TB: Esta cobranza por {formato_venezolano(info_cob['monto'])} Bs. (Cliente: {info_cob['cliente']}) se procesó en el sistema hoy, pero los analistas NO la incluyeron dentro del archivo TB.xlsx.",
-                                "Tipo": "Faltante en TB"
+                            # Está en cobranzas pero no ha caído en el banco (Verdadero Tránsito)
+                            discrepancias_transito.append({
+                                'Tipo Falla': '⏳ TRANSFERENCIA EN TRÁNSITO',
+                                'Monto': info_cob['monto'],
+                                'Detalle': f"Ref {info_cob['orig']} (Fila {info_cob['fila']}): Reportada en Cobranzas pero NO figura en el Estado de Cuenta de hoy.",
+                                'Estatus': 'Amarilla'
                             })
 
-                    # Caso C: Movimientos fantasmas en el archivo TB que no se justifican con Cobranzas
-                    for ref_norm, info_tb in tb_dia_map.items():
-                        if ref_norm not in cobranzas_dia_map:
-                            explicaciones_encontradas.append({
-                                "Referencia": info_tb['orig'],
-                                "Monto Cobranza": 0.0,
-                                "Monto en TB": info_tb['monto'],
-                                "Causa del Descuadre": f"🔍 Registro Huérfano en TB: El archivo TB.xlsx incluye la referencia por {formato_venezolano(info_tb['monto'])} Bs., pero no existe ningún registro equivalente en las Cobranzas de hoy.",
-                                "Tipo": "Sobrante en TB"
+                    # C. Banco vs Cobranzas (Ingresos al banco no registrados por el analista)
+                    for ref_norm, info_ban in banco_dia_map.items():
+                        if ref_norm not in cobranzas_dia_map and not ref_norm.startswith("oculto"):
+                            discrepancias_transito.append({
+                                'Tipo Falla': '🔎 INGRESO BANCO NO REGISTRADO',
+                                'Monto': info_ban['monto'],
+                                'Detalle': f"Ref {info_ban['orig']} (Fila {info_ban['fila']}): Dinero cayó en el banco por {formato_venezolano(info_ban['monto'])} pero el analista NO lo metió en Cobranzas.",
+                                'Estatus': 'Roja'
                             })
 
-                    # --- RECONSTRUIR LA VISUALIZACIÓN ---
-                    if explicaciones_encontradas:
-                        df_exp = pd.DataFrame(explicaciones_encontradas)
-                        
-                        # Mostrar la tabla explicativa detallada
-                        st.warning("🎯 El sistema identificó los siguientes factores específicos que generan el descuadre:")
-                        st.dataframe(df_exp[['Referencia', 'Monto Cobranza', 'Monto en TB', 'Causa del Descuadre']], use_container_width=True, hide_index=True)
-                        
-                        # Filtrar e informar las transferencias legítimas en tránsito (las que están en cobranzas esperando por banco)
-                        st.markdown("#### ⏳ Transferencias Registradas en Espera de Banco")
-                        en_espera_reales = [{ 'Referencia': v['orig'], 'Monto (Bs.)': formato_venezolano(v['monto']), 'Cliente': v['cliente'], 'Fila': v['fila'] } 
-                                             for k, v in cobranzas_dia_map.items() if k not in banco_dia_map]
-                        
-                        if en_espera_reales:
-                            st.dataframe(pd.DataFrame(en_espera_reales), use_container_width=True, hide_index=True)
-                        else:
-                            st.info("No se registran transferencias flotantes en espera para esta jornada.")
+                    # Renderizar alertas del Tránsito del día
+                    if discrepancias_transito:
+                        df_transito = pd.DataFrame(discrepancias_transito)
+                        st.error(f"🚨 Se detectaron {len(discrepancias_transito)} inconsistencias en la conciliación de tránsito del día:")
+                        df_transito['Monto (Bs.)'] = df_transito['Monto'].apply(formato_venezolano)
+                        st.dataframe(
+                            df_transito[['Tipo Falla', 'Monto (Bs.)', 'Detalle', 'Estatus']],
+                            use_container_width=True
+                        )
                     else:
-                        st.success("✅ Todo concuerda de forma exacta entre los archivos fuente.")
+                        st.success("✅ ¡Conciliación de Tránsito perfecta! Todo lo reportado en cobranzas cuadra con los ingresos del banco.")
                 else:
-                    st.info("ℹ️ Sube los archivos de Cobranzas, Estado de Cuenta y TB.xlsx de manera simultánea para activar el desglose.")
-        
+                    st.info("ℹ️ Carga los archivos obligatorios de **Cobranzas** y **Estado de Cuenta** para ejecutar el cruce automático de tránsito.")
+
         st.markdown("---")
         
         # ============================================================
@@ -5485,314 +5564,196 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             st.info("- 📥 **Recepción Trazabilidad** (opcional, para compras)")
 
         st.markdown("---")
+    
+    # ============================================================
+    # PESTAÑA 3: ARCHIVOS FUENTE DEL DÍA
+    # ============================================================
+    with tab_auditoria_archivos:
+        st.markdown("### 📄 Archivos Fuente y Auditoría del Bot")
+        st.caption("Visualización de los archivos Excel cargados y conciliación histórica del bot.")
 
-        # ============================================================
-        # 🔄 MOTOR DE TRAZABILIDAD EN VIVO: TRÁNSITO VS COBRANZAS DEL DÍA
-        # ============================================================
-        with st.expander("🔄 Auditoría de Transferencias en Tránsito (Cruce con Cobranzas del Día)", expanded=True):
-            tiene_cob_hoy = 'df_cobranzas' in locals() and df_cobranzas is not None
-            tiene_banco_hoy = 'df_estado_cuenta' in locals() and df_estado_cuenta is not None
+        # 1. Alertas de procesamiento diferidas
+        if 'cargas_status_alerts' in locals() and cargas_status_alerts:
+            with st.expander("📝 Registro de Carga de Archivos y Alertas de Procesamiento", expanded=False):
+                for tipo, msg in cargas_status_alerts:
+                    if tipo == "info": st.info(msg)
+                    elif tipo == "success": st.success(msg)
+                    elif tipo == "warning": st.warning(msg)
+                    elif tipo == "error": st.error(msg)
 
-            if tiene_cob_hoy and tiene_banco_hoy:
-                # 1. Extracción de Cobranzas del día (asegurando lectura de todo, incluso si estaba oculto)
-                df_cob_clean = ProcesadorArchivos._limpiar_columnas(df_cobranzas)
-                idx_cob = ProcesadorArchivos._encontrar_fila_datos(df_cob_clean, ['banco', 'deposito', 'monto'])
-                if idx_cob >= 0:
-                    df_cob_clean = df_cob_clean.iloc[idx_cob:].reset_index(drop=True)
-                    df_cob_clean.columns = [str(c).strip().lower() for c in df_cob_clean.iloc[0]]
-                    df_cob_clean = df_cob_clean.iloc[1:].reset_index(drop=True)
-                
-                col_ref_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'deposito', 'nro', 'referencia')
-                col_monto_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'monto', 'total', 'monto cobranza')
-
-                cobranzas_dia_map = {}
-                cobranzas_duplicadas_internas = []
-
-                for idx, row in df_cob_clean.iterrows():
-                    ref = str(row[col_ref_cob]).strip() if col_ref_cob in df_cob_clean.columns else ""
-                    monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_cob]) if col_monto_cob in df_cob_clean.columns else 0.0
-                    
-                    if monto and monto > 0:
-                        ref_norm = re.sub(r'[^0-9]', '', ref) if ref else f"oculto_cob_{idx}"
-                        # Detectar duplicados internos en el mismo archivo (incluso en celdas que estaban ocultas)
-                        if ref_norm in cobranzas_dia_map:
-                            cobranzas_duplicadas_internas.append({
-                                'Referencia': ref,
-                                'Monto': monto,
-                                'Fila Excel': idx + 1,
-                                'Detalle': '⚠️ Referencia duplicada dentro del mismo archivo de Cobranzas'
-                            })
-                        else:
-                            cobranzas_dia_map[ref_norm] = {'monto': float(monto), 'fila': idx + 1, 'orig': ref}
-
-                # 2. Extracción del Estado de Cuenta / TB del día
-                df_banco_clean = ProcesadorArchivos._limpiar_columnas(df_estado_cuenta)
-                idx_banco = ProcesadorArchivos._encontrar_fila_datos(df_banco_clean, ['fecha', 'referencia', 'descrip'])
-                if idx_banco >= 0:
-                    df_banco_clean = df_banco_clean.iloc[idx_banco:].reset_index(drop=True)
-                    df_banco_clean.columns = [str(c).strip().lower() for c in df_banco_clean.iloc[0]]
-                    df_banco_clean = df_banco_clean.iloc[1:].reset_index(drop=True)
-
-                col_ref_ban = ProcesadorArchivos._buscar_columna(df_banco_clean, 'referencia', 'nro', 'documento')
-                col_credito_ban = ProcesadorArchivos._buscar_columna(df_banco_clean, 'credito', 'monto', 'ingreso')
-
-                banco_dia_map = {}
-                for idx, row in df_banco_clean.iterrows():
-                    ref_b = str(row[col_ref_ban]).strip() if col_ref_ban in df_banco_clean.columns else ""
-                    monto_b = ProcesadorArchivos._convertir_numero_europeo(row[col_credito_ban]) if col_credito_ban in df_banco_clean.columns else 0.0
-                    
-                    if monto_b and monto_b > 0:
-                        ref_b_norm = re.sub(r'[^0-9]', '', ref_b) if ref_b else f"oculto_ban_{idx}"
-                        banco_dia_map[ref_b_norm] = {'monto': float(monto_b), 'fila': idx + 1, 'orig': ref_b}
-
-                # ============================================================
-                # 🎯 CRUCE CIEGO DE TRAZABILIDAD (Mismo Día)
-                # ============================================================
-                discrepancias_transito = []
-
-                # A. Reportar los duplicados internos primero
-                for dup in cobranzas_duplicadas_internas:
-                    discrepancias_transito.append({
-                        'Tipo Falla': '🔴 DUPLICADO INTERNO (Cobranzas)',
-                        'Monto': dup['Monto'],
-                        'Detalle': dup['Detalle'] + f" (Fila {dup['Fila Excel']})",
-                        'Estatus': 'Crítico'
-                    })
-
-                # B. Cruzar Cobranzas vs Banco (Buscar diferencias de montos o faltantes)
-                for ref_norm, info_cob in cobranzas_dia_map.items():
-                    if ref_norm in banco_dia_map:
-                        monto_banco = banco_dia_map[ref_norm]['monto']
-                        diff_monto = info_cob['monto'] - monto_banco
-                        if abs(diff_monto) > 0.01:
-                            discrepancias_transito.append({
-                                'Tipo Falla': '💥 DIFERENCIA DE MONTO (Tránsito)',
-                                'Monto': info_cob['monto'],
-                                'Detalle': f"Ref {info_cob['orig']}: Registrado en Cobranzas por {formato_venezolano(info_cob['monto'])} pero ingresó al Banco por {formato_venezolano(monto_banco)} (Dif: {formato_venezolano(diff_monto)})",
-                                'Estatus': 'Naranja'
-                            })
-                    else:
-                        # Está en cobranzas pero no ha caído en el banco (Verdadero Tránsito)
-                        discrepancias_transito.append({
-                            'Tipo Falla': '⏳ TRANSFERENCIA EN TRÁNSITO',
-                            'Monto': info_cob['monto'],
-                            'Detalle': f"Ref {info_cob['orig']} (Fila {info_cob['fila']}): Reportada en Cobranzas pero NO figura en el Estado de Cuenta de hoy.",
-                            'Estatus': 'Amarilla'
-                        })
-
-                # C. Banco vs Cobranzas (Ingresos al banco no registrados por el analista)
-                for ref_norm, info_ban in banco_dia_map.items():
-                    if ref_norm not in cobranzas_dia_map and not ref_norm.startswith("oculto"):
-                        discrepancias_transito.append({
-                            'Tipo Falla': '🔎 INGRESO BANCO NO REGISTRADO',
-                            'Monto': info_ban['monto'],
-                            'Detalle': f"Ref {info_ban['orig']} (Fila {info_ban['fila']}): Dinero cayó en el banco por {formato_venezolano(info_ban['monto'])} pero el analista NO lo metió en Cobranzas.",
-                            'Estatus': 'Roja'
-                        })
-
-                # Renderizar alertas del Tránsito del día
-                if discrepancies_df := pd.DataFrame(discrepancias_transito):
-                    if not discrepancies_df.empty:
-                        st.error(f"🚨 Se detectaron {len(discrepancias_transito)} inconsistencias en la conciliación de tránsito del día:")
-                        discrepancies_df['Monto (Bs.)'] = discrepancies_df['Monto'].apply(formato_venezolano)
-                        st.dataframe(
-                            discrepancies_df[['Tipo Falla', 'Monto (Bs.)', 'Detalle', 'Estatus']],
-                            use_container_width=True
-                        )
-                    else:
-                        st.success("✅ ¡Conciliación de Tránsito perfecta! Todo lo reportado en cobranzas cuadra con los ingresos del banco.")
-            else:
-                st.info("ℹ️ Carga los archivos obligatorios de **Cobranzas** y **Estado de Cuenta** para ejecutar el cruce automático de tránsito.")
-
-# ============================================================
-# PESTAÑA 3: ARCHIVOS FUENTE DEL DÍA
-# ============================================================
-with tab_auditoria_archivos:
-    st.markdown("### 📄 Archivos Fuente y Auditoría del Bot")
-    st.caption("Visualización de los archivos Excel cargados y conciliación histórica del bot.")
-
-    # 1. Alertas de procesamiento diferidas
-    if 'cargas_status_alerts' in locals() and cargas_status_alerts:
-        with st.expander("📝 Registro de Carga de Archivos y Alertas de Procesamiento", expanded=False):
-            for tipo, msg in cargas_status_alerts:
-                if tipo == "info": st.info(msg)
-                elif tipo == "success": st.success(msg)
-                elif tipo == "warning": st.warning(msg)
-                elif tipo == "error": st.error(msg)
-
-    # 2. Motor de Auditoría y Trazabilidad de Errores (Manual)
-    st.markdown("#### 🔍 Motor de Auditoría y Trazabilidad de Errores (Manual)")
-    if st.button("🔍 Ejecutar Auditoría de Trazabilidad Manual", width='stretch', key="btn_auditoria_manual_tab3_new"):
-        hay_err_m, fallas_m, df_c_m = ejecutar_auditoria_inteligente(
-            archivo_facturacion, archivo_cobranzas, archivo_egresos, archivo_estado_cuenta
-        )
-        st.session_state['fallas_detectadas'] = fallas_m
-        st.session_state['df_consolidado'] = df_c_m
-        st.session_state['hay_errores'] = hay_err_m
-        st.session_state['fecha_ultimo_cierre'] = "Manual (En tiempo real)"
-
-    if 'fallas_detectadas' in st.session_state and st.session_state.get('fecha_ultimo_cierre') == "Manual (En tiempo real)":
-        renderizar_modulo_auditoria(
-            st.session_state['fallas_detectadas'],
-            st.session_state['df_consolidado'],
-            st.session_state['hay_errores'],
-            "Manual (En tiempo real)",
-            usuario_info.get('nombre', 'Analista')
-        )
-
-    # 3. Módulo Pasivo del Bot Nocturno
-    st.markdown("---")
-    st.markdown("#### 🤖 Módulo Pasivo del Bot Nocturno")
-    existe_bot, fecha_bot, hay_err_bot, fallas_bot, df_c_bot, kpis_bot = cargar_ultimo_cierre(
-        fecha=fecha_procesar.strftime('%Y-%m-%d'),
-        empresa=st.session_state.empresa_activa
-    )
-    if existe_bot:
-        st.success(f"📅 **Último cierre automático registrado:** {fecha_bot}")
-        col_bot1, col_bot2, col_bot3 = st.columns(3)
-        col_bot1.metric("💵 Tasa BCV (Bot)", f"{kpis_bot.get('tasa_bcv', 0.0):.2f} Bs/$")
-        col_bot2.metric("📊 Total Balance (VES)", f"{kpis_bot.get('total_ves', 0.0):,.2f} VES")
-        col_bot3.metric("📈 Consolidado (USD)", f"${kpis_bot.get('total_usd', 0.0):,.2f}")
-
-        with st.expander("🔍 Ver detalle de Auditoría del Bot Nocturno", expanded=False):
-            renderizar_modulo_auditoria(
-                fallas_bot, df_c_bot, hay_err_bot, fecha_bot,
-                analista_default="Bot Nocturno"
+        # 2. Motor de Auditoría y Trazabilidad de Errores (Manual)
+        st.markdown("#### 🔍 Motor de Auditoría y Trazabilidad de Errores (Manual)")
+        if st.button("🔍 Ejecutar Auditoría de Trazabilidad Manual", width='stretch', key="btn_auditoria_manual_tab3_new"):
+            hay_err_m, fallas_m, df_c_m = ejecutar_auditoria_inteligente(
+                archivo_facturacion, archivo_cobranzas, archivo_egresos, archivo_estado_cuenta
             )
-    else:
-        st.info("ℹ️ No se encontró un cierre automático del bot nocturno registrado para esta fecha.")
+            st.session_state['fallas_detectadas'] = fallas_m
+            st.session_state['df_consolidado'] = df_c_m
+            st.session_state['hay_errores'] = hay_err_m
+            st.session_state['fecha_ultimo_cierre'] = "Manual (En tiempo real)"
 
-    st.markdown("---")
-    # VISUALIZACIÓN DE ARCHIVOS
-    # ============================================================
-    st.markdown("#### 📋 Archivos Cargados")
-    
-    # Crear tabs para cada archivo
-    archivos_tabs = list(archivos_data.keys())
-    if archivos_tabs:
-        tabs = st.tabs(archivos_tabs)
-        for tab, nombre in zip(tabs, archivos_tabs):
-            with tab:
-                info = archivos_data[nombre]
-                df = info['df']
-                nombre_archivo = info['nombre']
-                
-                # Procesar el archivo para mostrar
-                df_proc, stats, col_numericas = mostrar_archivo_con_formato(df, nombre_archivo, nombre)
-                if df_proc is not None and stats is not None:
-                    renderizar_archivo_en_tab(df_proc, nombre_archivo, nombre, stats, col_numericas)
-                else:
-                    st.warning(f"⚠️ No se pudo procesar el archivo {nombre}")
-    else:
-        st.info("ℹ️ No hay archivos cargados para visualizar.")
-    
-    # ============================================================
-    # BOTONES DE VERIFICACIÓN DE ARCHIVOS
-    # ============================================================
-    st.markdown("---")
-    st.markdown("#### 📂 Ver archivos de verificación")
+        if 'fallas_detectadas' in st.session_state and st.session_state.get('fecha_ultimo_cierre') == "Manual (En tiempo real)":
+            renderizar_modulo_auditoria(
+                st.session_state['fallas_detectadas'],
+                st.session_state['df_consolidado'],
+                st.session_state['hay_errores'],
+                "Manual (En tiempo real)",
+                usuario_info.get('nombre', 'Analista')
+            )
 
-    archivos_verificacion = [
-        ("CxC", archivo_cxc_reportado, "Cuentas por cobrar"),
-        ("Inventario", archivo_inventario_reportado, "Inventario"),
-        ("CxP", archivo_cxp_reportado, "Cuentas por pagar"),
-        ("Tránsito", archivo_tb, "Transferencias en tránsito")
-    ]
+        # 3. Módulo Pasivo del Bot Nocturno
+        st.markdown("---")
+        st.markdown("#### 🤖 Módulo Pasivo del Bot Nocturno")
+        existe_bot, fecha_bot, hay_err_bot, fallas_bot, df_c_bot, kpis_bot = cargar_ultimo_cierre(
+            fecha=fecha_procesar.strftime('%Y-%m-%d'),
+            empresa=st.session_state.empresa_activa
+        )
+        if existe_bot:
+            st.success(f"📅 **Último cierre automático registrado:** {fecha_bot}")
+            col_bot1, col_bot2, col_bot3 = st.columns(3)
+            col_bot1.metric("💵 Tasa BCV (Bot)", f"{kpis_bot.get('tasa_bcv', 0.0):.2f} Bs/$")
+            col_bot2.metric("📊 Total Balance (VES)", f"{kpis_bot.get('total_ves', 0.0):,.2f} VES")
+            col_bot3.metric("📈 Consolidado (USD)", f"${kpis_bot.get('total_usd', 0.0):,.2f}")
 
-    cols = st.columns(4)
-    for col, (nombre, archivo, titulo) in zip(cols, archivos_verificacion):
-        with col:
-            if archivo and archivos_cargados.get(titulo) is not None:
-                if st.button(f"📄 Ver {nombre}", key=f"btn_{nombre}_tab3", width='stretch'):
-                    df_verif, stats_verif, col_num_verif = mostrar_archivo_con_formato(
-                        archivos_cargados[titulo], 
-                        archivo.name, 
-                        f"Archivo {titulo}"
-                    )
-                    if df_verif is not None and stats_verif is not None:
-                        renderizar_archivo_en_tab(df_verif, archivo.name, f"Archivo {titulo}", stats_verif, col_num_verif)
+            with st.expander("🔍 Ver detalle de Auditoría del Bot Nocturno", expanded=False):
+                renderizar_modulo_auditoria(
+                    fallas_bot, df_c_bot, hay_err_bot, fecha_bot,
+                    analista_default="Bot Nocturno"
+                )
+        else:
+            st.info("ℹ️ No se encontró un cierre automático del bot nocturno registrado para esta fecha.")
+
+        st.markdown("---")
+        # VISUALIZACIÓN DE ARCHIVOS
+        # ============================================================
+        st.markdown("#### 📋 Archivos Cargados")
+        
+        # Crear tabs para cada archivo
+        archivos_tabs = list(archivos_data.keys())
+        if archivos_tabs:
+            tabs = st.tabs(archivos_tabs)
+            for tab, nombre in zip(tabs, archivos_tabs):
+                with tab:
+                    info = archivos_data[nombre]
+                    df = info['df']
+                    nombre_archivo = info['nombre']
+                    
+                    # Procesar el archivo para mostrar
+                    df_proc, stats, col_numericas = mostrar_archivo_con_formato(df, nombre_archivo, nombre)
+                    if df_proc is not None and stats is not None:
+                        renderizar_archivo_en_tab(df_proc, nombre_archivo, nombre, stats, col_numericas)
                     else:
-                        st.warning("⚠️ No se pudo procesar el archivo")
-            else:
-                st.button(f"❌ {nombre} no cargado", disabled=True, width='stretch')
-    # ============================================================
-    # REGLAS DE NEGOCIO (FUERA DE LAS PESTAÑAS)
-    # ============================================================
-    with st.expander("📌 Reglas de negocio aplicadas"):
-        st.markdown("""
-        | Movimiento | Efecto |
-        |------------|--------|
-        | Recepción de mercancía | Aumenta inventario |
-        | Costo de facturación | Disminuye inventario |
-        | Cobranzas | Disminuye CxC / Aumenta bancos |
-        | Notas de crédito (clientes) | Disminuye CxC |
-        | Notas de crédito (proveedores) | Disminuye CxP |
-        | Egresos iPago | Disminuye bancos |
-        | Estado de Cuenta Bancario | Determina saldo final bancario |
-        | Transferencias en tránsito | Se toma desde TB |
+                        st.warning(f"⚠️ No se pudo procesar el archivo {nombre}")
+        else:
+            st.info("ℹ️ No hay archivos cargados para visualizar.")
         
-        **Fórmulas clave:**  
-        🔄 Transferencias en tránsito = Tránsito inicial + Ingresos del día - Cobranzas  
-        📋 Cuentas por pagar = CxP inicial + Recepciones - Pagos proveedores  
-        🏦 Bancos = Saldo Inicial (estado de cuenta) + Ingresos - Egresos
-        
-        **Cierre Diario:**  
-        🏁 Capital de Trabajo Neto = (CxC + Inventario + Bancos) - (CxP + Transferencias en tránsito)
-        
-        **Los valores del Cierre Diario se toman EXCLUSIVAMENTE de los archivos de verificación:**
-        - CxC → Archivo "CUENTAS POR COBRAR"
-        - Inventario → Archivo "INVENTARIO"
-        - CxP → Archivo "CUENTAS POR PAGAR"
-        - Tránsito → Archivo "TB.xlsx"
-        - Bancos → Estado de cuenta bancario
-        
-        **NO se utilizan valores calculados** para el Cierre Diario.
-        """)
+        # ============================================================
+        # BOTONES DE VERIFICACIÓN DE ARCHIVOS
+        # ============================================================
+        st.markdown("---")
+        st.markdown("#### 📂 Ver archivos de verificación")
 
-    st.info("👈 Carga los archivos obligatorios del día en la barra lateral para comenzar la validación")
-    st.info("📌 **Archivos obligatorios:** Facturación, Cobranzas, Egresos iPago y Estado de Cuenta")
-    st.info("ℹ️ **Archivos opcionales:** Recepción de mercancía, Notas de crédito, Costo de facturación")
-    
-    with st.expander("📋 Formatos esperados de los archivos"):
-        st.markdown("""
-        ### Facturación diaria (Ranking de Ventas)
-        | Vendedor | Facturas | Div. Neto | Total |
-        |----------|----------|-----------|-------|
-        | JHORDAN PALOMO | 4 | 1220.79 | ... |
-        | Totales: | 26 | 15288.18 | ... |
+        archivos_verificacion = [
+            ("CxC", archivo_cxc_reportado, "Cuentas por cobrar"),
+            ("Inventario", archivo_inventario_reportado, "Inventario"),
+            ("CxP", archivo_cxp_reportado, "Cuentas por pagar"),
+            ("Tránsito", archivo_tb, "Transferencias en tránsito")
+        ]
+
+        cols = st.columns(4)
+        for col, (nombre, archivo, titulo) in zip(cols, archivos_verificacion):
+            with col:
+                if archivo and archivos_cargados.get(titulo) is not None:
+                    if st.button(f"📄 Ver {nombre}", key=f"btn_{nombre}_tab3", width='stretch'):
+                        df_verif, stats_verif, col_num_verif = mostrar_archivo_con_formato(
+                            archivos_cargados[titulo], 
+                            archivo.name, 
+                            f"Archivo {titulo}"
+                        )
+                        if df_verif is not None and stats_verif is not None:
+                            renderizar_archivo_en_tab(df_verif, archivo.name, f"Archivo {titulo}", stats_verif, col_num_verif)
+                        else:
+                            st.warning("⚠️ No se pudo procesar el archivo")
+                else:
+                    st.button(f"❌ {nombre} no cargado", disabled=True, width='stretch')
+        # ============================================================
+        # REGLAS DE NEGOCIO (FUERA DE LAS PESTAÑAS)
+        # ============================================================
+        with st.expander("📌 Reglas de negocio aplicadas"):
+            st.markdown("""
+            | Movimiento | Efecto |
+            |------------|--------|
+            | Recepción de mercancía | Aumenta inventario |
+            | Costo de facturación | Disminuye inventario |
+            | Cobranzas | Disminuye CxC / Aumenta bancos |
+            | Notas de crédito (clientes) | Disminuye CxC |
+            | Notas de crédito (proveedores) | Disminuye CxP |
+            | Egresos iPago | Disminuye bancos |
+            | Estado de Cuenta Bancario | Determina saldo final bancario |
+            | Transferencias en tránsito | Se toma desde TB |
+            
+            **Fórmulas clave:**  
+            🔄 Transferencias en tránsito = Tránsito inicial + Ingresos del día - Cobranzas  
+            📋 Cuentas por pagar = CxP inicial + Recepciones - Pagos proveedores  
+            🏦 Bancos = Saldo Inicial (estado de cuenta) + Ingresos - Egresos
+            
+            **Cierre Diario:**  
+            🏁 Capital de Trabajo Neto = (CxC + Inventario + Bancos) - (CxP + Transferencias en tránsito)
+            
+            **Los valores del Cierre Diario se toman EXCLUSIVAMENTE de los archivos de verificación:**
+            - CxC → Archivo "CUENTAS POR COBRAR"
+            - Inventario → Archivo "INVENTARIO"
+            - CxP → Archivo "CUENTAS POR PAGAR"
+            - Tránsito → Archivo "TB.xlsx"
+            - Bancos → Estado de cuenta bancario
+            
+            **NO se utilizan valores calculados** para el Cierre Diario.
+            """)
+
+        st.info("👈 Carga los archivos obligatorios del día en la barra lateral para comenzar la validación")
+        st.info("📌 **Archivos obligatorios:** Facturación, Cobranzas, Egresos iPago y Estado de Cuenta")
+        st.info("ℹ️ **Archivos opcionales:** Recepción de mercancía, Notas de crédito, Costo de facturación")
         
-        ### Cobranzas procesadas
-        | Banco | Cuenta | Fecha Cobranza | # Deposito | Monto Cobranza |
-        |-------|--------|----------------|------------|----------------|
-        | MCESIA | 02 - BANCO DE VENEZUELA | 2026-06-15 | 0591367815942 | 263.75 |
-        
-        ### Recepciones del día (OPCIONAL)
-        | Compra | Proveedor | F. Recepción | $ Neto + IVA |
-        |--------|-----------|--------------|--------------|
-        | 0000000587 | MOLINOS NACIONALES | 15/06/2026 | 21612.5 |
-        | Total General: | | | 21612.5 |
-        
-        ### Egresos iPago
-        | Fecha Pago | Empresa | Proveedor | Tipo de Pago | Tipo de Egreso | Cuenta | Monto | Monto USD |
-        |------------|---------|-----------|--------------|----------------|--------|-------|-----------|
-        | 2026-06-17 | CORPORACION GUAYANA | MOLINOS NACIONALES | PROVEEDORES DE MERCANCIA | Proveedor | BODEGUITA GUAYANA | 5967800 | 10000.00 |
-        
-        ### Estado de cuenta bancario
-        | Fecha | Referencia | Descripción | Crédito | Débito |
-        |-------|------------|-------------|---------|--------|
-        | 15/06/2026 | 0591367815942 | TRANSF RECIBIDA | 154.930,00 | 0,00 |
-        
-        ### TB.xlsx (Transferencias en tránsito)
-        | Cuenta | Referencia | Fecha | Descripción | Monto |
-        |--------|------------|-------|-------------|-------|
-        | BANCO DE VENEZUELA | 059137177692 | 2026-05-30 | TRANSF RECIBIDA | 5152834 |
-        
-        ### Costo de Facturación (Reporte de Utilidad)
-        | Producto | Cantidad | Precio | Total | **Costo** | ... |
-        |----------|----------|--------|-------|-----------|-----|
-        | ... | ... | ... | ... | ... | ... |
-        | **Total General:** | | | | **1.417,00** | |
-        """)
+        with st.expander("📋 Formatos esperados de los archivos"):
+            st.markdown("""
+            ### Facturación diaria (Ranking de Ventas)
+            | Vendedor | Facturas | Div. Neto | Total |
+            |----------|----------|-----------|-------|
+            | JHORDAN PALOMO | 4 | 1220.79 | ... |
+            | Totales: | 26 | 15288.18 | ... |
+            
+            ### Cobranzas procesadas
+            | Banco | Cuenta | Fecha Cobranza | # Deposito | Monto Cobranza |
+            |-------|--------|----------------|------------|----------------|
+            | MCESIA | 02 - BANCO DE VENEZUELA | 2026-06-15 | 0591367815942 | 263.75 |
+            
+            ### Recepciones del día (OPCIONAL)
+            | Compra | Proveedor | F. Recepción | $ Neto + IVA |
+            |--------|-----------|--------------|--------------|
+            | 0000000587 | MOLINOS NACIONALES | 15/06/2026 | 21612.5 |
+            | Total General: | | | 21612.5 |
+            
+            ### Egresos iPago
+            | Fecha Pago | Empresa | Proveedor | Tipo de Pago | Tipo de Egreso | Cuenta | Monto | Monto USD |
+            |------------|---------|-----------|--------------|----------------|--------|-------|-----------|
+            | 2026-06-17 | CORPORACION GUAYANA | MOLINOS NACIONALES | PROVEEDORES DE MERCANCIA | Proveedor | BODEGUITA GUAYANA | 5967800 | 10000.00 |
+            
+            ### Estado de cuenta bancario
+            | Fecha | Referencia | Descripción | Crédito | Débito |
+            |-------|------------|-------------|---------|--------|
+            | 15/06/2026 | 0591367815942 | TRANSF RECIBIDA | 154.930,00 | 0,00 |
+            
+            ### TB.xlsx (Transferencias en tránsito)
+            | Cuenta | Referencia | Fecha | Descripción | Monto |
+            |--------|------------|-------|-------------|-------|
+            | BANCO DE VENEZUELA | 059137177692 | 2026-05-30 | TRANSF RECIBIDA | 5152834 |
+            
+            ### Costo de Facturación (Reporte de Utilidad)
+            | Producto | Cantidad | Precio | Total | **Costo** | ... |
+            |----------|----------|--------|-------|-----------|-----|
+            | ... | ... | ... | ... | ... | ... |
+            | **Total General:** | | | | **1.417,00** | |
+            """)
 
 # ============================================================
 # 🤖 ASISTENTE IA - DEEPSEEK (SIEMPRE VISIBLE)
