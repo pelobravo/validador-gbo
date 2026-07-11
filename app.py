@@ -4811,164 +4811,137 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         else:
             st.error(f"⚠️ **DIFERENCIA DETECTADA:** {formato_venezolano(abs(diff_transito_calc))} Bs. de diferencia")
             
-            # Botones para análisis
-            st.markdown("---")
-            with st.expander("🔍 Auditoría de Desaduanaje de Tránsito Histórico", expanded=False):
-                st.markdown("--- ")
-                col_btn_t1, col_btn_t2 = st.columns(2)
-                
-                with col_btn_t1:
-                    if st.button("📊 Ver Análisis de Transferencias", width='stretch', key="btn_transito_analisis_tab2"):
-                        st.session_state['mostrar_transito_analisis'] = not st.session_state.get('mostrar_transito_analisis', False)
-                
-                with col_btn_t2:
-                    if st.button("📋 Ver Detalle de TB", width='stretch', key="btn_transito_tb_tab2"):
-                        st.session_state['mostrar_transito_tb'] = not st.session_state.get('mostrar_transito_tb', False)
-                
-                if st.session_state.get('mostrar_transito_analisis', False) or st.session_state.get('mostrar_transito_tb', False):
-                    try:
-                        import re
-                        
-                        tiene_tb = 'df_tb' in locals() and df_tb is not None
-                        tiene_cobranzas = 'df_cobranzas' in locals() and df_cobranzas is not None
-                        
-                        # 🔥 EXTRAER TRÁNSITO DEL DÍA ANTERIOR DESDE ARCHIVO SUBIDO
-                        transito_anterior_docs = {}
-                        if archivo_transito_anterior is not None:
-                            try:
-                                df_tran_ant = pd.read_excel(archivo_transito_anterior)
-                                df_tran_ant_clean = ProcesadorArchivos._limpiar_columnas(df_tran_ant)
-                                idx_tran_ant = ProcesadorArchivos._encontrar_fila_datos(df_tran_ant_clean, ['cuenta', 'referencia', 'monto'])
-                                if idx_tran_ant >= 0:
-                                    df_datos_tran = df_tran_ant_clean.iloc[idx_tran_ant:].reset_index(drop=True)
-                                    df_datos_tran.columns = [str(c).strip() for c in df_datos_tran.iloc[0]]
-                                    df_tran_ant_clean = df_datos_tran.iloc[1:].reset_index(drop=True)
-                                    
-                                    col_ref_t = ProcesadorArchivos._buscar_columna(df_tran_ant_clean, 'referencia', 'nro', 'documento')
-                                    col_monto_t = ProcesadorArchivos._buscar_columna(df_tran_ant_clean, 'monto', 'total')
-                                    
-                                    if col_ref_t and col_monto_t:
-                                        for idx, row in df_tran_ant_clean.iterrows():
-                                            ref = str(row[col_ref_t]).strip()
-                                            monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_t])
-                                            if ref and monto:
-                                                ref_norm = re.sub(r'[^0-9]', '', ref)
-                                                transito_anterior_docs[ref_norm] = float(monto)
-                            except Exception as e:
-                                st.error(f"⚠️ Error al procesar Tránsito del Día Anterior: {e}")
-                        
-                        # 🔥 EXTRAER INGRESOS DEL ESTADO DE CUENTA DE HOY (REFERENCIAS)
-                        ingresos_actual_docs = {}
-                        if 'df_estado_cuenta' in locals() and df_estado_cuenta is not None:
-                            try:
-                                df_ec_clean = ProcesadorArchivos._limpiar_columnas(df_estado_cuenta)
-                                idx_ec = ProcesadorArchivos._encontrar_fila_datos(df_ec_clean, ['fecha', 'referencia', 'descripción', 'crédito', 'débito'])
-                                if idx_ec >= 0:
-                                    df_datos_ec = df_ec_clean.iloc[idx_ec:].reset_index(drop=True)
-                                    df_datos_ec.columns = [str(c).strip() for c in df_datos_ec.iloc[0]]
-                                    df_ec_clean = df_datos_ec.iloc[1:].reset_index(drop=True)
-                                    
-                                    col_ref_ec = ProcesadorArchivos._buscar_columna(df_ec_clean, 'referencia', 'nro', 'documento')
-                                    col_credito = ProcesadorArchivos._buscar_columna(df_ec_clean, 'crédito', 'credito', 'ingreso')
-                                    
-                                    if col_ref_ec and col_credito:
-                                        for idx, row in df_ec_clean.iterrows():
-                                            ref = str(row[col_ref_ec]).strip()
-                                            credito = ProcesadorArchivos._convertir_numero_europeo(row[col_credito])
-                                            if ref and credito and credito > 0:
-                                                ref_norm = re.sub(r'[^0-9]', '', ref)
-                                                ingresos_actual_docs[ref_norm] = float(credito)
-                            except Exception as e:
+            # ============================================================
+            # 🔄 MOTOR DE TRAZABILIDAD EN VIVO UNIFICADO: COBRANZAS VS BANCO VS TB
+            # ============================================================
+            with st.expander("🔄 Auditoría Avanzada y Desglose Explicativo de Transferencias en Tránsito", expanded=True):
+                tiene_cob_hoy = 'df_cobranzas' in locals() and df_cobranzas is not None
+                tiene_banco_hoy = 'df_estado_cuenta' in locals() and df_estado_cuenta is not None
+                tiene_tb_hoy = 'df_tb' in locals() and df_tb is not None
+
+                if tiene_cob_hoy and tiene_banco_hoy and tiene_tb_hoy:
+                    # --- 1. PARSEO DE COBRANZAS DEL DÍA ---
+                    df_cob_clean = ProcesadorArchivos._limpiar_columnas(df_cobranzas)
+                    idx_cob = ProcesadorArchivos._encontrar_fila_datos(df_cob_clean, ['banco', 'deposito', 'monto'])
+                    if idx_cob >= 0:
+                        df_cob_clean = df_cob_clean.iloc[idx_cob:].reset_index(drop=True)
+                        df_cob_clean.columns = [str(c).strip().lower() for c in df_cob_clean.iloc[0]]
+                        df_cob_clean = df_cob_clean.iloc[1:].reset_index(drop=True)
+                    
+                    col_ref_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'deposito', 'nro', 'referencia')
+                    col_monto_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'monto', 'total', 'monto cobranza')
+                    col_cliente_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'cliente', 'nombre')
+
+                    cobranzas_dia_map = {}
+                    for idx, row in df_cob_clean.iterrows():
+                        ref = str(row[col_ref_cob]).strip() if col_ref_cob in df_cob_clean.columns else ""
+                        monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_cob]) if col_monto_cob in df_cob_clean.columns else 0.0
+                        cliente = str(row[col_cliente_cob]).strip() if col_cliente_cob in df_cob_clean.columns else "No identificado"
+                        if monto and monto > 0:
+                            ref_norm = re.sub(r'[^0-9]', '', ref) if ref else f"cob_row_{idx}"
+                            cobranzas_dia_map[ref_norm] = {'monto': float(monto), 'fila': idx + 1, 'orig': ref, 'cliente': cliente}
+
+                    # --- 2. PARSEO DE TB.XLXX (TRÁNSITO REPORTADO) ---
+                    df_tb_clean = ProcesadorArchivos._limpiar_columnas(df_tb)
+                    idx_tb = ProcesadorArchivos._encontrar_fila_datos(df_tb_clean, ['cuenta', 'referencia', 'monto'])
+                    if idx_tb >= 0:
+                        df_tb_clean = df_tb_clean.iloc[idx_tb:].reset_index(drop=True)
+                        df_tb_clean.columns = [str(c).strip().lower() for c in df_tb_clean.iloc[0]]
+                        df_tb_clean = df_tb_clean.iloc[1:].reset_index(drop=True)
+
+                    col_ref_tb = ProcesadorArchivos._buscar_columna(df_tb_clean, 'referencia', 'nro', 'documento')
+                    col_monto_tb = ProcesadorArchivos._buscar_columna(df_tb_clean, 'monto', 'total', 'importe')
+
+                    tb_dia_map = {}
+                    for idx, row in df_tb_clean.iterrows():
+                        ref_t = str(row[col_ref_tb]).strip() if col_ref_tb in df_tb_clean.columns else ""
+                        monto_t = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_tb]) if col_monto_tb in df_tb_clean.columns else 0.0
+                        if monto_t and monto_t > 0:
+                            ref_t_norm = re.sub(r'[^0-9]', '', ref_t) if ref_t else f"tb_row_{idx}"
+                            tb_dia_map[ref_t_norm] = {'monto': float(monto_t), 'fila': idx + 1, 'orig': ref_t}
+
+                    # --- 3. PARSEO DE BANCO (ESTADO DE CUENTA) ---
+                    df_banco_clean = ProcesadorArchivos._limpiar_columnas(df_estado_cuenta)
+                    idx_banco = ProcesadorArchivos._encontrar_fila_datos(df_banco_clean, ['fecha', 'referencia', 'descrip'])
+                    if idx_banco >= 0:
+                        df_banco_clean = df_banco_clean.iloc[idx_banco:].reset_index(drop=True)
+                        df_banco_clean.columns = [str(c).strip().lower() for c in df_banco_clean.iloc[0]]
+                        df_banco_clean = df_banco_clean.iloc[1:].reset_index(drop=True)
+
+                    col_ref_ban = ProcesadorArchivos._buscar_columna(df_banco_clean, 'referencia', 'nro', 'documento')
+                    col_credito_ban = ProcesadorArchivos._buscar_columna(df_banco_clean, 'credito', 'monto', 'ingreso')
+
+                    banco_dia_map = {}
+                    for idx, row in df_banco_clean.iterrows():
+                        ref_b = str(row[col_ref_ban]).strip() if col_ref_ban in df_banco_clean.columns else ""
+                        monto_b = ProcesadorArchivos._convertir_numero_europeo(row[col_credito_ban]) if col_credito_ban in df_banco_clean.columns else 0.0
+                        if monto_b and monto_b > 0:
+                            ref_b_norm = re.sub(r'[^0-9]', '', ref_b) if ref_b else f"ban_row_{idx}"
+                            banco_dia_map[ref_b_norm] = {'monto': float(monto_b), 'fila': idx + 1, 'orig': ref_b}
+
+                    # --- 4. ANALISIS CRUZADO EXPLICATIVO ---
+                    st.markdown("### 📋 Desglose Analítico de la Diferencia de Tránsito")
+                    
+                    explicaciones_encontradas = []
+                    
+                    # Buscar conciliaciones directas y brechas
+                    for ref_norm, info_cob in cobranzas_dia_map.items():
+                        # Caso A: Está en Cobranzas y está en el archivo TB (En espera legítimo)
+                        if ref_norm in tb_dia_map:
+                            monto_tb = tb_dia_map[ref_norm]['monto']
+                            if abs(info_cob['monto'] - monto_tb) < 0.01:
+                                # Conciliado correctamente en espera - no se reporta como diferencia
                                 pass
-                        
-                        # 🔥 CRUZAR TRÁNSITO ANTERIOR CONTRA INGRESOS DEL BANCO DE HOY
-                        transit_efectivo = []
-                        transit_pendiente = []
-                        
-                        for ref_norm, monto_t in transito_anterior_docs.items():
-                            if ref_norm in ingresos_actual_docs:
-                                transit_efectivo.append({
-                                    'Referencia': ref_norm, 
-                                    'Monto Tránsito Ayer': monto_t, 
-                                    'Monto Ingreso Hoy': ingresos_actual_docs[ref_norm],
-                                    'Estatus': '✅ Efectiva en Banco Hoy'
-                                })
                             else:
-                                transit_pendiente.append({
-                                    'Referencia': ref_norm, 
-                                    'Monto': monto_t, 
-                                    'Estatus': '⏳ Sigue en Tránsito (No ingresó hoy)'
+                                explicaciones_encontradas.append({
+                                    "Referencia": info_cob['orig'],
+                                    "Monto Cobranza": info_cob['monto'],
+                                    "Monto en TB": monto_tb,
+                                    "Causa del Descuadre": f"❌ Diferencia de monto en la misma transferencia. Registrado por el analista como {formato_venezolano(info_cob['monto'])} Bs., pero en el archivo TB figura como {formato_venezolano(monto_tb)} Bs.",
+                                    "Tipo": "Diferencia"
                                 })
+                        else:
+                            # Caso B: Está en cobranzas pero NO se anexó al reporte de TB de los analistas
+                            explicaciones_encontradas.append({
+                                "Referencia": info_cob['orig'],
+                                "Monto Cobranza": info_cob['monto'],
+                                "Monto en TB": 0.0,
+                                "Causa del Descuadre": f"⚠️ Documento Omitido en TB: Esta cobranza por {formato_venezolano(info_cob['monto'])} Bs. (Cliente: {info_cob['cliente']}) se procesó en el sistema hoy, pero los analistas NO la incluyeron dentro del archivo TB.xlsx.",
+                                "Tipo": "Faltante en TB"
+                            })
+
+                    # Caso C: Movimientos fantasmas en el archivo TB que no se justifican con Cobranzas
+                    for ref_norm, info_tb in tb_dia_map.items():
+                        if ref_norm not in cobranzas_dia_map:
+                            explicaciones_encontradas.append({
+                                "Referencia": info_tb['orig'],
+                                "Monto Cobranza": 0.0,
+                                "Monto en TB": info_tb['monto'],
+                                "Causa del Descuadre": f"🔍 Registro Huérfano en TB: El archivo TB.xlsx incluye la referencia por {formato_venezolano(info_tb['monto'])} Bs., pero no existe ningún registro equivalente en las Cobranzas de hoy.",
+                                "Tipo": "Sobrante en TB"
+                            })
+
+                    # --- RECONSTRUIR LA VISUALIZACIÓN ---
+                    if explicaciones_encontradas:
+                        df_exp = pd.DataFrame(explicaciones_encontradas)
                         
-                        # Mostrar resultados del desaduanaje
-                        if transit_efectivo:
-                            st.success(f"📈 {len(transit_efectivo)} Transferencias en tránsito de ayer se hicieron efectivas hoy en el banco:")
-                            df_efectivo = pd.DataFrame(transit_efectivo)
-                            st.dataframe(df_efectivo, use_container_width=True)
+                        # Mostrar la tabla explicativa detallada
+                        st.warning("🎯 El sistema identificó los siguientes factores específicos que generan el descuadre:")
+                        st.dataframe(df_exp[['Referencia', 'Monto Cobranza', 'Monto en TB', 'Causa del Descuadre']], use_container_width=True, hide_index=True)
                         
-                        if transit_pendiente:
-                            st.warning(f"⏳ {len(transit_pendiente)} Transferencias siguen flotando en tránsito:")
-                            df_pendiente = pd.DataFrame(transit_pendiente)
-                            st.dataframe(df_pendiente, use_container_width=True)
+                        # Filtrar e informar las transferencias legítimas en tránsito (las que están en cobranzas esperando por banco)
+                        st.markdown("#### ⏳ Transferencias Registradas en Espera de Banco")
+                        en_espera_reales = [{ 'Referencia': v['orig'], 'Monto (Bs.)': formato_venezolano(v['monto']), 'Cliente': v['cliente'], 'Fila': v['fila'] } 
+                                             for k, v in cobranzas_dia_map.items() if k not in banco_dia_map]
                         
-                        if not transito_anterior_docs:
-                            st.info("ℹ️ No hay registros de Tránsito del día anterior para evaluar desaduanaje.")
-                        
-                        # 🔥 EXTRAER TB ACTUAL (ya existente)
-                        tb_docs = {}
-                        if tiene_tb and st.session_state.get('mostrar_transito_tb', False):
-                            df_tb_clean = ProcesadorArchivos._limpiar_columnas(df_tb)
-                            
-                            idx_tb = None
-                            for idx, row in df_tb_clean.iterrows():
-                                row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).lower()
-                                if any(k in row_str for k in ['total tb', 'tb', 'transferencia']):
-                                    idx_tb = idx
-                                    break
-                            if idx_tb is None:
-                                idx_tb = ProcesadorArchivos._encontrar_fila_datos(df_tb_clean, ['banco', 'referencia', 'monto'])
-                            
-                            if idx_tb is not None and idx_tb >= 0 and idx_tb < len(df_tb_clean):
-                                df_datos = df_tb_clean.iloc[idx_tb:].reset_index(drop=True)
-                                if len(df_datos) > 0:
-                                    header_row = df_datos.iloc[0]
-                                    new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
-                                    df_datos.columns = new_cols
-                                    df_tb_clean = df_datos.iloc[1:].reset_index(drop=True)
-                            
-                            col_ref = ProcesadorArchivos._buscar_columna(df_tb_clean, 'referencia', 'nro', 'deposito', 'documento')
-                            col_monto_tb = ProcesadorArchivos._buscar_columna(df_tb_clean, 'monto', 'total', 'importe', 'saldo')
-                            
-                            if col_ref and col_monto_tb:
-                                for idx, row in df_tb_clean.iterrows():
-                                    ref = str(row[col_ref]).strip()
-                                    monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_tb])
-                                    if ref and ref != 'nan' and ref != 'None' and monto:
-                                        ref_norm = re.sub(r'[^0-9]', '', ref)
-                                        if ref_norm:
-                                            tb_docs[ref_norm] = {
-                                                'referencia': ref,
-                                                'monto': float(monto)
-                                            }
-                            
-                            with st.expander("📄 Transferencias en Tránsito (TB Actual)", expanded=True):
-                                if tb_docs:
-                                    df_tb_docs = pd.DataFrame(list(tb_docs.values()))
-                                    st.dataframe(df_tb_docs, use_container_width=True)
-                                    st.metric("📄 Total TB Actual", len(tb_docs))
-                                else:
-                                    st.info("No hay transferencias en TB Actual")
-                        
-                        # Botón para cerrar vistas de Tránsito
-                        if st.button("🔒 Cerrar todas las vistas de Tránsito", width='stretch'):
-                            st.session_state['mostrar_transito_analisis'] = False
-                            st.session_state['mostrar_transito_tb'] = False
-                            st.rerun()
-                            
-                    except Exception as e:
-                        st.error(f"❌ Error en el análisis de transferencias: {str(e)}")
-                        import traceback
-                        st.code(traceback.format_exc())
+                        if en_espera_reales:
+                            st.dataframe(pd.DataFrame(en_espera_reales), use_container_width=True, hide_index=True)
+                        else:
+                            st.info("No se registran transferencias flotantes en espera para esta jornada.")
+                    else:
+                        st.success("✅ Todo concuerda de forma exacta entre los archivos fuente.")
+                else:
+                    st.info("ℹ️ Sube los archivos de Cobranzas, Estado de Cuenta y TB.xlsx de manera simultánea para activar el desglose.")
         
         st.markdown("---")
         
