@@ -12,6 +12,7 @@
 # 🔥 AGREGADO: Cruce avanzado de cobranzas interdiarias y conciliación de tránsito
 # 🎯 AGREGADO: Motor automático de detección de errores interdiarios (Cobranzas)
 # 🚨 NUEVO: Auditoría de seguridad para detectar transferencias en TB ya aplicadas en Cobranzas
+# 🔥 MEJORADO: Detección de duplicados por REFERENCIA y por MONTO en TB vs Cobranzas
 
 import streamlit as st
 import pandas as pd
@@ -4873,14 +4874,15 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                             ref_t_norm = re.sub(r'[^0-9]', '', ref_t)
                             tb_dia_map[ref_t_norm] = {'monto': float(monto_t), 'fila': idx + 1, 'orig': ref_t}
 
-                    # --- 3. CRUCE DE AUDITORÍA DE ERRORES DE ANALISTAS ---
+                    # --- 3. CRUCE DE AUDITORÍA DE ERRORES DE ANALISTAS (MEJORADO) ---
                     errores_analistas = []
                     
+                    # 🔥 PRIMERO: Buscar por REFERENCIA (duplicados exactos)
                     for ref_norm, info_tb in tb_dia_map.items():
-                        # Si el dinero sigue listado en TB, pero resulta que YA está en el archivo de Cobranzas...
                         if ref_norm in cobranzas_dia_map:
                             info_cob = cobranzas_dia_map[ref_norm]
                             errores_analistas.append({
+                                "Tipo Error": "🔴 DUPLICADO POR REFERENCIA",
                                 "Referencia Única": info_tb['orig'],
                                 "Monto Afectado (Bs.)": formato_venezolano(info_tb['monto']),
                                 "Ubicación en TB": f"Fila Excel {info_tb['fila']}",
@@ -4888,19 +4890,42 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 "Cliente Identificado": info_cob['cliente'],
                                 "Explicación Detallada": f"❌ Error Crítico de Cierre: Esta transferencia ya fue identificada y aplicada al cliente en Cobranzas (Fila {info_cob['fila']}), pero la analista la mantuvo por descuido en el archivo TB.xlsx (Fila {info_tb['fila']}). Esto está restando {formato_venezolano(info_tb['monto'])} Bs. de tu Capital de Trabajo de forma duplicada."
                             })
+                    
+                    # 🔥 SEGUNDO: Buscar por MONTO (duplicados con referencias diferentes)
+                    for ref_tb, info_tb in tb_dia_map.items():
+                        monto_tb = info_tb['monto']
+                        for ref_cob, info_cob in cobranzas_dia_map.items():
+                            if abs(monto_tb - info_cob['monto']) < 0.01 and ref_tb != ref_cob:
+                                # Verificar si ya existe un duplicado por referencia para esta combinación
+                                ya_existe = False
+                                for err in errores_analistas:
+                                    if info_tb['orig'] in err['Referencia Única'] or info_cob['orig'] in err['Referencia Única']:
+                                        ya_existe = True
+                                        break
+                                if not ya_existe:
+                                    errores_analistas.append({
+                                        "Tipo Error": "💥 DUPLICADO POR MONTO",
+                                        "Referencia Única": f"TB: {info_tb['orig']} | Cob: {info_cob['orig']}",
+                                        "Monto Afectado (Bs.)": formato_venezolano(monto_tb),
+                                        "Ubicación en TB": f"Fila Excel {info_tb['fila']}",
+                                        "Ubicación en Cobranzas": f"Fila Excel {info_cob['fila']}",
+                                        "Cliente Identificado": info_cob['cliente'],
+                                        "Explicación Detallada": f"⚠️ Alerta: Se encontró un movimiento en TB por {formato_venezolano(monto_tb)} Bs. (Ref: {info_tb['orig']}) que coincide exactamente en monto con una cobranza (Ref: {info_cob['orig']}, Cliente: {info_cob['cliente']}). Verificar si es el mismo movimiento o corresponde a transacciones diferentes."
+                                    })
+                                break
 
                     # --- 4. RENDERIZADO DE HALLAZGOS CONTABLES ---
                     if errores_analistas:
                         st.error(f"🚨 ¡Atención! Se detectaron {len(errores_analistas)} errores operativos de analistas afectando directamente tu Capital:")
                         df_err = pd.DataFrame(errores_analistas)
                         
-                        # Tabla ejecutiva resumen
-                        st.dataframe(df_err[["Referencia Única", "Monto Afectado (Bs.)", "Cliente Identificado", "Ubicación en TB", "Ubicación en Cobranzas"]], use_container_width=True, hide_index=True)
+                        # 🔥 Mostrar tabla con el tipo de error
+                        st.dataframe(df_err[["Tipo Error", "Referencia Única", "Monto Afectado (Bs.)", "Cliente Identificado", "Ubicación en TB", "Ubicación en Cobranzas"]], use_container_width=True, hide_index=True)
                         
                         # Bloque narrativo explicativo caso por caso
                         st.markdown("#### 📋 Diagnóstico Explicativo para Ajustes:")
                         for err in errores_analistas:
-                            st.markdown(f"* **📄 Ref: {err['Referencia Única']}** | {err['Explicación Detallada']}")
+                            st.markdown(f"* **{err['Tipo Error']}** | 📄 Ref: {err['Referencia Única']} | {err['Explicación Detallada']}")
                             
                         total_recuperable = sum([float(re.sub(r'[^0-9.,]', '', x['Monto Afectado (Bs.)']).replace('.', '').replace(',', '.')) for x in errores_analistas])
                         st.warning(f"📈 **Impacto en Capital:** Si eliminas estos movimientos duplicados del archivo TB, tu Capital de Trabajo Neto aumentará automáticamente en **+{formato_venezolano(total_recuperable)} Bs.**")
