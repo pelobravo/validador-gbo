@@ -2426,18 +2426,18 @@ if (st.session_state.get("fact_top") is not None and
     st.session_state.modo_vista = "🔍 Ficha de Validación"
 
 # ============================================================
-# 📋 FUNCIÓN PARA RENDERIZAR ESTADO DE UPLOADER (CORREGIDA)
+# 📋 FUNCIÓN PARA RENDERIZAR ESTADO DE UPLOADER (VALIDACIÓN CRUZADA)
 # ============================================================
-def renderizar_estado_uploader(archivo, columnas_esperadas=None, nombre_archivo=None, buscar_en_todo=False):
+def renderizar_estado_uploader(archivo, columnas_esperadas=None, columnas_excluidas=None, nombre_archivo=None, buscar_en_todo=False):
     """
     Renderiza el estado de un uploader con colores y mensajes.
     
     Args:
         archivo: El archivo subido (de st.file_uploader)
-        columnas_esperadas: Lista de columnas que debe tener (opcional)
+        columnas_esperadas: Lista de columnas que DEBE tener (opcional)
+        columnas_excluidas: Lista de columnas que NO debe tener (opcional)
         nombre_archivo: Nombre descriptivo para mensajes de error (opcional)
         buscar_en_todo: Si es True, busca las columnas en todo el DataFrame
-                        Si es False, solo busca en las primeras 5 filas
     
     Returns:
         bool: True si el archivo es válido, False si no
@@ -2446,18 +2446,18 @@ def renderizar_estado_uploader(archivo, columnas_esperadas=None, nombre_archivo=
         st.warning("⏳ PENDIENTE")
         return False
     
-    if not columnas_esperadas:
+    if not columnas_esperadas and not columnas_excluidas:
         st.success("✅ CARGADO CORRECTO")
         return True
     
     try:
-        # 🔥 SI buscar_en_todo es True, buscar la fila de encabezado en todo el archivo
+        # Buscar fila de encabezado si es necesario
         if buscar_en_todo:
             df_raw = pd.read_excel(archivo, header=None)
             fila_encabezado = None
             for idx, row in df_raw.iterrows():
                 row_str = ' '.join([str(x).lower() for x in row.values if pd.notna(x)])
-                for col_esp in columnas_esperadas:
+                for col_esp in (columnas_esperadas or []):
                     if col_esp.lower() in row_str:
                         fila_encabezado = idx
                         break
@@ -2473,23 +2473,44 @@ def renderizar_estado_uploader(archivo, columnas_esperadas=None, nombre_archivo=
         
         columnas = [str(c).lower().strip() for c in df_test.columns]
         
-        # Verificar columnas esperadas
-        columnas_encontradas = []
-        for col_esp in columnas_esperadas:
-            col_esp_lower = col_esp.lower()
-            for col in columnas:
-                if col_esp_lower in col or col in col_esp_lower:
-                    columnas_encontradas.append(col_esp)
-                    break
+        # 🔥 1. VERIFICAR COLUMNAS EXCLUIDAS (detectar archivo equivocado)
+        if columnas_excluidas:
+            columnas_excluidas_encontradas = []
+            for col_excl in columnas_excluidas:
+                col_excl_lower = col_excl.lower()
+                for col in columnas:
+                    if col_excl_lower in col or col in col_excl_lower:
+                        columnas_excluidas_encontradas.append(col_excl)
+                        break
+            
+            if columnas_excluidas_encontradas:
+                st.error("❌ RECHAZADO")
+                if nombre_archivo:
+                    st.caption(f"📌 {nombre_archivo} parece ser un archivo de otro tipo")
+                return False
         
-        if columnas_encontradas:
-            st.success("✅ CARGADO CORRECTO")
-            return True
-        else:
-            st.error("❌ RECHAZADO")
-            if nombre_archivo:
-                st.caption(f"📌 {nombre_archivo} debe contener: {', '.join(columnas_esperadas)}")
-            return False
+        # 🔥 2. VERIFICAR COLUMNAS ESPERADAS
+        if columnas_esperadas:
+            columnas_encontradas = []
+            for col_esp in columnas_esperadas:
+                col_esp_lower = col_esp.lower()
+                for col in columnas:
+                    if col_esp_lower in col or col in col_esp_lower:
+                        columnas_encontradas.append(col_esp)
+                        break
+            
+            if columnas_encontradas:
+                st.success("✅ CARGADO CORRECTO")
+                return True
+            else:
+                st.error("❌ RECHAZADO")
+                if nombre_archivo:
+                    st.caption(f"📌 {nombre_archivo} debe contener: {', '.join(columnas_esperadas)}")
+                return False
+        
+        st.success("✅ CARGADO CORRECTO")
+        return True
+        
     except Exception as e:
         st.error("❌ RECHAZADO")
         st.caption(f"📌 Error al leer el archivo")
@@ -2497,7 +2518,7 @@ def renderizar_estado_uploader(archivo, columnas_esperadas=None, nombre_archivo=
 
 
 # ============================================================
-# 🔥 UPLOADERS CON VALIDACIÓN CORREGIDA
+# 🔥 UPLOADERS EN LA PARTE SUPERIOR (CON VALIDACIÓN CRUZADA)
 # ============================================================
 with st.container():
     st.markdown("### 📂 Carga de Archivos del Día")
@@ -2510,20 +2531,45 @@ with st.container():
     
     with col_u1:
         archivo_facturacion = st.file_uploader("📊 Facturación", type=["xlsx", "xls"], key="fact_top")
-        renderizar_estado_uploader(archivo_facturacion, ['total', 'vendedor'], 'Facturación', buscar_en_todo=True)
+        # 🔥 Facturación: DEBE tener 'vendedor','total' | NO debe tener 'deposito','monto_cobranza'
+        renderizar_estado_uploader(
+            archivo_facturacion,
+            columnas_esperadas=['vendedor', 'total'],
+            columnas_excluidas=['deposito', 'monto_cobranza'],
+            nombre_archivo='Facturación',
+            buscar_en_todo=True
+        )
         
     with col_u2:
         archivo_cobranzas = st.file_uploader("💰 Cobranzas", type=["xlsx", "xls"], key="cob_top")
-        renderizar_estado_uploader(archivo_cobranzas, ['deposito', 'monto_cobranza'], 'Cobranzas', buscar_en_todo=True)
+        # 🔥 Cobranzas: DEBE tener 'deposito','monto_cobranza' | NO debe tener 'vendedor','total'
+        renderizar_estado_uploader(
+            archivo_cobranzas,
+            columnas_esperadas=['deposito', 'monto_cobranza'],
+            columnas_excluidas=['vendedor', 'total'],
+            nombre_archivo='Cobranzas',
+            buscar_en_todo=True
+        )
         
     with col_u3:
         archivo_egresos = st.file_uploader("💳 Egresos iPago", type=["xlsx", "xls"], key="egr_top")
-        renderizar_estado_uploader(archivo_egresos, ['monto', 'proveedor'], 'Egresos iPago', buscar_en_todo=True)
+        # ✅ Egresos: DEBE tener 'monto','proveedor'
+        renderizar_estado_uploader(
+            archivo_egresos,
+            columnas_esperadas=['monto', 'proveedor'],
+            nombre_archivo='Egresos iPago',
+            buscar_en_todo=True
+        )
         
     with col_u4:
         archivo_estado_cuenta = st.file_uploader("🏦 Estado de Cuenta", type=["xlsx", "xls"], key="estado_top")
-        # 🔥 CORREGIDO: busca 'monto_bs' en lugar de 'credito'
-        renderizar_estado_uploader(archivo_estado_cuenta, ['fecha', 'referencia', 'monto_bs'], 'Estado de Cuenta', buscar_en_todo=True)
+        # 🔥 Estado de Cuenta: DEBE tener 'fecha','referencia','monto_bs' (NO tiene 'credito')
+        renderizar_estado_uploader(
+            archivo_estado_cuenta,
+            columnas_esperadas=['fecha', 'referencia', 'monto_bs'],
+            nombre_archivo='Estado de Cuenta',
+            buscar_en_todo=True
+        )
     
     # ============================================================
     # 2. ARCHIVOS OPCIONALES
@@ -2533,21 +2579,41 @@ with st.container():
     
     with col_u5:
         archivo_recepciones = st.file_uploader("📦 Recepciones", type=["xlsx", "xls"], key="rec_top")
-        # 🔥 CORREGIDO: columnas reales del archivo
-        renderizar_estado_uploader(archivo_recepciones, ['productos', 'documento', 'costo'], 'Recepciones', buscar_en_todo=True)
+        # 🔥 Recepciones: DEBE tener 'productos','documento','costo'
+        renderizar_estado_uploader(
+            archivo_recepciones,
+            columnas_esperadas=['productos', 'documento', 'costo'],
+            nombre_archivo='Recepciones',
+            buscar_en_todo=True
+        )
             
     with col_u6:
         archivo_recepciones_trazabilidad = st.file_uploader("📊 Recepción Trazabilidad", type=["xlsx", "xls"], key="rec_traz_top")
-        renderizar_estado_uploader(archivo_recepciones_trazabilidad, ['codigo', 'producto', 'cantidad'], 'Recepción Trazabilidad', buscar_en_todo=True)
+        renderizar_estado_uploader(
+            archivo_recepciones_trazabilidad,
+            columnas_esperadas=['codigo', 'producto', 'cantidad'],
+            nombre_archivo='Recepción Trazabilidad',
+            buscar_en_todo=True
+        )
             
     with col_u7:
         archivo_notas_credito_cliente = st.file_uploader("📝 NC Clientes", type=["xlsx", "xls"], key="notas_cliente_top")
-        # 🔥 CORREGIDO: solo busca 'monto' (no tiene columna 'cliente')
-        renderizar_estado_uploader(archivo_notas_credito_cliente, ['monto'], 'NC Clientes', buscar_en_todo=True)
+        # 🔥 NC Clientes: solo busca 'monto' (no tiene columna 'cliente')
+        renderizar_estado_uploader(
+            archivo_notas_credito_cliente,
+            columnas_esperadas=['monto'],
+            nombre_archivo='NC Clientes',
+            buscar_en_todo=True
+        )
             
     with col_u8:
         archivo_notas_credito_proveedor = st.file_uploader("📝 NC Proveedores", type=["xlsx", "xls"], key="notas_proveedor_top")
-        renderizar_estado_uploader(archivo_notas_credito_proveedor, ['proveedor', 'monto'], 'NC Proveedores', buscar_en_todo=True)
+        renderizar_estado_uploader(
+            archivo_notas_credito_proveedor,
+            columnas_esperadas=['proveedor', 'monto'],
+            nombre_archivo='NC Proveedores',
+            buscar_en_todo=True
+        )
     
     # ============================================================
     # 3. ARCHIVOS DE VERIFICACIÓN
@@ -2557,20 +2623,40 @@ with st.container():
     
     with col_u9:
         archivo_cxc_reportado = st.file_uploader("📄 CxC Reportado", type=["xlsx", "xls"], key="cxc_rep_top")
-        renderizar_estado_uploader(archivo_cxc_reportado, ['cliente', 'saldo', 'documento'], 'CxC Reportado', buscar_en_todo=True)
+        renderizar_estado_uploader(
+            archivo_cxc_reportado,
+            columnas_esperadas=['cliente', 'saldo', 'documento'],
+            nombre_archivo='CxC Reportado',
+            buscar_en_todo=True
+        )
             
     with col_u10:
         archivo_cxp_reportado = st.file_uploader("📄 CxP Reportado", type=["xlsx", "xls"], key="cxp_rep_top")
-        renderizar_estado_uploader(archivo_cxp_reportado, ['proveedor', 'documento', 'saldo'], 'CxP Reportado', buscar_en_todo=True)
+        renderizar_estado_uploader(
+            archivo_cxp_reportado,
+            columnas_esperadas=['proveedor', 'documento', 'saldo'],
+            nombre_archivo='CxP Reportado',
+            buscar_en_todo=True
+        )
             
     with col_u11:
         archivo_inventario_reportado = st.file_uploader("📄 Inventario Reportado", type=["xlsx", "xls"], key="inv_rep_top")
-        renderizar_estado_uploader(archivo_inventario_reportado, ['producto', 'cantidad', 'total'], 'Inventario Reportado', buscar_en_todo=True)
+        renderizar_estado_uploader(
+            archivo_inventario_reportado,
+            columnas_esperadas=['producto', 'cantidad', 'total'],
+            nombre_archivo='Inventario Reportado',
+            buscar_en_todo=True
+        )
             
     with col_u12:
         archivo_tb = st.file_uploader("🔄 TB.xlsx", type=["xlsx", "xls"], key="tb_top")
-        # ✅ TB ESTÁ BIEN - NO TOCAR
-        renderizar_estado_uploader(archivo_tb, ['referencia', '$'], 'TB.xlsx', buscar_en_todo=True)
+        # ✅ TB ESTÁ BIEN: busca 'referencia' y '$'
+        renderizar_estado_uploader(
+            archivo_tb,
+            columnas_esperadas=['referencia', '$'],
+            nombre_archivo='TB.xlsx',
+            buscar_en_todo=True
+        )
     
     # ============================================================
     # 4. ARCHIVOS ADICIONALES
@@ -2580,19 +2666,39 @@ with st.container():
     
     with col_u13:
         archivo_costo_facturacion = st.file_uploader("📈 Costo Facturación", type=["xlsx", "xls"], key="costo_fact_top")
-        renderizar_estado_uploader(archivo_costo_facturacion, ['costo', 'producto'], 'Costo Facturación', buscar_en_todo=True)
+        renderizar_estado_uploader(
+            archivo_costo_facturacion,
+            columnas_esperadas=['costo', 'producto'],
+            nombre_archivo='Costo Facturación',
+            buscar_en_todo=True
+        )
             
     with col_u14:
         archivo_inventario_anterior = st.file_uploader("📦 Inventario Anterior", type=["xlsx", "xls"], key="inv_ant_top")
-        renderizar_estado_uploader(archivo_inventario_anterior, ['producto', 'cantidad'], 'Inventario Anterior', buscar_en_todo=True)
+        renderizar_estado_uploader(
+            archivo_inventario_anterior,
+            columnas_esperadas=['producto', 'cantidad'],
+            nombre_archivo='Inventario Anterior',
+            buscar_en_todo=True
+        )
             
     with col_u15:
         archivo_cxp_anterior = st.file_uploader("📄 CxP Día Anterior", type=["xlsx", "xls"], key="cxp_ant_top")
-        renderizar_estado_uploader(archivo_cxp_anterior, ['proveedor', 'documento', 'saldo'], 'CxP Día Anterior', buscar_en_todo=True)
+        renderizar_estado_uploader(
+            archivo_cxp_anterior,
+            columnas_esperadas=['proveedor', 'documento', 'saldo'],
+            nombre_archivo='CxP Día Anterior',
+            buscar_en_todo=True
+        )
             
     with col_u16:
         archivo_cobranzas_anterior = st.file_uploader("💰 Cobranzas Día Anterior", type=["xlsx", "xls"], key="cob_ant_top")
-        renderizar_estado_uploader(archivo_cobranzas_anterior, ['deposito', 'monto_cobranza'], 'Cobranzas Día Anterior', buscar_en_todo=True)
+        renderizar_estado_uploader(
+            archivo_cobranzas_anterior,
+            columnas_esperadas=['deposito', 'monto_cobranza'],
+            nombre_archivo='Cobranzas Día Anterior',
+            buscar_en_todo=True
+        )
 
     # ============================================================
     # 5. TRAZABILIDAD DE SALDOS HISTÓRICOS
@@ -2602,7 +2708,12 @@ with st.container():
     
     with col_u17:
         archivo_transito_anterior = st.file_uploader("🔄 Tránsito Día Anterior", type=["xlsx", "xls"], key="transito_ant_top")
-        renderizar_estado_uploader(archivo_transito_anterior, ['referencia', 'monto'], 'Tránsito Día Anterior', buscar_en_todo=True)
+        renderizar_estado_uploader(
+            archivo_transito_anterior,
+            columnas_esperadas=['referencia', 'monto'],
+            nombre_archivo='Tránsito Día Anterior',
+            buscar_en_todo=True
+        )
     
     st.markdown("---")
 # ============================================================
