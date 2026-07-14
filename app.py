@@ -4963,12 +4963,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 # ============================================================
                 # 🔥 CRUCE AUTOMÁTICO: COBRANZAS vs TB (TRANSFERENCIAS EN TRÁNSITO)
                 # ============================================================
-                # 🔥 FORZAR DETECCIÓN DE TB (si no se detectó automáticamente)
-                if not tiene_tb_hoy and 'df_tb' in globals() and globals()['df_tb'] is not None:
-                    tiene_tb_hoy = True
-                    df_tb = globals()['df_tb']
-                    st.info("ℹ️ TB.xlsx detectado forzadamente desde la variable global.")
-                
                 if tiene_cob_hoy and tiene_tb_hoy:
                     st.markdown("---")
                     st.markdown("#### 🔄 Cruce Automático: Cobranzas vs TB (Transferencias en Tránsito)")
@@ -5001,94 +4995,155 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 'cliente': cliente
                             }
 
-                    # --- 2. Extraer movimientos de TB (Tránsito Reportado) ---
+                    # --- 2. EXTRAER MOVIMIENTOS DE TB (FORZADO) ---
                     df_tb_clean = ProcesadorArchivos._limpiar_columnas(df_tb)
-                    idx_tb = ProcesadorArchivos._encontrar_fila_datos(df_tb_clean, ['cuenta', 'referencia', 'monto'])
-                    if idx_tb >= 0:
-                        df_tb_clean = df_tb_clean.iloc[idx_tb:].reset_index(drop=True)
-                        df_tb_clean.columns = [str(c).strip().lower() for c in df_tb_clean.iloc[0]]
-                        df_tb_clean = df_tb_clean.iloc[1:].reset_index(drop=True)
-
-                    col_ref_tb = ProcesadorArchivos._buscar_columna(df_tb_clean, 'referencia', 'nro', 'documento')
                     
-                    # 🔥 FORZAR BÚSQUEDA DE MONTO:
-                    # 1. Buscar columna 'monto' primero
-                    # 2. Si no tiene valores numéricos (fórmulas), buscar columna '$' que tiene el valor calculado
+                    # 🔥 DEPURACIÓN EXTREMA: Mostrar columnas y primeras filas
+                    st.write("📋 Columnas de TB:", list(df_tb_clean.columns))
+                    st.write("📋 Primeras 5 filas de TB:", df_tb_clean.head(5).to_dict())
+                    
+                    # 🔥 FORZAR: BUSCAR LA FILA QUE CONTIENE "REFERENCIA" Y "MONTO"
+                    idx_inicio = None
+                    for idx, row in df_tb_clean.iterrows():
+                        fila_texto = ' '.join([str(x).lower() for x in row.values if pd.notna(x)])
+                        if 'referencia' in fila_texto and 'monto' in fila_texto:
+                            idx_inicio = idx
+                            break
+                    
+                    # Si no encuentra, buscar por palabras clave
+                    if idx_inicio is None:
+                        for idx, row in df_tb_clean.iterrows():
+                            fila_texto = ' '.join([str(x).lower() for x in row.values if pd.notna(x)])
+                            if 'fecha' in fila_texto and 'referencia' in fila_texto:
+                                idx_inicio = idx
+                                break
+                    
+                    # Si aún no, buscar cualquier fila con "referencia"
+                    if idx_inicio is None:
+                        for idx, row in df_tb_clean.iterrows():
+                            fila_texto = ' '.join([str(x).lower() for x in row.values if pd.notna(x)])
+                            if 'referencia' in fila_texto:
+                                idx_inicio = idx
+                                break
+                    
+                    if idx_inicio is not None:
+                        df_datos = df_tb_clean.iloc[idx_inicio:].reset_index(drop=True)
+                        if len(df_datos) > 0:
+                            header_row = df_datos.iloc[0]
+                            nuevas_columnas = []
+                            for col in header_row:
+                                if pd.notna(col):
+                                    nuevas_columnas.append(str(col).strip().lower())
+                                else:
+                                    nuevas_columnas.append(f'col_{len(nuevas_columnas)}')
+                            df_datos.columns = nuevas_columnas
+                            df_tb_clean = df_datos.iloc[1:].reset_index(drop=True)
+                    
+                    # 🔥 AHORA BUSCAR COLUMNAS POR NOMBRE
+                    col_ref_tb = None
                     col_monto_tb = None
                     
-                    # Buscar columna 'monto'
+                    # Buscar columna de referencia
                     for col in df_tb_clean.columns:
-                        col_lower = str(col).lower()
+                        col_lower = str(col).lower().strip()
+                        if col_lower == 'referencia' or col_lower == 'nro' or col_lower == 'documento' or col_lower == '# deposito':
+                            col_ref_tb = col
+                            break
+                    
+                    # Si no, buscar cualquier columna que contenga "referencia"
+                    if col_ref_tb is None:
+                        for col in df_tb_clean.columns:
+                            if 'referencia' in str(col).lower() or 'deposito' in str(col).lower():
+                                col_ref_tb = col
+                                break
+                    
+                    # Buscar columna de monto (priorizar 'monto')
+                    for col in df_tb_clean.columns:
+                        col_lower = str(col).lower().strip()
                         if col_lower == 'monto':
                             col_monto_tb = col
                             break
                     
-                    # Verificar si la columna 'monto' tiene valores numéricos
-                    if col_monto_tb is not None:
-                        # Intentar convertir a numérico y ver si hay valores válidos
-                        try:
-                            test_values = df_tb_clean[col_monto_tb].apply(ProcesadorArchivos._convertir_numero_europeo)
-                            if test_values.notna().sum() == 0 or test_values.sum() == 0:
-                                # La columna 'monto' no tiene valores numéricos (probablemente fórmulas)
-                                col_monto_tb = None
-                        except:
-                            col_monto_tb = None
-                    
-                    # Si no funciona, buscar columna '$' o 'usd'
+                    # Si no, buscar '$' o 'usd'
                     if col_monto_tb is None:
                         for col in df_tb_clean.columns:
-                            col_lower = str(col).lower()
+                            col_lower = str(col).lower().strip()
                             if col_lower == '$' or col_lower == 'usd':
                                 col_monto_tb = col
                                 break
                     
-                    # Si aún no se encuentra, buscar columna 'total' o 'importe'
-                    if col_monto_tb is None:
-                        col_monto_tb = ProcesadorArchivos._buscar_columna(df_tb_clean, 'monto', 'total', 'importe')
-
-                    # Fallback final: buscar cualquier columna numérica que no sea fecha o referencia
+                    # Si aún no, buscar cualquier columna numérica
                     if col_monto_tb is None:
                         for col in df_tb_clean.columns:
-                            col_lower = str(col).lower()
-                            if col_lower not in ['fecha', 'referencia', 'descripcion', 'tasa', 'listo', 'usd', '$']:
-                                try:
-                                    test_values = pd.to_numeric(df_tb_clean[col], errors='coerce')
-                                    if test_values.notna().sum() > 0 and test_values.sum() > 0:
-                                        col_monto_tb = col
-                                        break
-                                except:
-                                    pass
-
-                    # 🔥 DEPURACIÓN: Mostrar qué columna se está usando
-                    st.info(f"🔍 Columna de monto en TB: '{col_monto_tb}' | Columna de referencia: '{col_ref_tb}'")
+                            try:
+                                test = pd.to_numeric(df_tb_clean[col], errors='coerce')
+                                if test.notna().sum() > 3:
+                                    col_monto_tb = col
+                                    break
+                            except:
+                                pass
                     
+                    # 🔥 SI FALLA, MOSTRAR COLUMNAS DISPONIBLES
+                    if col_ref_tb is None or col_monto_tb is None:
+                        st.error(f"❌ Columnas disponibles en TB: {list(df_tb_clean.columns)}")
+                        st.info(f"🔍 Columna referencia: {col_ref_tb}")
+                        st.info(f"🔍 Columna monto: {col_monto_tb}")
+                    
+                    # 🔥 EXTRAER MOVIMIENTOS DE TB
                     tb_dia_map = {}
+                    filas_procesadas = 0
+                    
                     for idx, row in df_tb_clean.iterrows():
+                        if col_ref_tb is None or col_monto_tb is None:
+                            break
+                            
                         ref_t = str(row[col_ref_tb]).strip() if col_ref_tb in df_tb_clean.columns else ""
                         monto_t = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_tb]) if col_monto_tb in df_tb_clean.columns else 0.0
                         
-                        if ref_t.lower() in ['nan', 'none', ''] or not ref_t:
+                        # Saltar filas vacías o con textos de total
+                        if not ref_t or ref_t.lower() in ['nan', 'none', '']:
                             continue
-                            
+                        
+                        # Saltar filas de total
+                        if 'total' in ref_t.lower():
+                            continue
+                        
+                        # 🔥 INTENTAR EXTRAER NÚMEROS DE LA REFERENCIA
+                        ref_norm = re.sub(r'[^0-9]', '', ref_t)
+                        
+                        # Si la referencia no tiene números, intentar con la siguiente fila
+                        if not ref_norm:
+                            continue
+                        
+                        # Si el monto es válido (>0), guardar
                         if monto_t and monto_t > 0:
-                            ref_t_norm = re.sub(r'[^0-9]', '', ref_t)
-                            tb_dia_map[ref_t_norm] = {
+                            tb_dia_map[ref_norm] = {
                                 'monto': float(monto_t), 
                                 'fila': idx + 1, 
                                 'orig': ref_t
                             }
+                            filas_procesadas += 1
                     
-                    # 🔥 DEPURACIÓN: Mostrar cuántos movimientos se encontraron en TB
-                    st.info(f"📊 Se encontraron {len(tb_dia_map)} movimientos en TB.xlsx con montos válidos.")
+                    st.info(f"📊 TB procesado: {len(tb_dia_map)} movimientos válidos extraídos")
                     
-                    # 🔥 BUSCAR ESPECÍFICAMENTE EL DUPLICADO DE 3040.84
-                    for ref_norm, info_cob in cobranzas_dia_map.items():
-                        if info_cob['monto'] == 3040.84:
-                            st.warning(f"🔍 Cobranza con monto 3040.84 encontrada: Ref {info_cob['orig']} (Fila {info_cob['fila']})")
-                            if ref_norm in tb_dia_map:
-                                st.error(f"✅ ¡DUPLICADO ENCONTRADO! La referencia {info_cob['orig']} también está en TB.xlsx con monto {tb_dia_map[ref_norm]['monto']}")
-                            else:
-                                st.warning(f"❌ La referencia {info_cob['orig']} NO está en TB.xlsx")
+                    # 🔥 BUSCAR ESPECÍFICAMENTE 059135450741
+                    ref_buscada = '059135450741'
+                    ref_norm_buscada = re.sub(r'[^0-9]', '', ref_buscada)
+                    
+                    if ref_norm_buscada in tb_dia_map:
+                        st.error(f"✅ ¡DUPLICADO ENCONTRADO! {ref_buscada} está en TB con monto {tb_dia_map[ref_norm_buscada]['monto']}")
+                    else:
+                        # Buscar por substring
+                        encontrado_parcial = False
+                        for ref_norm, info in tb_dia_map.items():
+                            if ref_buscada in info['orig'] or info['orig'] in ref_buscada:
+                                st.error(f"✅ ¡ENCONTRADO POR SUBSTR! {ref_buscada} está en TB como '{info['orig']}' con monto {info['monto']}")
+                                encontrado_parcial = True
+                                break
+                        if not encontrado_parcial:
+                            st.warning(f"❌ {ref_buscada} NO encontrado en TB (buscando con referencia normalizada '{ref_norm_buscada}')")
+                            # Mostrar primeras referencias para depuración
+                            st.info(f"Primeras referencias en TB: {list(tb_dia_map.keys())[:10]}")
 
                     # --- 3. CRUCE COBRANZAS vs TB ---
                     discrepancias_cob_tb = []
@@ -5228,7 +5283,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         st.success("✅ ¡Conciliación perfecta! Todas las cobranzas del día coinciden con los movimientos en TB.")
                 else:
                     st.info("ℹ️ Carga los archivos de **Cobranzas** y **TB.xlsx** para ejecutar el cruce automático entre Cobranzas y Transferencias en Tránsito.")
-        
         # ============================================================
         # 🔥 TRAZABILIDAD DE CUENTAS POR COBRAR (CON KPIs + MOTOR DE AUDITORÍA)
         # ============================================================
