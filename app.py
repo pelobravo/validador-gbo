@@ -13,6 +13,7 @@
 # 🎯 AGREGADO: Motor automático de detección de errores interdiarios (Cobranzas)
 # 🚨 NUEVO: Auditoría de seguridad para detectar transferencias en TB ya aplicadas en Cobranzas
 # 🔥 MEJORADO: Detección de duplicados por REFERENCIA y por MONTO en TB vs Cobranzas
+# 🔥 CORREGIDO: Extracción de columna de monto en TB (prioriza 'monto' sobre 'USD')
 
 import streamlit as st
 import pandas as pd
@@ -4859,8 +4860,32 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         df_tb_clean.columns = [str(c).strip().lower() for c in df_tb_clean.iloc[0]]
                         df_tb_clean = df_tb_clean.iloc[1:].reset_index(drop=True)
 
+                    # 🔥 BUSCAR COLUMNA DE MONTO (priorizar 'monto' sobre 'USD')
                     col_ref_tb = ProcesadorArchivos._buscar_columna(df_tb_clean, 'referencia', 'nro', 'documento')
-                    col_monto_tb = ProcesadorArchivos._buscar_columna(df_tb_clean, 'monto', 'total', 'importe')
+
+                    # 🔥 FORZAR BÚSQUEDA DE MONTO: buscar 'monto' primero, luego 'total', luego 'importe'
+                    col_monto_tb = None
+                    for col in df_tb_clean.columns:
+                        col_lower = str(col).lower()
+                        if col_lower == 'monto':
+                            col_monto_tb = col
+                            break
+                    if col_monto_tb is None:
+                        col_monto_tb = ProcesadorArchivos._buscar_columna(df_tb_clean, 'monto', 'total', 'importe')
+
+                    # 🔥 Si no se encuentra, buscar cualquier columna numérica que no sea USD
+                    if col_monto_tb is None:
+                        for col in df_tb_clean.columns:
+                            col_lower = str(col).lower()
+                            if col_lower not in ['usd', '$', 'tasa', 'fecha', 'referencia', 'descripcion']:
+                                # Probar si la columna tiene números
+                                try:
+                                    df_tb_clean[col] = pd.to_numeric(df_tb_clean[col], errors='coerce')
+                                    if df_tb_clean[col].notna().sum() > 0:
+                                        col_monto_tb = col
+                                        break
+                                except:
+                                    pass
 
                     tb_dia_map = {}
                     for idx, row in df_tb_clean.iterrows():
