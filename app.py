@@ -4251,7 +4251,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     st.success("✅ Ajustes reseteados a 0")
                     st.rerun()
 
-       # ============================================================
+# ============================================================
 # 📋 DETALLE DEL CIERRE DIARIO - VERSIÓN MINIMALISTA
 # ============================================================
 st.markdown("#### 📋 Detalle del Cierre Diario")
@@ -4530,7 +4530,7 @@ with col_desc2:
         use_container_width=True
     )
         # 🔥 BOTÓN PARA DESCARGAR EL CIERRE DIARIO COMPLETO EN EXCEL
-        st.markdown("---")
+    st.markdown("---")
         col_desc1, col_desc2, col_desc3 = st.columns([1, 2, 1])
         with col_desc2:
             if st.button("📥 DESCARGAR CIERRE DIARIO COMPLETO (EXCEL)", use_container_width=True):
