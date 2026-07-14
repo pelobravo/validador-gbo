@@ -4531,37 +4531,37 @@ with col_desc2:
     )
         # 🔥 BOTÓN PARA DESCARGAR EL CIERRE DIARIO COMPLETO EN EXCEL
     st.markdown("---")
-        col_desc1, col_desc2, col_desc3 = st.columns([1, 2, 1])
-        with col_desc2:
-            if st.button("📥 DESCARGAR CIERRE DIARIO COMPLETO (EXCEL)", use_container_width=True):
-                # Crear DataFrame con el cierre completo
-                df_cierre_completo = pd.DataFrame(cierre_items)
-                df_cierre_completo['Monto'] = df_cierre_completo['monto']
-                df_cierre_completo = df_cierre_completo[['Concepto', 'tipo', 'Monto']]
-                df_cierre_completo['Monto'] = df_cierre_completo['Monto'].apply(formato_venezolano)
-                df_cierre_completo.columns = ['Concepto', 'Tipo', 'Monto (Bs.)']
-                
-                # Añadir resumen adicional
-                resumen_data = {
-                    'Concepto': ['TOTAL ACTIVOS', 'TOTAL PASIVOS', 'CAPITAL DE TRABAJO NETO'],
-                    'Tipo': ['RESUMEN', 'RESUMEN', 'RESUMEN'],
-                    'Monto (Bs.)': [
-                        formato_venezolano(activos_operativos),
-                        formato_venezolano(pasivos_operativos),
-                        formato_venezolano(capital_neto)
-                    ]
-                }
-                df_resumen = pd.DataFrame(resumen_data)
-                df_final = pd.concat([df_cierre_completo, df_resumen], ignore_index=True)
-                
-                excel_data = descargar_excel(df_final, "Cierre_Diario", fecha_procesar)
-                st.download_button(
-                    label="⬇️ Confirmar Descarga",
-                    data=excel_data,
-                    file_name=f"Cierre_Diario_{fecha_procesar.strftime('%Y-%m-%d')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="download_cierre_completo"
-                )
+    col_desc1, col_desc2, col_desc3 = st.columns([1, 2, 1])
+    with col_desc2:
+        if st.button("📥 DESCARGAR CIERRE DIARIO COMPLETO (EXCEL)", use_container_width=True):
+            # Crear DataFrame con el cierre completo
+            df_cierre_completo = pd.DataFrame(cierre_items)
+            df_cierre_completo['Monto'] = df_cierre_completo['monto']
+            df_cierre_completo = df_cierre_completo[['Concepto', 'tipo', 'Monto']]
+            df_cierre_completo['Monto'] = df_cierre_completo['Monto'].apply(formato_venezolano)
+            df_cierre_completo.columns = ['Concepto', 'Tipo', 'Monto (Bs.)']
+            
+            # Añadir resumen adicional
+            resumen_data = {
+                'Concepto': ['TOTAL ACTIVOS', 'TOTAL PASIVOS', 'CAPITAL DE TRABAJO NETO'],
+                'Tipo': ['RESUMEN', 'RESUMEN', 'RESUMEN'],
+                'Monto (Bs.)': [
+                    formato_venezolano(activos_operativos),
+                    formato_venezolano(pasivos_operativos),
+                    formato_venezolano(capital_neto)
+                ]
+            }
+            df_resumen = pd.DataFrame(resumen_data)
+            df_final = pd.concat([df_cierre_completo, df_resumen], ignore_index=True)
+            
+            excel_data = descargar_excel(df_final, "Cierre_Diario", fecha_procesar)
+            st.download_button(
+                label="⬇️ Confirmar Descarga",
+                data=excel_data,
+                file_name=f"Cierre_Diario_{fecha_procesar.strftime('%Y-%m-%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_cierre_completo"
+            )
 
         with st.expander("📂 Ver origen detallado de cada archivo", expanded=False):
             st.markdown("""
