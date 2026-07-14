@@ -3615,6 +3615,32 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     diferencia_bancos = bancos_calculado - saldo_final
     
     # ============================================================
+    # 🔥 DEFINIR VARIABLES PARA EL CIERRE DIARIO
+    # ============================================================
+    # Estas son las variables que se usan en el Cierre Diario
+    # Se toman de los archivos de verificación (no de los cálculos)
+    
+    # Cuentas por cobrar (CxC) - desde archivo CxC Reportado
+    cx_c_cierre = safe_number(saldos_reportados.get('Cuentas por cobrar', 0))
+    
+    # Inventario - desde archivo Inventario Reportado
+    inventario_cierre = safe_number(saldos_reportados.get('Inventario', 0))
+    
+    # Bancos - desde Estado de Cuenta (saldo final)
+    bancos_cierre = safe_number(saldo_final)
+    
+    # Cuentas por pagar (CxP) - desde archivo CxP Reportado
+    cx_p_cierre = safe_number(saldos_reportados.get('Cuentas por pagar', 0))
+    
+    # Transferencias en tránsito - desde archivo TB
+    transito_cierre = safe_number(saldos_reportados.get('Transferencias en tránsito', 0))
+    
+    # Activos y Pasivos para el Cierre
+    activos_operativos = cx_c_cierre + inventario_cierre + bancos_cierre
+    pasivos_operativos = cx_p_cierre + transito_cierre
+    capital_neto = activos_operativos - pasivos_operativos
+    
+    # ============================================================
     # ESTRUCTURA PRINCIPAL CON PESTAÑAS - AGREGADA PESTAÑA DE REPORTES
     # ============================================================
     tab_resumen, tab_conciliacion, tab_auditoria_archivos, tab_reportes = st.tabs([
@@ -4529,7 +4555,8 @@ with col_desc2:
         key="download_cierre_completo_minimal",
         use_container_width=True
     )
-        # 🔥 BOTÓN PARA DESCARGAR EL CIERRE DIARIO COMPLETO EN EXCEL
+    
+    # 🔥 BOTÓN PARA DESCARGAR EL CIERRE DIARIO COMPLETO EN EXCEL
     st.markdown("---")
     col_desc1, col_desc2, col_desc3 = st.columns([1, 2, 1])
     with col_desc2:
