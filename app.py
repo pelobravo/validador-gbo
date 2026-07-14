@@ -2428,7 +2428,7 @@ if (st.session_state.get("fact_top") is not None and
 # ============================================================
 # 📋 FUNCIÓN PARA RENDERIZAR ESTADO DE UPLOADER (VERSIÓN ROBUSTA)
 # ============================================================
-def renderizar_estado_uploader(archivo, columnas_esperadas=None, columnas_excluidas=None, nombre_archivo=None, palabras_clave_nombre=None):
+def renderizar_estado_uploader(archivo, columnas_esperadas=None, columnas_excluidas=None, nombre_archivo=None, palabras_clave_nombre=None, hoja_nombre=None):
     """
     Renderiza el estado de un uploader con colores y mensajes.
     VALIDA POR COLUMNAS en TODO el archivo Y por nombre de archivo.
@@ -2439,6 +2439,7 @@ def renderizar_estado_uploader(archivo, columnas_esperadas=None, columnas_exclui
         columnas_excluidas: Lista de columnas que NO debe tener (opcional)
         nombre_archivo: Nombre descriptivo para mensajes de error (opcional)
         palabras_clave_nombre: Palabras clave que debe tener el nombre del archivo (opcional)
+        hoja_nombre: Nombre específico de la hoja a leer (opcional)
     
     Returns:
         bool: True si el archivo es válido, False si no
@@ -2447,7 +2448,7 @@ def renderizar_estado_uploader(archivo, columnas_esperadas=None, columnas_exclui
         st.warning("⏳ PENDIENTE")
         return False
     
-    # 🔥 1. VALIDAR POR NOMBRE DE ARCHIVO (primera línea de defensa)
+    # Validar por nombre de archivo
     if palabras_clave_nombre:
         nombre_lower = archivo.name.lower()
         nombre_valido = False
@@ -2467,43 +2468,61 @@ def renderizar_estado_uploader(archivo, columnas_esperadas=None, columnas_exclui
         return True
     
     try:
-        # 🔥 2. LEER TODO EL ARCHIVO y buscar columnas en cualquier fila
-        df_raw = pd.read_excel(archivo, header=None)
+        # 🔥 LEER TODAS LAS HOJAS DEL ARCHIVO
+        xls = pd.ExcelFile(archivo)
+        hojas = xls.sheet_names
         
-        # Buscar en TODAS las filas si alguna contiene las columnas esperadas o excluidas
+        # Si se especificó una hoja, solo buscar en esa
+        if hoja_nombre and hoja_nombre in hojas:
+            hojas_a_buscar = [hoja_nombre]
+        else:
+            hojas_a_buscar = hojas
+        
         columnas_encontradas = set()
         columnas_excluidas_encontradas = set()
         
-        # Recorrer todas las filas buscando coincidencias de columnas
-        for idx, row in df_raw.iterrows():
-            row_str = ' '.join([str(x).lower() for x in row.values if pd.notna(x)])
-            
-            # Buscar columnas esperadas
-            if columnas_esperadas:
-                for col_esp in columnas_esperadas:
-                    col_esp_lower = col_esp.lower()
-                    if col_esp_lower in row_str:
-                        columnas_encontradas.add(col_esp)
-            
-            # Buscar columnas excluidas
-            if columnas_excluidas:
-                for col_excl in columnas_excluidas:
-                    col_excl_lower = col_excl.lower()
-                    if col_excl_lower in row_str:
-                        columnas_excluidas_encontradas.add(col_excl)
-            
-            # Si ya encontramos todo lo que necesitamos, salir temprano
-            if columnas_esperadas and len(columnas_encontradas) >= len(columnas_esperadas):
-                break
+        # Buscar en cada hoja
+        for hoja in hojas_a_buscar:
+            try:
+                df_raw = pd.read_excel(archivo, sheet_name=hoja, header=None)
+                
+                # Recorrer todas las filas buscando coincidencias
+                for idx, row in df_raw.iterrows():
+                    row_str = ' '.join([str(x).lower() for x in row.values if pd.notna(x)])
+                    
+                    # Buscar columnas esperadas
+                    if columnas_esperadas:
+                        for col_esp in columnas_esperadas:
+                            col_esp_lower = col_esp.lower()
+                            if col_esp_lower in row_str:
+                                columnas_encontradas.add(col_esp)
+                    
+                    # Buscar columnas excluidas
+                    if columnas_excluidas:
+                        for col_excl in columnas_excluidas:
+                            col_excl_lower = col_excl.lower()
+                            if col_excl_lower in row_str:
+                                columnas_excluidas_encontradas.add(col_excl)
+                    
+                    # Si ya encontramos todo, salir
+                    if columnas_esperadas and len(columnas_encontradas) >= len(columnas_esperadas):
+                        break
+                
+                # Si encontramos todo en esta hoja, salir del loop de hojas
+                if columnas_esperadas and len(columnas_encontradas) >= len(columnas_esperadas):
+                    break
+                    
+            except Exception as e:
+                continue
         
-        # 🔥 3. VERIFICAR COLUMNAS EXCLUIDAS (detectar archivo equivocado)
+        # Verificar columnas excluidas
         if columnas_excluidas and columnas_excluidas_encontradas:
             st.error("❌ RECHAZADO")
             if nombre_archivo:
                 st.caption(f"📌 {nombre_archivo} parece ser un archivo de otro tipo")
             return False
         
-        # 🔥 4. VERIFICAR COLUMNAS ESPERADAS
+        # Verificar columnas esperadas
         if columnas_esperadas:
             if len(columnas_encontradas) >= len(columnas_esperadas):
                 st.success("✅ CARGADO CORRECTO")
@@ -2519,7 +2538,7 @@ def renderizar_estado_uploader(archivo, columnas_esperadas=None, columnas_exclui
         
     except Exception as e:
         st.error("❌ RECHAZADO")
-        st.caption(f"📌 Error al leer el archivo")
+        st.caption(f"📌 Error al leer el archivo: {str(e)[:50]}...")
         return False
 
 
@@ -2537,7 +2556,6 @@ with st.container():
     
     with col_u1:
         archivo_facturacion = st.file_uploader("📊 Facturación", type=["xlsx", "xls"], key="fact_top")
-        # 🔥 Facturación: busca 'vendedor','total' | excluye 'deposito','monto'
         renderizar_estado_uploader(
             archivo_facturacion,
             columnas_esperadas=['vendedor', 'total'],
@@ -2548,7 +2566,6 @@ with st.container():
         
     with col_u2:
         archivo_cobranzas = st.file_uploader("💰 Cobranzas", type=["xlsx", "xls"], key="cob_top")
-        # 🔥 Cobranzas: busca 'deposito','monto' | excluye 'vendedor','total'
         renderizar_estado_uploader(
             archivo_cobranzas,
             columnas_esperadas=['deposito', 'monto'],
@@ -2568,13 +2585,36 @@ with st.container():
         
     with col_u4:
         archivo_estado_cuenta = st.file_uploader("🏦 Estado de Cuenta", type=["xlsx", "xls"], key="estado_top")
-        # 🔥 Estado de Cuenta: busca 'fecha','referencia','monto'
-        renderizar_estado_uploader(
-            archivo_estado_cuenta,
-            columnas_esperadas=['fecha', 'referencia', 'monto'],
-            nombre_archivo='Estado de Cuenta',
-            palabras_clave_nombre=['estado', 'cuenta', 'cierre', 'conciliacion']
-        )
+        
+        # 🔥 Estado de Cuenta: Buscar la hoja correcta automáticamente
+        if archivo_estado_cuenta is not None:
+            try:
+                xls = pd.ExcelFile(archivo_estado_cuenta)
+                hoja_datos = None
+                
+                # Buscar hoja que contenga datos (REPORTE, DETALLE, INGRESOS, etc.)
+                for hoja in xls.sheet_names:
+                    hoja_lower = hoja.lower()
+                    if 'reporte' in hoja_lower or 'detalle' in hoja_lower or 'ingresos' in hoja_lower or 'egresos' in hoja_lower:
+                        hoja_datos = hoja
+                        break
+                
+                # Si no se encontró, usar la segunda hoja (índice 1)
+                if hoja_datos is None and len(xls.sheet_names) >= 2:
+                    hoja_datos = xls.sheet_names[1]
+                
+                renderizar_estado_uploader(
+                    archivo_estado_cuenta,
+                    columnas_esperadas=['fecha', 'referencia', 'monto'],
+                    nombre_archivo='Estado de Cuenta',
+                    palabras_clave_nombre=['estado', 'cuenta', 'cierre', 'conciliacion'],
+                    hoja_nombre=hoja_datos
+                )
+            except Exception as e:
+                st.error("❌ RECHAZADO")
+                st.caption(f"📌 Error al leer el archivo: {str(e)[:50]}...")
+        else:
+            st.warning("⏳ PENDIENTE")
     
     # ============================================================
     # 2. ARCHIVOS OPCIONALES
