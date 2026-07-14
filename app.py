@@ -5096,7 +5096,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         cliente = str(row[col_cliente_cob]).strip() if col_cliente_cob in df_cob_clean.columns else "No identificado"
                         
                         if monto and monto > 0:
-                            # 🔥 MANTENER EL 0 INICIAL
                             ref_norm = re.sub(r'[^0-9]', '', ref) if ref else f"cob_sin_ref_{idx}"
                             cobranzas_dia_map[ref_norm] = {
                                 'monto': float(monto), 
@@ -5105,100 +5104,80 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 'cliente': cliente
                             }
 
-                    # --- 2. EXTRAER MOVIMIENTOS DE TB (LEER TODAS LAS FILAS) ---
-                    df_tb_clean = ProcesadorArchivos._limpiar_columnas(df_tb)
+                    # --- 2. EXTRAER TODAS LAS REFERENCIAS DE TB (IGNORANDO MONTO) ---
+                    # 🔥 LEER EL ARCHIVO TB COMPLETO CON PANDAS
+                    try:
+                        df_tb_raw = pd.read_excel(archivo_tb, header=None)
+                    except:
+                        df_tb_raw = df_tb
                     
-                    # 🔥 BUSCAR FILA DE ENCABEZADO
-                    idx_inicio = None
-                    for idx, row in df_tb_clean.iterrows():
-                        fila_texto = ' '.join([str(x).lower() for x in row.values if pd.notna(x)])
-                        if 'referencia' in fila_texto and 'monto' in fila_texto:
-                            idx_inicio = idx
+                    # 🔥 BUSCAR LA FILA QUE CONTIENE "REFERENCIA" COMO ENCABEZADO
+                    idx_header = None
+                    for idx, row in df_tb_raw.iterrows():
+                        row_str = ' '.join([str(x).lower() for x in row.values if pd.notna(x)])
+                        if 'referencia' in row_str:
+                            idx_header = idx
                             break
                     
-                    if idx_inicio is None:
-                        for idx, row in df_tb_clean.iterrows():
-                            fila_texto = ' '.join([str(x).lower() for x in row.values if pd.notna(x)])
-                            if 'fecha' in fila_texto and 'referencia' in fila_texto:
-                                idx_inicio = idx
+                    # 🔥 SI NO ENCUENTRA, BUSCAR EN CUALQUIER FILA
+                    if idx_header is None:
+                        for idx, row in df_tb_raw.iterrows():
+                            row_str = ' '.join([str(x).lower() for x in row.values if pd.notna(x)])
+                            if 'referencia' in row_str:
+                                idx_header = idx
                                 break
                     
-                    if idx_inicio is None:
-                        for idx, row in df_tb_clean.iterrows():
-                            fila_texto = ' '.join([str(x).lower() for x in row.values if pd.notna(x)])
-                            if 'referencia' in fila_texto:
-                                idx_inicio = idx
-                                break
+                    # 🔥 SI NO ENCUENTRA, USAR LA FILA 0 COMO ENCABEZADO
+                    if idx_header is None:
+                        idx_header = 0
                     
-                    if idx_inicio is not None:
-                        df_datos = df_tb_clean.iloc[idx_inicio:].reset_index(drop=True)
-                        if len(df_datos) > 0:
-                            header_row = df_datos.iloc[0]
-                            nuevas_columnas = []
-                            for col in header_row:
-                                if pd.notna(col):
-                                    nuevas_columnas.append(str(col).strip().lower())
-                                else:
-                                    nuevas_columnas.append(f'col_{len(nuevas_columnas)}')
-                            df_datos.columns = nuevas_columnas
-                            # 🔥 IMPORTANTE: PROCESAR TODAS LAS FILAS
-                            df_tb_clean = df_datos.iloc[1:].reset_index(drop=True)
+                    # 🔥 CREAR EL DATAFRAME CON ENCABEZADOS
+                    header_row = df_tb_raw.iloc[idx_header]
+                    col_names = []
+                    for col in header_row:
+                        if pd.notna(col):
+                            col_names.append(str(col).strip().lower())
+                        else:
+                            col_names.append(f'col_{len(col_names)}')
                     
-                    # 🔥 IDENTIFICAR COLUMNAS
+                    # 🔥 TODAS LAS FILAS DESPUÉS DEL ENCABEZADO
+                    df_tb_clean = df_tb_raw.iloc[idx_header+1:].reset_index(drop=True)
+                    df_tb_clean.columns = col_names
+                    
+                    # 🔥 IDENTIFICAR COLUMNA DE REFERENCIA
                     col_ref_tb = None
-                    col_monto_tb = None
                     
-                    # Columna de referencia
+                    # Buscar por nombre exacto
                     for col in df_tb_clean.columns:
                         col_lower = str(col).lower().strip()
                         if col_lower == 'referencia' or col_lower == 'nro' or col_lower == 'documento':
                             col_ref_tb = col
                             break
                     
+                    # Si no, buscar por contenido
                     if col_ref_tb is None:
                         for col in df_tb_clean.columns:
                             if 'referencia' in str(col).lower():
                                 col_ref_tb = col
                                 break
                     
-                    # 🔥 COLUMNA DE MONTO: FORZAR '$'
-                    for col in df_tb_clean.columns:
-                        col_lower = str(col).lower().strip()
-                        if col_lower == '$':
-                            col_monto_tb = col
-                            break
+                    # Si no, usar la columna 2 (C) que normalmente es REFERENCIA
+                    if col_ref_tb is None and len(df_tb_clean.columns) > 2:
+                        col_ref_tb = df_tb_clean.columns[2]
                     
-                    if col_monto_tb is None:
-                        for col in df_tb_clean.columns:
-                            col_lower = str(col).lower().strip()
-                            if col_lower == 'usd':
-                                col_monto_tb = col
-                                break
+                    st.info(f"🔍 Columna referencia en TB: '{col_ref_tb}'")
+                    st.info(f"📊 Total filas en TB: {len(df_tb_clean)}")
                     
-                    if col_monto_tb is None:
-                        for col in df_tb_clean.columns:
-                            col_lower = str(col).lower().strip()
-                            if col_lower == 'monto':
-                                col_monto_tb = col
-                                break
-                    
-                    st.info(f"🔍 Columna referencia: '{col_ref_tb}' | Columna monto: '{col_monto_tb}'")
-                    st.info(f"📊 Total filas en TB (después de encabezado): {len(df_tb_clean)}")
-                    
-                    # 🔥 EXTRAER MOVIMIENTOS DE TB (TODAS LAS FILAS)
-                    tb_dia_map = {}
+                    # 🔥 EXTRAER SOLO LAS REFERENCIAS DE TB
+                    tb_referencias = {}
                     
                     for idx, row in df_tb_clean.iterrows():
-                        if col_ref_tb is None or col_monto_tb is None:
+                        if col_ref_tb is None:
                             break
                             
                         ref_t = str(row[col_ref_tb]).strip() if col_ref_tb in df_tb_clean.columns else ""
                         
-                        # 🔥 Si la referencia tiene .0 al final, quitarlo
-                        if ref_t.endswith('.0'):
-                            ref_t = ref_t[:-2]
-                        
-                        # 🔥 Si la referencia está vacía o es NaN, saltar
+                        # 🔥 Si la referencia es NaN o está vacía, saltar
                         if not ref_t or ref_t.lower() in ['nan', 'none', '']:
                             continue
                         
@@ -5206,29 +5185,23 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         if 'total' in ref_t.lower():
                             continue
                         
-                        # 🔥 Obtener el monto
-                        monto_t = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_tb]) if col_monto_tb in df_tb_clean.columns else 0.0
+                        # 🔥 ELIMINAR SOLO EL .0 AL FINAL (SI EXISTE)
+                        if ref_t.endswith('.0'):
+                            ref_t = ref_t[:-2]
                         
-                        # 🔥 Si el monto es 0, intentar con la columna 'monto' (si es diferente)
-                        if monto_t == 0 or monto_t is None:
-                            if 'monto' in df_tb_clean.columns and col_monto_tb != 'monto':
-                                monto_t = ProcesadorArchivos._convertir_numero_europeo(row['monto'])
-                        
-                        # 🔥 MANTENER EL 0 INICIAL
+                        # 🔥 MANTENER EL 0 INICIAL (NO ELIMINARLO)
                         ref_norm = re.sub(r'[^0-9]', '', ref_t)
                         
                         if not ref_norm:
                             continue
                         
-                        # 🔥 SOLO guardar si el monto es válido
-                        if monto_t and monto_t > 0:
-                            tb_dia_map[ref_norm] = {
-                                'monto': float(monto_t), 
-                                'fila': idx + 1, 
-                                'orig': ref_t
-                            }
+                        # 🔥 Guardar la referencia
+                        tb_referencias[ref_norm] = {
+                            'fila': idx + 1,
+                            'orig': ref_t
+                        }
                     
-                    st.info(f"📊 TB procesado: {len(tb_dia_map)} movimientos")
+                    st.info(f"📊 TB procesado: {len(tb_referencias)} referencias")
                     
                     # 🔥 BUSCAR ESPECÍFICAMENTE 059135450741
                     ref_buscada = '059135450741'
@@ -5236,31 +5209,33 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     
                     st.info(f"🔍 Buscando específicamente {ref_buscada} en TB...")
                     
-                    if ref_norm in tb_dia_map:
-                        st.error(f"✅ ¡ENCONTRADO! {ref_buscada} está en TB con monto {tb_dia_map[ref_norm]['monto']}")
+                    if ref_norm in tb_referencias:
+                        st.error(f"✅ ¡ENCONTRADO! {ref_buscada} está en TB en la fila {tb_referencias[ref_norm]['fila']}")
                     else:
                         # Buscar por substring
                         encontrado = False
-                        for ref_tb, info_tb in tb_dia_map.items():
-                            if ref_buscada in info_tb['orig']:
-                                st.error(f"✅ ¡ENCONTRADO POR SUBSTR! {ref_buscada} está en TB como '{info_tb['orig']}' con monto {info_tb['monto']}")
+                        for ref_key, ref_info in tb_referencias.items():
+                            if ref_buscada in ref_info['orig']:
+                                st.error(f"✅ ¡ENCONTRADO POR SUBSTR! {ref_buscada} está en TB como '{ref_info['orig']}' en la fila {ref_info['fila']}")
                                 encontrado = True
-                                # 🔥 Agregar al mapa con la referencia correcta
-                                tb_dia_map[ref_norm] = info_tb
                                 break
                         
                         if not encontrado:
                             st.warning(f"❌ {ref_buscada} NO está en TB")
-                            # Mostrar las últimas filas de TB para depuración
-                            st.info(f"Últimas 10 filas de TB (para verificar si la referencia está):")
-                            st.dataframe(df_tb_clean.tail(10))
+                            # Mostrar referencias similares
+                            similares = []
+                            for ref_key, ref_info in tb_referencias.items():
+                                if '135450741' in ref_key or '59135450741' in ref_key:
+                                    similares.append(f"{ref_info['orig']} ({ref_key}) - Fila {ref_info['fila']}")
+                            if similares:
+                                st.info(f"Referencias similares en TB: {similares}")
                     
                     # 🔥 BUSCAR DUPLICADOS POR REFERENCIA
                     duplicados_encontrados = []
                     
                     for ref_cob, info_cob in cobranzas_dia_map.items():
-                        if ref_cob in tb_dia_map:
-                            info_tb = tb_dia_map[ref_cob]
+                        if ref_cob in tb_referencias:
+                            info_tb = tb_referencias[ref_cob]
                             duplicados_encontrados.append({
                                 'Referencia': info_cob['orig'],
                                 'Monto': info_cob['monto'],
@@ -5268,7 +5243,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 'Fila TB': info_tb['fila'],
                                 'Cliente': info_cob['cliente']
                             })
-                            st.error(f"✅ DUPLICADO ENCONTRADO: {info_cob['orig']} | Monto: {info_cob['monto']} | Cob: Fila {info_cob['fila']} | TB: Fila {info_tb['fila']}")
+                            st.error(f"✅ DUPLICADO ENCONTRADO: {info_cob['orig']} | Cob: Fila {info_cob['fila']} | TB: Fila {info_tb['fila']}")
                     
                     # 🔥 MOSTRAR DUPLICADOS ENCONTRADOS
                     if duplicados_encontrados:
@@ -5285,34 +5260,6 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 st.error(f"🎯 ¡ENCONTRADO! La referencia 059135450741 está duplicada en Cobranzas y TB por {formato_venezolano(dup['Monto'])} Bs.")
                     else:
                         st.success("✅ No se encontraron duplicados por referencia entre Cobranzas y TB.")
-                        
-                        # 🔥 DEPURACIÓN: Mostrar la referencia buscada
-                        ref_buscada = '059135450741'
-                        ref_norm = re.sub(r'[^0-9]', '', ref_buscada)
-                        
-                        if ref_norm in cobranzas_dia_map:
-                            st.info(f"🔍 {ref_buscada} está en Cobranzas con monto {cobranzas_dia_map[ref_norm]['monto']}")
-                        
-                        if ref_norm in tb_dia_map:
-                            st.error(f"✅ {ref_buscada} está en TB con monto {tb_dia_map[ref_norm]['monto']}")
-                            # 🔥 FORZAR: Agregar al mapa de duplicados
-                            duplicados_encontrados.append({
-                                'Referencia': ref_buscada,
-                                'Monto': cobranzas_dia_map[ref_norm]['monto'],
-                                'Fila Cobranzas': cobranzas_dia_map[ref_norm]['fila'],
-                                'Fila TB': tb_dia_map[ref_norm]['fila'],
-                                'Cliente': cobranzas_dia_map[ref_norm]['cliente']
-                            })
-                            st.error(f"🎯 ¡ENCONTRADO! La referencia {ref_buscada} está duplicada en Cobranzas y TB por {formato_venezolano(cobranzas_dia_map[ref_norm]['monto'])} Bs.")
-                        else:
-                            st.warning(f"❌ {ref_buscada} NO está en TB")
-                            # Mostrar referencias similares
-                            similares = []
-                            for ref_tb, info_tb in tb_dia_map.items():
-                                if '135450741' in ref_tb or '59135450741' in ref_tb:
-                                    similares.append(f"{info_tb['orig']} ({ref_tb})")
-                            if similares:
-                                st.info(f"Referencias similares en TB: {similares}")
                 else:
                     st.info("ℹ️ Carga los archivos de **Cobranzas** y **TB.xlsx** para ejecutar el cruce automático entre Cobranzas y Transferencias en Tránsito.")
         # ============================================================
