@@ -15,6 +15,9 @@
 # 🔥 MEJORADO: Detección de duplicados por REFERENCIA y por MONTO en TB vs Cobranzas
 # 🔥 CORREGIDO: Extracción de columna de monto en TB (prioriza 'monto' sobre 'USD')
 # 🔥 CORREGIDO: Cruce Cobranzas vs TB (Transferencias en Tránsito) en lugar de Estado de Cuenta
+# 📊 NUEVO: Módulo de Reportes con análisis de egresos por tipo de pago y CxP por empresa
+# 🔥 CORREGIDO: KPI de Total Egresos usa total_egresos (iPago) en lugar de total_egresos_banco
+# 📥 AGREGADO: Botones de descarga en Excel para todos los reportes y archivos del Cierre Diario
 
 import streamlit as st
 import pandas as pd
@@ -73,6 +76,24 @@ def consultar_deepseek(pregunta, contexto=""):
 # ============================================================
 # FIN FUNCIÓN DEEPSEEK
 # ============================================================
+
+# ============================================================
+# 🔥 FUNCIÓN PARA DESCARGAR EN EXCEL
+# ============================================================
+def descargar_excel(df, nombre_archivo, fecha):
+    """
+    Convierte un DataFrame a Excel y lo prepara para descarga.
+    """
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Datos')
+        # Ajustar ancho de columnas automáticamente
+        for column in df:
+            column_length = max(df[column].astype(str).map(len).max(), len(str(column)))
+            col_idx = df.columns.get_loc(column)
+            writer.sheets['Datos'].column_dimensions[chr(65 + col_idx)].width = min(column_length + 2, 50)
+    output.seek(0)
+    return output
 
 # ============================================================
 # 🔥 FUNCIÓN PARA BUSCAR CANDIDATOS POR MONTO (NUEVA)
@@ -3579,12 +3600,13 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     diferencia_bancos = bancos_calculado - saldo_final
     
     # ============================================================
-    # ESTRUCTURA PRINCIPAL CON PESTAÑAS
+    # ESTRUCTURA PRINCIPAL CON PESTAÑAS - AGREGADA PESTAÑA DE REPORTES
     # ============================================================
-    tab_resumen, tab_conciliacion, tab_auditoria_archivos = st.tabs([
+    tab_resumen, tab_conciliacion, tab_auditoria_archivos, tab_reportes = st.tabs([
         "📈 Resumen Ejecutivo", 
         "🔍 Conciliación y Auditoría Profunda", 
-        "📄 Archivos Fuente y Auditoría del Bot"
+        "📄 Archivos Fuente y Auditoría del Bot",
+        "📊 Reportes y Análisis"  # 🆕 NUEVA PESTAÑA
     ])
     
     # ============================================================
@@ -3703,7 +3725,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         st.markdown("---")
     
         # ============================================================
-        # 🔥 SALDO DEL ESTADO DE CUENTA - MODIFICADO CON mostrar_kpi_paso_paso
+        # 🔥 SALDO DEL ESTADO DE CUENTA - CORREGIDO: total_egresos en lugar de total_egresos_banco
         # ============================================================
         st.markdown("#### 📊 Saldo del Estado de Cuenta")
         st.caption("💡 Este es el saldo que viene del archivo de estado de cuenta")
@@ -3712,7 +3734,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
 
         mostrar_kpi_paso_paso(col_ec1, "Saldo Inicial", saldo_inicial_bancos, "🏦", "blue")
         mostrar_kpi_paso_paso(col_ec2, "Ingresos", total_ingresos, "📈", "green")
-        mostrar_kpi_paso_paso(col_ec3, "Egresos", total_egresos_banco, "📉", "red")
+        # 🔥 CORREGIDO: Ahora usa total_egresos (iPago) en lugar de total_egresos_banco
+        mostrar_kpi_paso_paso(col_ec3, "Egresos iPago", total_egresos, "📉", "red")
         mostrar_kpi_paso_paso(col_ec4, "Saldo Final", saldo_final, "🏁", "orange")
 
         st.markdown("---")
@@ -4214,7 +4237,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     st.rerun()
 
         # ============================================================
-        # CIERRE DIARIO - RESUMEN
+        # CIERRE DIARIO - RESUMEN CON BOTONES VER/DESCARGAR
         # ============================================================
         st.markdown("---")
         st.markdown("#### 📊 CIERRE DIARIO - Capital de Trabajo Neto")
@@ -4315,39 +4338,140 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         pasivos_operativos = cx_p_cierre + transito_cierre
         capital_neto = activos_operativos - pasivos_operativos
 
+        # ============================================================
+        # 📋 DETALLE DEL CIERRE DIARIO CON BOTONES VER/DESCARGAR
+        # ============================================================
         st.markdown("#### 📋 Detalle del Cierre Diario")
 
-        cierre_detalle = [
-            {"Concepto": "📦 Inventario", "Archivo Origen": origen_archivos.get('Inventario', 'NO DISPONIBLE'), "Tipo": "ACTIVO", "Monto": formato_venezolano(inventario_cierre)},
-            {"Concepto": "💰 Cuentas por cobrar", "Archivo Origen": origen_archivos.get('CxC', 'NO DISPONIBLE'), "Tipo": "ACTIVO", "Monto": formato_venezolano(cx_c_cierre)},
-            {"Concepto": "🏦 Bancos", "Archivo Origen": origen_archivos.get('Bancos', 'NO DISPONIBLE'), "Tipo": "ACTIVO", "Monto": formato_venezolano(bancos_cierre)},
-            {"Concepto": "📌 TOTAL ACTIVOS OPERATIVOS", "Archivo Origen": "Suma de activos", "Tipo": "ACTIVO_TOTAL", "Monto": formato_venezolano(activos_operativos)},
-            {"Concepto": "📋 Cuentas por pagar", "Archivo Origen": origen_archivos.get('CxP', 'NO DISPONIBLE'), "Tipo": "PASIVO", "Monto": formato_venezolano(cx_p_cierre)},
-            {"Concepto": "🔄 Transferencias en tránsito", "Archivo Origen": origen_archivos.get('Tránsito', 'NO DISPONIBLE'), "Tipo": "PASIVO", "Monto": formato_venezolano(transito_cierre)},
-            {"Concepto": "📌 TOTAL PASIVOS OPERATIVOS", "Archivo Origen": "Suma de pasivos", "Tipo": "PASIVO_TOTAL", "Monto": formato_venezolano(pasivos_operativos)},
-            {"Concepto": "🏁 CAPITAL DE TRABAJO NETO", "Archivo Origen": "Activos - Pasivos", "Tipo": "CAPITAL", "Monto": formato_venezolano(capital_neto)}
+        # Definir los items con referencia al archivo
+        cierre_items = [
+            {"Concepto": "📦 Inventario", "clave": "Inventario", "tipo": "ACTIVO", "monto": inventario_cierre},
+            {"Concepto": "💰 Cuentas por cobrar", "clave": "CxC", "tipo": "ACTIVO", "monto": cx_c_cierre},
+            {"Concepto": "🏦 Bancos", "clave": "Bancos", "tipo": "ACTIVO", "monto": bancos_cierre},
+            {"Concepto": "📌 TOTAL ACTIVOS OPERATIVOS", "clave": None, "tipo": "ACTIVO_TOTAL", "monto": activos_operativos},
+            {"Concepto": "📋 Cuentas por pagar", "clave": "CxP", "tipo": "PASIVO", "monto": cx_p_cierre},
+            {"Concepto": "🔄 Transferencias en tránsito", "clave": "Tránsito", "tipo": "PASIVO", "monto": transito_cierre},
+            {"Concepto": "📌 TOTAL PASIVOS OPERATIVOS", "clave": None, "tipo": "PASIVO_TOTAL", "monto": pasivos_operativos},
+            {"Concepto": "🏁 CAPITAL DE TRABAJO NETO", "clave": None, "tipo": "CAPITAL", "monto": capital_neto}
         ]
 
-        df_cierre = pd.DataFrame(cierre_detalle)
+        # Mapeo de claves a archivos
+        archivo_mapeo = {
+            "Inventario": archivo_inventario_reportado,
+            "CxC": archivo_cxc_reportado,
+            "Bancos": archivo_estado_cuenta,
+            "CxP": archivo_cxp_reportado,
+            "Tránsito": archivo_tb
+        }
 
-        def color_cierre_rows(row):
-            if row['Tipo'] == 'ACTIVO_TOTAL':
-                return ['background-color: #e8f5e9; font-weight: bold;'] * len(row)
-            elif row['Tipo'] == 'PASIVO_TOTAL':
-                return ['background-color: #fff3e0; font-weight: bold;'] * len(row)
-            elif row['Tipo'] == 'CAPITAL':
-                if capital_neto >= 0:
-                    return ['background-color: #0f3d2e; color: white; font-weight: bold; font-size: 1.1rem;'] * len(row)
+        # Mapeo de claves a DataFrames
+        df_mapeo = {
+            "Inventario": archivos_cargados.get('Inventario'),
+            "CxC": archivos_cargados.get('CxC'),
+            "Bancos": df_estado_cuenta if 'df_estado_cuenta' in locals() else None,
+            "CxP": archivos_cargados.get('CxP'),
+            "Tránsito": archivos_cargados.get('Tránsito')
+        }
+
+        # Inicializar estados de visualización
+        for clave in df_mapeo.keys():
+            if f'ver_archivo_{clave}' not in st.session_state:
+                st.session_state[f'ver_archivo_{clave}'] = False
+
+        for item in cierre_items:
+            col1, col2, col3, col4 = st.columns([2.5, 3.5, 1.5, 2])
+            
+            with col1:
+                if item['tipo'] in ['ACTIVO_TOTAL', 'PASIVO_TOTAL', 'CAPITAL']:
+                    st.markdown(f"**{item['Concepto']}**")
                 else:
-                    return ['background-color: #3d1a1a; color: white; font-weight: bold; font-size: 1.1rem;'] * len(row)
-            elif row['Tipo'] == 'ACTIVO':
-                return ['background-color: #f1f8f4;'] * len(row)
-            elif row['Tipo'] == 'PASIVO':
-                return ['background-color: #fff8f0;'] * len(row)
-            return [''] * len(row)
+                    st.markdown(item['Concepto'])
+            
+            with col2:
+                clave = item.get('clave')
+                if clave and clave in archivo_mapeo:
+                    archivo = archivo_mapeo[clave]
+                    if archivo:
+                        nombre_archivo = archivo.name if hasattr(archivo, 'name') else clave
+                        st.markdown(f"📄 {nombre_archivo}")
+                        
+                        # Botón para ver el archivo
+                        col_btn1, col_btn2 = st.columns(2)
+                        with col_btn1:
+                            if st.button(f"👁️ Ver", key=f"ver_{clave}"):
+                                st.session_state[f'ver_archivo_{clave}'] = not st.session_state.get(f'ver_archivo_{clave}', False)
+                        
+                        # Mostrar el DataFrame si está activo
+                        if st.session_state.get(f'ver_archivo_{clave}', False):
+                            df = df_mapeo.get(clave)
+                            if df is not None:
+                                with st.expander(f"📄 {clave} - Detalle", expanded=True):
+                                    st.dataframe(df, use_container_width=True, height=300)
+                                    
+                                    # 🔥 BOTÓN DE DESCARGA EN EXCEL
+                                    excel_data = descargar_excel(df, clave, fecha_procesar)
+                                    st.download_button(
+                                        label="⬇️ Descargar Excel",
+                                        data=excel_data,
+                                        file_name=f"{clave}_{fecha_procesar.strftime('%Y-%m-%d')}.xlsx",
+                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                        key=f"download_{clave}"
+                                    )
+                    else:
+                        st.markdown("❌ NO DISPONIBLE")
+                else:
+                    st.markdown(origen_archivos.get(clave, '—'))
+            
+            with col3:
+                st.markdown(f"**{item['tipo']}**")
+            
+            with col4:
+                monto_str = formato_venezolano(item['monto'])
+                if item['tipo'] == 'CAPITAL':
+                    if capital_neto >= 0:
+                        st.markdown(f"<span style='color: #1e7e34; font-weight: 800; font-size: 1.1rem;'>{monto_str}</span>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"<span style='color: #c82333; font-weight: 800; font-size: 1.1rem;'>{monto_str}</span>", unsafe_allow_html=True)
+                elif item['tipo'] in ['ACTIVO_TOTAL', 'PASIVO_TOTAL']:
+                    st.markdown(f"<span style='font-weight: 700;'>{monto_str}</span>", unsafe_allow_html=True)
+                else:
+                    st.markdown(monto_str)
+            
+            st.markdown("---")
 
-        styled_df = df_cierre.style.apply(color_cierre_rows, axis=1).hide(axis='index')
-        st.dataframe(styled_df, use_container_width=True)
+        # 🔥 BOTÓN PARA DESCARGAR EL CIERRE DIARIO COMPLETO EN EXCEL
+        st.markdown("---")
+        col_desc1, col_desc2, col_desc3 = st.columns([1, 2, 1])
+        with col_desc2:
+            if st.button("📥 DESCARGAR CIERRE DIARIO COMPLETO (EXCEL)", use_container_width=True):
+                # Crear DataFrame con el cierre completo
+                df_cierre_completo = pd.DataFrame(cierre_items)
+                df_cierre_completo['Monto'] = df_cierre_completo['monto']
+                df_cierre_completo = df_cierre_completo[['Concepto', 'tipo', 'Monto']]
+                df_cierre_completo['Monto'] = df_cierre_completo['Monto'].apply(formato_venezolano)
+                df_cierre_completo.columns = ['Concepto', 'Tipo', 'Monto (Bs.)']
+                
+                # Añadir resumen adicional
+                resumen_data = {
+                    'Concepto': ['TOTAL ACTIVOS', 'TOTAL PASIVOS', 'CAPITAL DE TRABAJO NETO'],
+                    'Tipo': ['RESUMEN', 'RESUMEN', 'RESUMEN'],
+                    'Monto (Bs.)': [
+                        formato_venezolano(activos_operativos),
+                        formato_venezolano(pasivos_operativos),
+                        formato_venezolano(capital_neto)
+                    ]
+                }
+                df_resumen = pd.DataFrame(resumen_data)
+                df_final = pd.concat([df_cierre_completo, df_resumen], ignore_index=True)
+                
+                excel_data = descargar_excel(df_final, "Cierre_Diario", fecha_procesar)
+                st.download_button(
+                    label="⬇️ Confirmar Descarga",
+                    data=excel_data,
+                    file_name=f"Cierre_Diario_{fecha_procesar.strftime('%Y-%m-%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="download_cierre_completo"
+                )
 
         with st.expander("📂 Ver origen detallado de cada archivo", expanded=False):
             st.markdown("""
@@ -6150,6 +6274,308 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             | ... | ... | ... | ... | ... | ... |
             | **Total General:** | | | | **1.417,00** | |
             """)
+
+    # ============================================================
+    # PESTAÑA 4: REPORTES Y ANÁLISIS
+    # ============================================================
+    with tab_reportes:
+        st.markdown("### 📊 Reportes y Análisis")
+        st.caption("Análisis detallado de egresos por tipo de pago y cuentas por pagar por empresa")
+        
+        # ============================================================
+        # SECCIÓN 1: REPORTE DE EGRESOS IPAGO POR TIPO DE PAGO
+        # ============================================================
+        st.markdown("#### 💳 Análisis de Egresos iPago por Tipo de Pago")
+        
+        if 'df_egresos' in locals() and df_egresos is not None:
+            try:
+                # Procesar el archivo de egresos para agrupar por tipo de pago
+                df_egr_clean = ProcesadorArchivos._limpiar_columnas(df_egresos)
+                
+                # Encontrar la fila de encabezados
+                idx_egr = None
+                for idx, row in df_egr_clean.iterrows():
+                    row_str = ' '.join([str(x).lower() for x in row.values if pd.notna(x)])
+                    if 'fecha pago' in row_str and 'proveedor' in row_str:
+                        idx_egr = idx
+                        break
+                
+                if idx_egr is not None and idx_egr >= 0:
+                    df_datos = df_egr_clean.iloc[idx_egr:].reset_index(drop=True)
+                    if len(df_datos) > 0:
+                        header_row = df_datos.iloc[0]
+                        new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
+                        df_datos.columns = new_cols
+                        df_egr_clean = df_datos.iloc[1:].reset_index(drop=True)
+                
+                # Identificar columnas clave
+                col_tipo_pago = ProcesadorArchivos._buscar_columna(df_egr_clean, 'tipo de pago', 'tipo_pago', 'tipo')
+                col_proveedor = ProcesadorArchivos._buscar_columna(df_egr_clean, 'proveedor', 'rif', 'nombre')
+                col_monto = ProcesadorArchivos._buscar_columna(df_egr_clean, 'monto')
+                col_empresa = ProcesadorArchivos._buscar_columna(df_egr_clean, 'empresa', 'cuenta')
+                col_monto_usd = ProcesadorArchivos._buscar_columna(df_egr_clean, 'usd', '$')
+                
+                if col_tipo_pago and col_monto:
+                    # Crear DataFrame de análisis
+                    analysis_data = []
+                    
+                    for idx, row in df_egr_clean.iterrows():
+                        tipo_pago = str(row[col_tipo_pago]).strip() if col_tipo_pago in df_egr_clean.columns else "No clasificado"
+                        proveedor = str(row[col_proveedor]).strip() if col_proveedor in df_egr_clean.columns else "No identificado"
+                        monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto]) if col_monto in df_egr_clean.columns else 0.0
+                        empresa = str(row[col_empresa]).strip() if col_empresa in df_egr_clean.columns else "General"
+                        
+                        if monto and monto > 0 and tipo_pago not in ['nan', 'None', '']:
+                            analysis_data.append({
+                                'Tipo de Pago': tipo_pago,
+                                'Proveedor': proveedor,
+                                'Empresa': empresa,
+                                'Monto (Bs.)': monto
+                            })
+                    
+                    if analysis_data:
+                        df_analysis = pd.DataFrame(analysis_data)
+                        
+                        # 🔥 RESUMEN POR TIPO DE PAGO
+                        st.markdown("##### 📊 Resumen por Tipo de Pago")
+                        df_tipo_resumen = df_analysis.groupby('Tipo de Pago').agg({
+                            'Monto (Bs.)': ['sum', 'count']
+                        }).round(2)
+                        df_tipo_resumen.columns = ['Total Bs.', 'Cantidad']
+                        df_tipo_resumen['Total Bs.'] = df_tipo_resumen['Total Bs.'].apply(formato_venezolano)
+                        st.dataframe(df_tipo_resumen, use_container_width=True)
+                        
+                        # 🔥 RESUMEN POR EMPRESA
+                        st.markdown("##### 📊 Resumen por Empresa")
+                        df_empresa_resumen = df_analysis.groupby('Empresa').agg({
+                            'Monto (Bs.)': ['sum', 'count']
+                        }).round(2)
+                        df_empresa_resumen.columns = ['Total Bs.', 'Cantidad']
+                        df_empresa_resumen['Total Bs.'] = df_empresa_resumen['Total Bs.'].apply(formato_venezolano)
+                        st.dataframe(df_empresa_resumen, use_container_width=True)
+                        
+                        # 🔥 GRÁFICO DE BARRAS POR TIPO DE PAGO
+                        st.markdown("##### 📈 Distribución de Egresos por Tipo de Pago")
+                        chart_data = df_analysis.groupby('Tipo de Pago')['Monto (Bs.)'].sum().sort_values(ascending=False)
+                        st.bar_chart(chart_data, height=300)
+                        
+                        # 🔥 TABLA COMPLETA CON FILTROS
+                        st.markdown("##### 📋 Detalle Completo de Egresos")
+                        
+                        col_filtro1, col_filtro2 = st.columns(2)
+                        with col_filtro1:
+                            tipos_unicos = ['Todos'] + sorted(df_analysis['Tipo de Pago'].unique().tolist())
+                            filtro_tipo = st.selectbox("Filtrar por Tipo de Pago", tipos_unicos)
+                        
+                        with col_filtro2:
+                            empresas_unicas = ['Todos'] + sorted(df_analysis['Empresa'].unique().tolist())
+                            filtro_empresa = st.selectbox("Filtrar por Empresa", empresas_unicas)
+                        
+                        df_filtrado = df_analysis.copy()
+                        if filtro_tipo != 'Todos':
+                            df_filtrado = df_filtrado[df_filtrado['Tipo de Pago'] == filtro_tipo]
+                        if filtro_empresa != 'Todos':
+                            df_filtrado = df_filtrado[df_filtrado['Empresa'] == filtro_empresa]
+                        
+                        df_display = df_filtrado.copy()
+                        df_display['Monto (Bs.)'] = df_display['Monto (Bs.)'].apply(formato_venezolano)
+                        st.dataframe(df_display, use_container_width=True, height=400)
+                        
+                        # 🔥 BOTÓN DE DESCARGA EN EXCEL
+                        col_desc1, col_desc2, col_desc3 = st.columns([1, 2, 1])
+                        with col_desc2:
+                            # Crear un Excel con múltiples hojas
+                            output = io.BytesIO()
+                            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                                # Hoja 1: Detalle completo
+                                df_analysis.to_excel(writer, index=False, sheet_name='Detalle Egresos')
+                                # Hoja 2: Resumen por tipo
+                                df_tipo_resumen.to_excel(writer, sheet_name='Resumen por Tipo')
+                                # Hoja 3: Resumen por empresa
+                                df_empresa_resumen.to_excel(writer, sheet_name='Resumen por Empresa')
+                            output.seek(0)
+                            
+                            st.download_button(
+                                label="📥 Descargar Reporte Egresos (Excel)",
+                                data=output,
+                                file_name=f"Reporte_Egresos_{fecha_procesar.strftime('%Y-%m-%d')}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True
+                            )
+                        
+                        # Mostrar total general
+                        total_general = df_analysis['Monto (Bs.)'].sum()
+                        st.metric("💰 Total General de Egresos", formato_venezolano(total_general))
+                    else:
+                        st.info("No se encontraron datos de egresos para analizar")
+                else:
+                    st.warning("No se pudieron identificar las columnas necesarias en el archivo de egresos")
+            except Exception as e:
+                st.error(f"Error al procesar egresos: {str(e)}")
+        else:
+            st.info("ℹ️ Carga el archivo de Egresos iPago para ver el análisis detallado")
+        
+        st.markdown("---")
+        
+        # ============================================================
+        # SECCIÓN 2: REPORTE DE CUENTAS POR PAGAR POR EMPRESA
+        # ============================================================
+        st.markdown("#### 📋 Análisis de Cuentas por Pagar por Empresa")
+        
+        if 'df_cxp_rep' in locals() and df_cxp_rep is not None:
+            try:
+                # Procesar el archivo de CxP
+                df_cxp_clean = ProcesadorArchivos._limpiar_columnas(df_cxp_rep)
+                
+                # Encontrar la fila de encabezados
+                idx_cxp = None
+                for idx, row in df_cxp_clean.iterrows():
+                    row_str = ' '.join([str(x).lower() for x in row.values if pd.notna(x)])
+                    if 'proveedor' in row_str and ('documento' in row_str or 'saldo' in row_str):
+                        idx_cxp = idx
+                        break
+                
+                if idx_cxp is not None and idx_cxp >= 0:
+                    df_datos = df_cxp_clean.iloc[idx_cxp:].reset_index(drop=True)
+                    if len(df_datos) > 0:
+                        header_row = df_datos.iloc[0]
+                        new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
+                        df_datos.columns = new_cols
+                        df_cxp_clean = df_datos.iloc[1:].reset_index(drop=True)
+                
+                # Identificar columnas
+                col_proveedor_cxp = ProcesadorArchivos._buscar_columna(df_cxp_clean, 'proveedor', 'rif', 'nombre', 'razon social')
+                col_monto_cxp = None
+                if len(df_cxp_clean.columns) > 2:
+                    col_monto_cxp = df_cxp_clean.columns[2]
+                else:
+                    col_monto_cxp = ProcesadorArchivos._buscar_columna(df_cxp_clean, 'saldo', 'monto', 'total')
+                
+                col_fecha_cxp = ProcesadorArchivos._buscar_columna(df_cxp_clean, 'fecha', 'fecha recepcion', 'vencimiento')
+                
+                if col_proveedor_cxp and col_monto_cxp:
+                    # Extraer datos
+                    cxp_data = []
+                    
+                    for idx, row in df_cxp_clean.iterrows():
+                        proveedor = str(row[col_proveedor_cxp]).strip() if col_proveedor_cxp in df_cxp_clean.columns else "No identificado"
+                        monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_cxp]) if col_monto_cxp in df_cxp_clean.columns else 0.0
+                        
+                        if proveedor not in ['nan', 'None', ''] and monto and monto > 0:
+                            fecha = "No disponible"
+                            if col_fecha_cxp and col_fecha_cxp in df_cxp_clean.columns:
+                                try:
+                                    fecha_val = row[col_fecha_cxp]
+                                    if pd.notna(fecha_val):
+                                        if isinstance(fecha_val, pd.Timestamp):
+                                            fecha = fecha_val.strftime('%Y-%m-%d')
+                                        else:
+                                            fecha = str(fecha_val).strip()
+                                except:
+                                    pass
+                            
+                            cxp_data.append({
+                                'Proveedor': proveedor,
+                                'Monto (Bs.)': monto,
+                                'Fecha Recepción': fecha
+                            })
+                    
+                    if cxp_data:
+                        df_cxp_analysis = pd.DataFrame(cxp_data)
+                        
+                        # 🔥 CLASIFICAR PROVEEDORES POR EMPRESA
+                        # Identificar palabras clave para asignar empresa
+                        empresas_mapeo = {
+                            'BODEGUITA GUAYANA': ['guayana', 'guyana'],
+                            'BODEGUITA MONAGAS': ['monagas'],
+                            'BODEGUITA CORPORACION': ['corporacion', 'corp'],
+                            'BODEGUITA ANZOATEGUI': ['anzoategui', 'anzo'],
+                            'BODEGUITA NORORIENTAL': ['nororiental', 'nor'],
+                            'BODEGUITA CARUPANO': ['carupano', 'carúpano'],
+                            'NEXO COMERCIAL': ['nexo'],
+                            'CREDITO BANCARIO': ['credito', 'bancario', 'mercantil'],
+                            'DEUDA GENERAL': ['deuda', 'prestamo']
+                        }
+                        
+                        def asignar_empresa(proveedor):
+                            prov_upper = proveedor.upper()
+                            for empresa, keywords in empresas_mapeo.items():
+                                for kw in keywords:
+                                    if kw.upper() in prov_upper:
+                                        return empresa
+                            return "OTROS"
+                        
+                        df_cxp_analysis['Empresa'] = df_cxp_analysis['Proveedor'].apply(asignar_empresa)
+                        
+                        # 🔥 RESUMEN POR EMPRESA
+                        st.markdown("##### 📊 Resumen de Cuentas por Pagar por Empresa")
+                        df_cxp_empresa = df_cxp_analysis.groupby('Empresa').agg({
+                            'Monto (Bs.)': ['sum', 'count']
+                        }).round(2)
+                        df_cxp_empresa.columns = ['Total Bs.', 'Cantidad Proveedores']
+                        df_cxp_empresa['Total Bs.'] = df_cxp_empresa['Total Bs.'].apply(formato_venezolano)
+                        st.dataframe(df_cxp_empresa, use_container_width=True)
+                        
+                        # 🔥 GRÁFICO DE BARRAS POR EMPRESA
+                        st.markdown("##### 📈 Distribución de CxP por Empresa")
+                        chart_cxp = df_cxp_analysis.groupby('Empresa')['Monto (Bs.)'].sum().sort_values(ascending=False)
+                        st.bar_chart(chart_cxp, height=300)
+                        
+                        # 🔥 TABLA COMPLETA CON FILTROS
+                        st.markdown("##### 📋 Detalle Completo de Cuentas por Pagar")
+                        
+                        col_filtro_cxp1, col_filtro_cxp2 = st.columns(2)
+                        with col_filtro_cxp1:
+                            empresas_cxp = ['Todos'] + sorted(df_cxp_analysis['Empresa'].unique().tolist())
+                            filtro_empresa_cxp = st.selectbox("Filtrar por Empresa", empresas_cxp, key="filtro_cxp_empresa")
+                        
+                        with col_filtro_cxp2:
+                            df_cxp_filtrado = df_cxp_analysis.copy()
+                            if filtro_empresa_cxp != 'Todos':
+                                df_cxp_filtrado = df_cxp_filtrado[df_cxp_filtrado['Empresa'] == filtro_empresa_cxp]
+                        
+                        df_cxp_display = df_cxp_filtrado.copy()
+                        df_cxp_display['Monto (Bs.)'] = df_cxp_display['Monto (Bs.)'].apply(formato_venezolano)
+                        st.dataframe(df_cxp_display[['Proveedor', 'Monto (Bs.)', 'Fecha Recepción', 'Empresa']], use_container_width=True, height=400)
+                        
+                        # 🔥 BOTÓN DE DESCARGA EN EXCEL
+                        col_desc1, col_desc2, col_desc3 = st.columns([1, 2, 1])
+                        with col_desc2:
+                            # Crear un Excel con múltiples hojas
+                            output_cxp = io.BytesIO()
+                            with pd.ExcelWriter(output_cxp, engine='openpyxl') as writer:
+                                # Hoja 1: Detalle completo
+                                df_cxp_analysis.to_excel(writer, index=False, sheet_name='Detalle CxP')
+                                # Hoja 2: Resumen por empresa
+                                df_cxp_empresa.to_excel(writer, sheet_name='Resumen por Empresa')
+                            output_cxp.seek(0)
+                            
+                            st.download_button(
+                                label="📥 Descargar Reporte Cuentas por Pagar (Excel)",
+                                data=output_cxp,
+                                file_name=f"Reporte_CxP_{fecha_procesar.strftime('%Y-%m-%d')}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True
+                            )
+                        
+                        # Mostrar total general
+                        total_cxp = df_cxp_analysis['Monto (Bs.)'].sum()
+                        st.metric("💰 Total Cuentas por Pagar", formato_venezolano(total_cxp))
+                        
+                        # 🔥 MOSTRAR LA TABLA COMO EN EL CAPTURE
+                        with st.expander("📋 Ver tabla de Cuentas por Pagar (formato capture)", expanded=False):
+                            st.markdown("##### 📄 Cuentas por Pagar - Detalle por Proveedor")
+                            df_capture = df_cxp_analysis.copy()
+                            df_capture['Monto (Bs.)'] = df_capture['Monto (Bs.)'].apply(formato_venezolano)
+                            st.dataframe(df_capture[['Proveedor', 'Monto (Bs.)', 'Fecha Recepción']], use_container_width=True)
+                    else:
+                        st.info("No se encontraron datos de Cuentas por Pagar para analizar")
+                else:
+                    st.warning("No se pudieron identificar las columnas necesarias en el archivo de CxP")
+            except Exception as e:
+                st.error(f"Error al procesar Cuentas por Pagar: {str(e)}")
+        else:
+            st.info("ℹ️ Carga el archivo de Cuentas por Pagar Reportado para ver el análisis detallado")
 
 # ============================================================
 # 🤖 ASISTENTE IA - DEEPSEEK (SIEMPRE VISIBLE)
