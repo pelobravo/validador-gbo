@@ -4960,7 +4960,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 else:
                     st.info("ℹ️ Sube los archivos de Cobranzas y TB.xlsx para verificar si existen conciliaciones duplicadas que afecten el capital.")
 
-                                # ============================================================
+                               # ============================================================
                 # 🔥 CRUCE AUTOMÁTICO: COBRANZAS vs TB (TRANSFERENCIAS EN TRÁNSITO)
                 # ============================================================
                 if tiene_cob_hoy and tiene_tb_hoy:
