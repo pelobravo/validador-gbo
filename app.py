@@ -5096,7 +5096,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         cliente = str(row[col_cliente_cob]).strip() if col_cliente_cob in df_cob_clean.columns else "No identificado"
                         
                         if monto and monto > 0:
-                            # 🔥 MANTENER EL 0 INICIAL - NO ELIMINARLO
+                            # 🔥 MANTENER EL 0 INICIAL
                             ref_norm = re.sub(r'[^0-9]', '', ref) if ref else f"cob_sin_ref_{idx}"
                             cobranzas_dia_map[ref_norm] = {
                                 'monto': float(monto), 
@@ -5105,7 +5105,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 'cliente': cliente
                             }
 
-                    # --- 2. EXTRAER MOVIMIENTOS DE TB (MANTENIENDO EL 0 INICIAL) ---
+                    # --- 2. EXTRAER MOVIMIENTOS DE TB (LEER TODAS LAS FILAS) ---
                     df_tb_clean = ProcesadorArchivos._limpiar_columnas(df_tb)
                     
                     # 🔥 BUSCAR FILA DE ENCABEZADO
@@ -5141,6 +5141,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 else:
                                     nuevas_columnas.append(f'col_{len(nuevas_columnas)}')
                             df_datos.columns = nuevas_columnas
+                            # 🔥 IMPORTANTE: PROCESAR TODAS LAS FILAS
                             df_tb_clean = df_datos.iloc[1:].reset_index(drop=True)
                     
                     # 🔥 IDENTIFICAR COLUMNAS
@@ -5182,8 +5183,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 break
                     
                     st.info(f"🔍 Columna referencia: '{col_ref_tb}' | Columna monto: '{col_monto_tb}'")
+                    st.info(f"📊 Total filas en TB (después de encabezado): {len(df_tb_clean)}")
                     
-                    # 🔥 EXTRAER MOVIMIENTOS DE TB
+                    # 🔥 EXTRAER MOVIMIENTOS DE TB (TODAS LAS FILAS)
                     tb_dia_map = {}
                     
                     for idx, row in df_tb_clean.iterrows():
@@ -5196,20 +5198,29 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         if ref_t.endswith('.0'):
                             ref_t = ref_t[:-2]
                         
-                        monto_t = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_tb]) if col_monto_tb in df_tb_clean.columns else 0.0
-                        
+                        # 🔥 Si la referencia está vacía o es NaN, saltar
                         if not ref_t or ref_t.lower() in ['nan', 'none', '']:
                             continue
                         
+                        # 🔥 Saltar filas de total
                         if 'total' in ref_t.lower():
                             continue
                         
-                        # 🔥 MANTENER EL 0 INICIAL - NO ELIMINARLO
+                        # 🔥 Obtener el monto
+                        monto_t = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_tb]) if col_monto_tb in df_tb_clean.columns else 0.0
+                        
+                        # 🔥 Si el monto es 0, intentar con la columna 'monto' (si es diferente)
+                        if monto_t == 0 or monto_t is None:
+                            if 'monto' in df_tb_clean.columns and col_monto_tb != 'monto':
+                                monto_t = ProcesadorArchivos._convertir_numero_europeo(row['monto'])
+                        
+                        # 🔥 MANTENER EL 0 INICIAL
                         ref_norm = re.sub(r'[^0-9]', '', ref_t)
                         
                         if not ref_norm:
                             continue
                         
+                        # 🔥 SOLO guardar si el monto es válido
                         if monto_t and monto_t > 0:
                             tb_dia_map[ref_norm] = {
                                 'monto': float(monto_t), 
@@ -5219,7 +5230,32 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     
                     st.info(f"📊 TB procesado: {len(tb_dia_map)} movimientos")
                     
-                    # 🔥 BUSCAR DUPLICADOS POR REFERENCIA (MANTENIENDO EL 0 INICIAL)
+                    # 🔥 BUSCAR ESPECÍFICAMENTE 059135450741
+                    ref_buscada = '059135450741'
+                    ref_norm = re.sub(r'[^0-9]', '', ref_buscada)
+                    
+                    st.info(f"🔍 Buscando específicamente {ref_buscada} en TB...")
+                    
+                    if ref_norm in tb_dia_map:
+                        st.error(f"✅ ¡ENCONTRADO! {ref_buscada} está en TB con monto {tb_dia_map[ref_norm]['monto']}")
+                    else:
+                        # Buscar por substring
+                        encontrado = False
+                        for ref_tb, info_tb in tb_dia_map.items():
+                            if ref_buscada in info_tb['orig']:
+                                st.error(f"✅ ¡ENCONTRADO POR SUBSTR! {ref_buscada} está en TB como '{info_tb['orig']}' con monto {info_tb['monto']}")
+                                encontrado = True
+                                # 🔥 Agregar al mapa con la referencia correcta
+                                tb_dia_map[ref_norm] = info_tb
+                                break
+                        
+                        if not encontrado:
+                            st.warning(f"❌ {ref_buscada} NO está en TB")
+                            # Mostrar las últimas filas de TB para depuración
+                            st.info(f"Últimas 10 filas de TB (para verificar si la referencia está):")
+                            st.dataframe(df_tb_clean.tail(10))
+                    
+                    # 🔥 BUSCAR DUPLICADOS POR REFERENCIA
                     duplicados_encontrados = []
                     
                     for ref_cob, info_cob in cobranzas_dia_map.items():
@@ -5250,7 +5286,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     else:
                         st.success("✅ No se encontraron duplicados por referencia entre Cobranzas y TB.")
                         
-                        # 🔥 DEPURACIÓN: Buscar específicamente 059135450741
+                        # 🔥 DEPURACIÓN: Mostrar la referencia buscada
                         ref_buscada = '059135450741'
                         ref_norm = re.sub(r'[^0-9]', '', ref_buscada)
                         
