@@ -4995,7 +4995,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 'cliente': cliente
                             }
 
-                    # --- 2. EXTRAER MOVIMIENTOS DE TB (VERSIÓN RADICAL) ---
+                    # --- 2. EXTRAER MOVIMIENTOS DE TB (FORZANDO COLUMNA '$') ---
                     df_tb_clean = ProcesadorArchivos._limpiar_columnas(df_tb)
                     
                     # 🔥 MOSTRAR COLUMNAS
@@ -5053,12 +5053,20 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 col_ref_tb = col
                                 break
                     
-                    # 🔥 COLUMNA DE MONTO: PRIORIZAR '$'
+                    # 🔥 COLUMNA DE MONTO: FORZAR '$'
                     for col in df_tb_clean.columns:
                         col_lower = str(col).lower().strip()
-                        if col_lower == '$' or col_lower == 'usd':
+                        if col_lower == '$':
                             col_monto_tb = col
                             break
+                    
+                    # Si no encuentra '$', buscar 'usd'
+                    if col_monto_tb is None:
+                        for col in df_tb_clean.columns:
+                            col_lower = str(col).lower().strip()
+                            if col_lower == 'usd':
+                                col_monto_tb = col
+                                break
                     
                     # Si no, buscar 'monto'
                     if col_monto_tb is None:
@@ -5102,6 +5110,12 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         if not ref_norm:
                             continue
                         
+                        # 🔥 CRÍTICO: Si el monto es 0, intentar con la columna '$' directamente
+                        if monto_t == 0 or monto_t is None:
+                            # Buscar la columna '$' por nombre exacto
+                            if '$' in df_tb_clean.columns:
+                                monto_t = ProcesadorArchivos._convertir_numero_europeo(row['$'])
+                        
                         if monto_t and monto_t > 0:
                             tb_dia_map[ref_norm] = {
                                 'monto': float(monto_t), 
@@ -5111,51 +5125,121 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     
                     st.info(f"📊 TB procesado: {len(tb_dia_map)} movimientos")
                     
-                    # 🔥 BUSCAR DUPLICADOS DE COBRANZAS EN TB (FORZADO)
-                    duplicados_encontrados = []
+                    # --- 3. CRUCE COBRANZAS vs TB ---
+                    discrepancias_cob_tb = []
+                    duplicados_por_ref = []
+                    duplicados_por_monto = []
                     
-                    for ref_cob, info_cob in cobranzas_dia_map.items():
-                        # Buscar por referencia normalizada
-                        if ref_cob in tb_dia_map:
-                            info_tb = tb_dia_map[ref_cob]
+                    # 🔥 A. Buscar DUPLICADOS POR REFERENCIA (misma referencia)
+                    for ref_norm, info_cob in cobranzas_dia_map.items():
+                        if ref_norm in tb_dia_map:
+                            info_tb = tb_dia_map[ref_norm]
                             diff_monto = abs(info_cob['monto'] - info_tb['monto'])
                             if diff_monto < 0.01:
-                                duplicados_encontrados.append({
-                                    'referencia': info_cob['orig'],
-                                    'monto': info_cob['monto'],
-                                    'fila_cob': info_cob['fila'],
-                                    'fila_tb': info_tb['fila'],
-                                    'cliente': info_cob['cliente']
+                                duplicados_por_ref.append({
+                                    'Tipo': '🟠 DUPLICADO POR REFERENCIA',
+                                    'Referencia': info_cob['orig'],
+                                    'Monto Cob': info_cob['monto'],
+                                    'Monto TB': info_tb['monto'],
+                                    'Fila Cob': info_cob['fila'],
+                                    'Fila TB': info_tb['fila'],
+                                    'Cliente': info_cob['cliente']
                                 })
-                                st.error(f"✅ DUPLICADO ENCONTRADO: {info_cob['orig']} | Monto: {info_cob['monto']} | Cob: Fila {info_cob['fila']} | TB: Fila {info_tb['fila']}")
+                            else:
+                                discrepancias_cob_tb.append({
+                                    'Tipo Falla': '⚠️ DIFERENCIA DE MONTO (Misma Ref)',
+                                    'Monto': info_cob['monto'],
+                                    'Detalle': f"Ref {info_cob['orig']} | Cobranzas: {info_cob['monto']} vs TB: {info_tb['monto']} (Dif: {diff_monto:.2f}) | Cliente: {info_cob['cliente']}",
+                                    'Estatus': '🟠 Revisar'
+                                })
                     
-                    # 🔥 SI NO ENCUENTRA POR REFERENCIA, BUSCAR POR MONTO
-                    if not duplicados_encontrados:
-                        st.warning("⚠️ No se encontraron duplicados por referencia. Buscando por MONTO...")
-                        for ref_cob, info_cob in cobranzas_dia_map.items():
-                            for ref_tb, info_tb in tb_dia_map.items():
-                                if abs(info_cob['monto'] - info_tb['monto']) < 0.01:
-                                    if ref_cob != ref_tb:
-                                        duplicados_encontrados.append({
-                                            'referencia': info_cob['orig'],
-                                            'monto': info_cob['monto'],
-                                            'fila_cob': info_cob['fila'],
-                                            'fila_tb': info_tb['fila'],
-                                            'cliente': info_cob['cliente'],
-                                            'ref_tb': info_tb['orig']
-                                        })
-                                        st.error(f"✅ DUPLICADO POR MONTO: {info_cob['orig']} = {info_tb['orig']} | Monto: {info_cob['monto']}")
+                    # 🔥 B. Buscar DUPLICADOS POR MONTO (referencias diferentes, mismo monto)
+                    for ref_cob, info_cob in cobranzas_dia_map.items():
+                        for ref_tb, info_tb in tb_dia_map.items():
+                            if ref_cob != ref_tb and abs(info_cob['monto'] - info_tb['monto']) < 0.01:
+                                duplicados_por_monto.append({
+                                    'Tipo': '💥 DUPLICADO POR MONTO',
+                                    'Referencia Cob': info_cob['orig'],
+                                    'Referencia TB': info_tb['orig'],
+                                    'Monto': info_cob['monto'],
+                                    'Fila Cob': info_cob['fila'],
+                                    'Fila TB': info_tb['fila'],
+                                    'Cliente': info_cob['cliente']
+                                })
+                                # Para evitar duplicados, eliminar la combinación
+                                break
                     
-                    # 🔥 MOSTRAR DUPLICADOS ENCONTRADOS
-                    if duplicados_encontrados:
-                        st.error(f"🚨 Se encontraron {len(duplicados_encontrados)} DUPLICADOS entre Cobranzas y TB:")
-                        df_dup = pd.DataFrame(duplicados_encontrados)
-                        st.dataframe(df_dup, use_container_width=True)
+                    # 🔥 C. Buscar COBRANZAS que NO están en TB
+                    for ref_norm, info_cob in cobranzas_dia_map.items():
+                        if ref_norm not in tb_dia_map:
+                            # Verificar si coincide por monto (ya lo tenemos en duplicados_por_monto)
+                            ya_encontrado = False
+                            for dup in duplicados_por_monto:
+                                if dup['Referencia Cob'] == info_cob['orig']:
+                                    ya_encontrado = True
+                                    break
+                            if not ya_encontrado:
+                                discrepancias_cob_tb.append({
+                                    'Tipo Falla': '⏳ COBRANZA NO REGISTRADA EN TB',
+                                    'Monto': info_cob['monto'],
+                                    'Detalle': f"Ref {info_cob['orig']} (Fila {info_cob['fila']}) | Cliente: {info_cob['cliente']} | NO está en TB.xlsx",
+                                    'Estatus': '🟡 En Tránsito'
+                                })
+                    
+                    # 🔥 D. Buscar movimientos en TB que NO están en Cobranzas
+                    for ref_norm, info_tb in tb_dia_map.items():
+                        if ref_norm not in cobranzas_dia_map:
+                            ya_encontrado = False
+                            for dup in duplicados_por_monto:
+                                if dup['Referencia TB'] == info_tb['orig']:
+                                    ya_encontrado = True
+                                    break
+                            if not ya_encontrado:
+                                discrepancias_cob_tb.append({
+                                    'Tipo Falla': '🔎 MOVIMIENTO EN TB SIN COBRANZA',
+                                    'Monto': info_tb['monto'],
+                                    'Detalle': f"Ref {info_tb['orig']} (Fila {info_tb['fila']}) | NO está en Cobranzas del día",
+                                    'Estatus': '🔴 Sin Cobranza'
+                                })
+
+                    # --- 4. RENDERIZAR RESULTADOS ---
+                    
+                    # 🔥 MOSTRAR DUPLICADOS POR REFERENCIA
+                    if duplicados_por_ref:
+                        st.error(f"🚨 Se encontraron {len(duplicados_por_ref)} DUPLICADOS POR REFERENCIA entre Cobranzas y TB:")
+                        df_dup_ref = pd.DataFrame(duplicados_por_ref)
+                        st.dataframe(df_dup_ref, use_container_width=True)
+                        total_dup_ref = sum([d['Monto Cob'] for d in duplicados_por_ref])
+                        st.error(f"💰 Total de duplicados por referencia: {formato_venezolano(total_dup_ref)} Bs.")
+                    
+                    # 🔥 MOSTRAR DUPLICADOS POR MONTO
+                    if duplicados_por_monto:
+                        st.warning(f"⚠️ Se encontraron {len(duplicados_por_monto)} DUPLICADOS POR MONTO (referencias diferentes):")
+                        df_dup_monto = pd.DataFrame(duplicados_por_monto)
+                        st.dataframe(df_dup_monto, use_container_width=True)
+                        total_dup_monto = sum([d['Monto'] for d in duplicados_por_monto])
+                        st.warning(f"💰 Total de duplicados por monto: {formato_venezolano(total_dup_monto)} Bs.")
+                    
+                    # 🔥 MOSTRAR OTRAS DISCREPANCIAS
+                    if discrepancias_cob_tb:
+                        df_discrepancias = pd.DataFrame(discrepancias_cob_tb)
                         
-                        total_duplicados = sum([d['monto'] for d in duplicados_encontrados])
-                        st.error(f"💰 Total de duplicados: {formato_venezolano(total_duplicados)} Bs.")
-                    else:
-                        st.success("✅ No se encontraron duplicados entre Cobranzas y TB.")
+                        st.markdown("---")
+                        st.markdown("#### 📋 Otras Discrepancias")
+                        st.dataframe(
+                            df_discrepancias.style.apply(
+                                lambda row: ['background-color: #fff3cd;'] * len(row) if row['Estatus'] == '🟡 En Tránsito' else
+                                           (['background-color: #f8d7da;'] * len(row) if row['Estatus'] == '🔴 Sin Cobranza' else
+                                           (['background-color: #ffe6cc;'] * len(row) if row['Estatus'] == '🟠 Revisar' else [''] * len(row))),
+                                axis=1
+                            ),
+                            use_container_width=True
+                        )
+                    
+                    if not duplicados_por_ref and not duplicados_por_monto and not discrepancias_cob_tb:
+                        st.success("✅ ¡Conciliación perfecta! Todas las cobranzas del día coinciden con los movimientos en TB.")
+                else:
+                    st.info("ℹ️ Carga los archivos de **Cobranzas** y **TB.xlsx** para ejecutar el cruce automático entre Cobranzas y Transferencias en Tránsito.")
         # ============================================================
         # 🔥 TRAZABILIDAD DE CUENTAS POR COBRAR (CON KPIs + MOTOR DE AUDITORÍA)
         # ============================================================
