@@ -4963,6 +4963,12 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 # ============================================================
                 # 🔥 CRUCE AUTOMÁTICO: COBRANZAS vs TB (TRANSFERENCIAS EN TRÁNSITO)
                 # ============================================================
+                # 🔥 FORZAR DETECCIÓN DE TB (si no se detectó automáticamente)
+                if not tiene_tb_hoy and 'df_tb' in globals() and globals()['df_tb'] is not None:
+                    tiene_tb_hoy = True
+                    df_tb = globals()['df_tb']
+                    st.info("ℹ️ TB.xlsx detectado forzadamente desde la variable global.")
+                
                 if tiene_cob_hoy and tiene_tb_hoy:
                     st.markdown("---")
                     st.markdown("#### 🔄 Cruce Automático: Cobranzas vs TB (Transferencias en Tránsito)")
@@ -5053,6 +5059,9 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 except:
                                     pass
 
+                    # 🔥 DEPURACIÓN: Mostrar qué columna se está usando
+                    st.info(f"🔍 Columna de monto en TB: '{col_monto_tb}' | Columna de referencia: '{col_ref_tb}'")
+                    
                     tb_dia_map = {}
                     for idx, row in df_tb_clean.iterrows():
                         ref_t = str(row[col_ref_tb]).strip() if col_ref_tb in df_tb_clean.columns else ""
@@ -5068,6 +5077,18 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 'fila': idx + 1, 
                                 'orig': ref_t
                             }
+                    
+                    # 🔥 DEPURACIÓN: Mostrar cuántos movimientos se encontraron en TB
+                    st.info(f"📊 Se encontraron {len(tb_dia_map)} movimientos en TB.xlsx con montos válidos.")
+                    
+                    # 🔥 BUSCAR ESPECÍFICAMENTE EL DUPLICADO DE 3040.84
+                    for ref_norm, info_cob in cobranzas_dia_map.items():
+                        if info_cob['monto'] == 3040.84:
+                            st.warning(f"🔍 Cobranza con monto 3040.84 encontrada: Ref {info_cob['orig']} (Fila {info_cob['fila']})")
+                            if ref_norm in tb_dia_map:
+                                st.error(f"✅ ¡DUPLICADO ENCONTRADO! La referencia {info_cob['orig']} también está en TB.xlsx con monto {tb_dia_map[ref_norm]['monto']}")
+                            else:
+                                st.warning(f"❌ La referencia {info_cob['orig']} NO está en TB.xlsx")
 
                     # --- 3. CRUCE COBRANZAS vs TB ---
                     discrepancias_cob_tb = []
