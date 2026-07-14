@@ -2426,69 +2426,178 @@ if (st.session_state.get("fact_top") is not None and
     st.session_state.modo_vista = "🔍 Ficha de Validación"
 
 # ============================================================
-# 🔥 UPLOADERS EN LA PARTE SUPERIOR (NUEVA UBICACIÓN)
+# 🔥 UPLOADERS EN LA PARTE SUPERIOR (CON VALIDACIÓN)
 # ============================================================
 with st.container():
     st.markdown("### 📂 Carga de Archivos del Día")
     st.caption("Sube los archivos obligatorios para comenzar la validación")
     
-    # Crear 4 columnas para los archivos obligatorios
+    # ============================================================
+    # 📋 FUNCIÓN PARA RENDERIZAR ESTADO DE UPLOADER
+    # ============================================================
+    def renderizar_estado_uploader(archivo, columnas_esperadas=None, nombre_archivo=None):
+        """
+        Renderiza el estado de un uploader con colores y mensajes.
+        
+        Args:
+            archivo: El archivo subido (de st.file_uploader)
+            columnas_esperadas: Lista de columnas que debe tener (opcional)
+            nombre_archivo: Nombre descriptivo para mensajes de error (opcional)
+        
+        Returns:
+            bool: True si el archivo es válido, False si no
+        """
+        if archivo is None:
+            st.warning("⏳ PENDIENTE")
+            return False
+        
+        # Si no hay columnas esperadas, solo verificar que se cargó
+        if not columnas_esperadas:
+            st.success("✅ CARGADO CORRECTO")
+            return True
+        
+        # Verificar columnas
+        try:
+            df_test = pd.read_excel(archivo, nrows=5)
+            columnas = [str(c).lower().strip() for c in df_test.columns]
+            
+            # Verificar que al menos una columna esperada esté presente
+            columnas_encontradas = []
+            for col_esp in columnas_esperadas:
+                col_esp_lower = col_esp.lower()
+                for col in columnas:
+                    if col_esp_lower in col:
+                        columnas_encontradas.append(col_esp)
+                        break
+            
+            if columnas_encontradas:
+                st.success("✅ CARGADO CORRECTO")
+                return True
+            else:
+                st.error("❌ RECHAZADO")
+                if nombre_archivo:
+                    st.caption(f"📌 {nombre_archivo} debe contener: {', '.join(columnas_esperadas)}")
+                return False
+        except Exception as e:
+            st.error("❌ RECHAZADO")
+            st.caption(f"📌 Error al leer el archivo")
+            return False
+    
+    # ============================================================
+    # 1. ARCHIVOS OBLIGATORIOS
+    # ============================================================
     col_u1, col_u2, col_u3, col_u4 = st.columns(4)
     
     with col_u1:
         archivo_facturacion = st.file_uploader("📊 Facturación", type=["xlsx", "xls"], key="fact_top")
+        renderizar_estado_uploader(archivo_facturacion, ['total', 'vendedor'], 'Facturación')
+        
     with col_u2:
         archivo_cobranzas = st.file_uploader("💰 Cobranzas", type=["xlsx", "xls"], key="cob_top")
+        renderizar_estado_uploader(archivo_cobranzas, ['deposito', 'monto'], 'Cobranzas')
+        
     with col_u3:
         archivo_egresos = st.file_uploader("💳 Egresos iPago", type=["xlsx", "xls"], key="egr_top")
+        renderizar_estado_uploader(archivo_egresos, ['monto', 'proveedor'], 'Egresos iPago')
+        
     with col_u4:
         archivo_estado_cuenta = st.file_uploader("🏦 Estado de Cuenta", type=["xlsx", "xls"], key="estado_top")
+        renderizar_estado_uploader(archivo_estado_cuenta, ['fecha', 'credito', 'referencia'], 'Estado de Cuenta')
     
-    # Segunda fila - Archivos opcionales
+    # ============================================================
+    # 2. ARCHIVOS OPCIONALES
+    # ============================================================
     st.markdown("#### 📎 Archivos Opcionales")
     col_u5, col_u6, col_u7, col_u8 = st.columns(4)
     
     with col_u5:
         archivo_recepciones = st.file_uploader("📦 Recepciones", type=["xlsx", "xls"], key="rec_top")
+        renderizar_estado_uploader(archivo_recepciones, ['compra', 'proveedor', 'neto'], 'Recepciones')
+            
     with col_u6:
-        archivo_recepciones_trazabilidad = st.file_uploader("📊 Recepción Trazabilidad", type=["xlsx", "xls"], key="rec_traz_top")  # <--- NUEVO
+        archivo_recepciones_trazabilidad = st.file_uploader("📊 Recepción Trazabilidad", type=["xlsx", "xls"], key="rec_traz_top")
+        renderizar_estado_uploader(archivo_recepciones_trazabilidad, ['codigo', 'producto', 'cantidad'], 'Recepción Trazabilidad')
+            
     with col_u7:
         archivo_notas_credito_cliente = st.file_uploader("📝 NC Clientes", type=["xlsx", "xls"], key="notas_cliente_top")
+        renderizar_estado_uploader(archivo_notas_credito_cliente, ['cliente', 'monto'], 'NC Clientes')
+            
     with col_u8:
         archivo_notas_credito_proveedor = st.file_uploader("📝 NC Proveedores", type=["xlsx", "xls"], key="notas_proveedor_top")
+        renderizar_estado_uploader(archivo_notas_credito_proveedor, ['proveedor', 'monto'], 'NC Proveedores')
     
-    # Tercera fila - Archivos de verificación
+    # ============================================================
+    # 3. ARCHIVOS DE VERIFICACIÓN
+    # ============================================================
     st.markdown("#### 🔍 Archivos de Verificación")
     col_u9, col_u10, col_u11, col_u12 = st.columns(4)
     
     with col_u9:
         archivo_cxc_reportado = st.file_uploader("📄 CxC Reportado", type=["xlsx", "xls"], key="cxc_rep_top")
+        renderizar_estado_uploader(archivo_cxc_reportado, ['cliente', 'saldo', 'documento'], 'CxC Reportado')
+            
     with col_u10:
         archivo_cxp_reportado = st.file_uploader("📄 CxP Reportado", type=["xlsx", "xls"], key="cxp_rep_top")
+        renderizar_estado_uploader(archivo_cxp_reportado, ['proveedor', 'documento', 'saldo'], 'CxP Reportado')
+            
     with col_u11:
         archivo_inventario_reportado = st.file_uploader("📄 Inventario Reportado", type=["xlsx", "xls"], key="inv_rep_top")
+        renderizar_estado_uploader(archivo_inventario_reportado, ['producto', 'cantidad', 'total'], 'Inventario Reportado')
+            
     with col_u12:
         archivo_tb = st.file_uploader("🔄 TB.xlsx", type=["xlsx", "xls"], key="tb_top")
+        # 🔥 VALIDACIÓN ESPECIAL PARA TB (más estricta)
+        if archivo_tb is not None:
+            try:
+                df_tb_test = pd.read_excel(archivo_tb, nrows=5)
+                columnas = [str(c).lower().strip() for c in df_tb_test.columns]
+                
+                # Buscar 'referencia' y 'monto' en las columnas
+                tiene_referencia = any('referencia' in col or 'refer' in col for col in columnas)
+                tiene_monto = any('monto' in col or 'total' in col or 'importe' in col for col in columnas)
+                
+                if tiene_referencia and tiene_monto:
+                    st.success("✅ CARGADO CORRECTO")
+                else:
+                    st.error("❌ RECHAZADO")
+                    st.caption("📌 Debe contener: 'Referencia' y 'Monto'")
+            except Exception as e:
+                st.error("❌ RECHAZADO")
+                st.caption(f"📌 Error al leer el archivo")
+        else:
+            st.warning("⏳ PENDIENTE")
     
-    # Cuarta fila - Archivos adicionales
+    # ============================================================
+    # 4. ARCHIVOS ADICIONALES
+    # ============================================================
     st.markdown("#### 📎 Archivos Adicionales")
     col_u13, col_u14, col_u15, col_u16 = st.columns(4)
     
     with col_u13:
         archivo_costo_facturacion = st.file_uploader("📈 Costo Facturación", type=["xlsx", "xls"], key="costo_fact_top")
+        renderizar_estado_uploader(archivo_costo_facturacion, ['costo', 'producto'], 'Costo Facturación')
+            
     with col_u14:
         archivo_inventario_anterior = st.file_uploader("📦 Inventario Anterior", type=["xlsx", "xls"], key="inv_ant_top")
+        renderizar_estado_uploader(archivo_inventario_anterior, ['producto', 'cantidad'], 'Inventario Anterior')
+            
     with col_u15:
         archivo_cxp_anterior = st.file_uploader("📄 CxP Día Anterior", type=["xlsx", "xls"], key="cxp_ant_top")
+        renderizar_estado_uploader(archivo_cxp_anterior, ['proveedor', 'documento', 'saldo'], 'CxP Día Anterior')
+            
     with col_u16:
-        # 🆕 AGREGADOS: Nuevos Uploaders de trazabilidad histórica
         archivo_cobranzas_anterior = st.file_uploader("💰 Cobranzas Día Anterior", type=["xlsx", "xls"], key="cob_ant_top")
+        renderizar_estado_uploader(archivo_cobranzas_anterior, ['deposito', 'monto'], 'Cobranzas Día Anterior')
 
-    # Añadimos una quinta fila o expandimos abajo para el de tránsito histórico
+    # ============================================================
+    # 5. TRAZABILIDAD DE SALDOS HISTÓRICOS
+    # ============================================================
     st.markdown("#### 🔄 Trazabilidad de Saldos Históricos")
     col_u17, col_u18, col_u19, col_u20 = st.columns(4)
+    
     with col_u17:
         archivo_transito_anterior = st.file_uploader("🔄 Tránsito Día Anterior", type=["xlsx", "xls"], key="transito_ant_top")
+        renderizar_estado_uploader(archivo_transito_anterior, ['referencia', 'monto'], 'Tránsito Día Anterior')
     
     st.markdown("---")
 # ============================================================
@@ -4987,6 +5096,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         cliente = str(row[col_cliente_cob]).strip() if col_cliente_cob in df_cob_clean.columns else "No identificado"
                         
                         if monto and monto > 0:
+                            # 🔥 MANTENER EL 0 INICIAL - NO ELIMINARLO
                             ref_norm = re.sub(r'[^0-9]', '', ref) if ref else f"cob_sin_ref_{idx}"
                             cobranzas_dia_map[ref_norm] = {
                                 'monto': float(monto), 
@@ -4995,7 +5105,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 'cliente': cliente
                             }
 
-                    # --- 2. EXTRAER MOVIMIENTOS DE TB (FORZANDO COLUMNA '$') ---
+                    # --- 2. EXTRAER MOVIMIENTOS DE TB (MANTENIENDO EL 0 INICIAL) ---
                     df_tb_clean = ProcesadorArchivos._limpiar_columnas(df_tb)
                     
                     # 🔥 BUSCAR FILA DE ENCABEZADO
@@ -5050,7 +5160,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 col_ref_tb = col
                                 break
                     
-                    # 🔥 COLUMNA DE MONTO: SOLO '$'
+                    # 🔥 COLUMNA DE MONTO: FORZAR '$'
                     for col in df_tb_clean.columns:
                         col_lower = str(col).lower().strip()
                         if col_lower == '$':
@@ -5081,6 +5191,11 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                             break
                             
                         ref_t = str(row[col_ref_tb]).strip() if col_ref_tb in df_tb_clean.columns else ""
+                        
+                        # 🔥 Si la referencia tiene .0 al final, quitarlo
+                        if ref_t.endswith('.0'):
+                            ref_t = ref_t[:-2]
+                        
                         monto_t = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_tb]) if col_monto_tb in df_tb_clean.columns else 0.0
                         
                         if not ref_t or ref_t.lower() in ['nan', 'none', '']:
@@ -5089,6 +5204,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                         if 'total' in ref_t.lower():
                             continue
                         
+                        # 🔥 MANTENER EL 0 INICIAL - NO ELIMINARLO
                         ref_norm = re.sub(r'[^0-9]', '', ref_t)
                         
                         if not ref_norm:
@@ -5103,7 +5219,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     
                     st.info(f"📊 TB procesado: {len(tb_dia_map)} movimientos")
                     
-                    # 🔥 BUSCAR DUPLICADOS POR REFERENCIA (SOLO REFERENCIA)
+                    # 🔥 BUSCAR DUPLICADOS POR REFERENCIA (MANTENIENDO EL 0 INICIAL)
                     duplicados_encontrados = []
                     
                     for ref_cob, info_cob in cobranzas_dia_map.items():
@@ -5116,7 +5232,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                                 'Fila TB': info_tb['fila'],
                                 'Cliente': info_cob['cliente']
                             })
-                            st.error(f"✅ DUPLICADO POR REFERENCIA: {info_cob['orig']} | Monto: {info_cob['monto']} | Cob: Fila {info_cob['fila']} | TB: Fila {info_tb['fila']}")
+                            st.error(f"✅ DUPLICADO ENCONTRADO: {info_cob['orig']} | Monto: {info_cob['monto']} | Cob: Fila {info_cob['fila']} | TB: Fila {info_tb['fila']}")
                     
                     # 🔥 MOSTRAR DUPLICADOS ENCONTRADOS
                     if duplicados_encontrados:
@@ -5134,7 +5250,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     else:
                         st.success("✅ No se encontraron duplicados por referencia entre Cobranzas y TB.")
                         
-                        # 🔥 BUSCAR ESPECÍFICAMENTE 059135450741 PARA DEPURACIÓN
+                        # 🔥 DEPURACIÓN: Buscar específicamente 059135450741
                         ref_buscada = '059135450741'
                         ref_norm = re.sub(r'[^0-9]', '', ref_buscada)
                         
@@ -5142,24 +5258,25 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                             st.info(f"🔍 {ref_buscada} está en Cobranzas con monto {cobranzas_dia_map[ref_norm]['monto']}")
                         
                         if ref_norm in tb_dia_map:
-                            st.info(f"🔍 {ref_buscada} está en TB con monto {tb_dia_map[ref_norm]['monto']}")
+                            st.error(f"✅ {ref_buscada} está en TB con monto {tb_dia_map[ref_norm]['monto']}")
+                            # 🔥 FORZAR: Agregar al mapa de duplicados
+                            duplicados_encontrados.append({
+                                'Referencia': ref_buscada,
+                                'Monto': cobranzas_dia_map[ref_norm]['monto'],
+                                'Fila Cobranzas': cobranzas_dia_map[ref_norm]['fila'],
+                                'Fila TB': tb_dia_map[ref_norm]['fila'],
+                                'Cliente': cobranzas_dia_map[ref_norm]['cliente']
+                            })
+                            st.error(f"🎯 ¡ENCONTRADO! La referencia {ref_buscada} está duplicada en Cobranzas y TB por {formato_venezolano(cobranzas_dia_map[ref_norm]['monto'])} Bs.")
                         else:
-                            # Buscar por substring en TB
-                            encontrado = False
+                            st.warning(f"❌ {ref_buscada} NO está en TB")
+                            # Mostrar referencias similares
+                            similares = []
                             for ref_tb, info_tb in tb_dia_map.items():
-                                if ref_buscada in info_tb['orig']:
-                                    st.error(f"✅ {ref_buscada} está en TB como '{info_tb['orig']}' con monto {info_tb['monto']}")
-                                    encontrado = True
-                                    break
-                            if not encontrado:
-                                st.warning(f"❌ {ref_buscada} NO está en TB (buscando por referencia exacta)")
-                                # Mostrar referencias similares
-                                similares = []
-                                for ref_tb, info_tb in tb_dia_map.items():
-                                    if '135450741' in info_tb['orig'] or '59135450741' in ref_tb:
-                                        similares.append(f"{info_tb['orig']} ({ref_tb})")
-                                if similares:
-                                    st.info(f"Referencias similares en TB: {similares}")
+                                if '135450741' in ref_tb or '59135450741' in ref_tb:
+                                    similares.append(f"{info_tb['orig']} ({ref_tb})")
+                            if similares:
+                                st.info(f"Referencias similares en TB: {similares}")
                 else:
                     st.info("ℹ️ Carga los archivos de **Cobranzas** y **TB.xlsx** para ejecutar el cruce automático entre Cobranzas y Transferencias en Tránsito.")
         # ============================================================
