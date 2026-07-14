@@ -14,6 +14,7 @@
 # 🚨 NUEVO: Auditoría de seguridad para detectar transferencias en TB ya aplicadas en Cobranzas
 # 🔥 MEJORADO: Detección de duplicados por REFERENCIA y por MONTO en TB vs Cobranzas
 # 🔥 CORREGIDO: Extracción de columna de monto en TB (prioriza 'monto' sobre 'USD')
+# 🔥 CORREGIDO: Cruce Cobranzas vs TB (Transferencias en Tránsito) en lugar de Estado de Cuenta
 
 import streamlit as st
 import pandas as pd
@@ -4959,10 +4960,13 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 else:
                     st.info("ℹ️ Sube los archivos de Cobranzas y TB.xlsx para verificar si existen conciliaciones duplicadas que afecten el capital.")
 
-                # --- CONTINUAR CON EL ANÁLISIS TRADICIONAL DE TRÁNSITO (Cruce Cobranzas vs Banco) ---
-                if tiene_cob_hoy and tiene_banco_hoy:
+                # ============================================================
+                # 🔥 CRUCE AUTOMÁTICO: COBRANZAS vs TB (TRANSFERENCIAS EN TRÁNSITO)
+                # ============================================================
+                if tiene_cob_hoy and tiene_tb_hoy:
                     st.markdown("---")
-                    st.markdown("#### 🏦 Cruce Automático: Cobranzas vs Estado de Cuenta")
+                    st.markdown("#### 🔄 Cruce Automático: Cobranzas vs TB (Transferencias en Tránsito)")
+                    st.caption("Compara las cobranzas aplicadas hoy contra los movimientos registrados en TB.xlsx para detectar duplicados o discrepancias.")
                     
                     # --- 1. Extraer Cobranzas del día ---
                     df_cob_clean = ProcesadorArchivos._limpiar_columnas(df_cobranzas)
@@ -4974,103 +4978,189 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     
                     col_ref_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'deposito', 'nro', 'referencia')
                     col_monto_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'monto', 'total', 'monto cobranza')
+                    col_cliente_cob = ProcesadorArchivos._buscar_columna(df_cob_clean, 'cliente', 'nombre')
 
                     cobranzas_dia_map = {}
-                    cobranzas_duplicadas_internas = []
-
                     for idx, row in df_cob_clean.iterrows():
                         ref = str(row[col_ref_cob]).strip() if col_ref_cob in df_cob_clean.columns else ""
                         monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_cob]) if col_monto_cob in df_cob_clean.columns else 0.0
+                        cliente = str(row[col_cliente_cob]).strip() if col_cliente_cob in df_cob_clean.columns else "No identificado"
                         
                         if monto and monto > 0:
-                            ref_norm = re.sub(r'[^0-9]', '', ref) if ref else f"oculto_cob_{idx}"
-                            # Detectar duplicados internos en el mismo archivo
-                            if ref_norm in cobranzas_dia_map:
-                                cobranzas_duplicadas_internas.append({
-                                    'Referencia': ref,
-                                    'Monto': monto,
-                                    'Fila Excel': idx + 1,
-                                    'Detalle': '⚠️ Referencia duplicada dentro del mismo archivo de Cobranzas'
+                            ref_norm = re.sub(r'[^0-9]', '', ref) if ref else f"cob_sin_ref_{idx}"
+                            cobranzas_dia_map[ref_norm] = {
+                                'monto': float(monto), 
+                                'fila': idx + 1, 
+                                'orig': ref,
+                                'cliente': cliente
+                            }
+
+                    # --- 2. Extraer movimientos de TB (Tránsito Reportado) ---
+                    df_tb_clean = ProcesadorArchivos._limpiar_columnas(df_tb)
+                    idx_tb = ProcesadorArchivos._encontrar_fila_datos(df_tb_clean, ['cuenta', 'referencia', 'monto'])
+                    if idx_tb >= 0:
+                        df_tb_clean = df_tb_clean.iloc[idx_tb:].reset_index(drop=True)
+                        df_tb_clean.columns = [str(c).strip().lower() for c in df_tb_clean.iloc[0]]
+                        df_tb_clean = df_tb_clean.iloc[1:].reset_index(drop=True)
+
+                    col_ref_tb = ProcesadorArchivos._buscar_columna(df_tb_clean, 'referencia', 'nro', 'documento')
+                    
+                    # 🔥 FORZAR BÚSQUEDA DE MONTO: buscar 'monto' primero
+                    col_monto_tb = None
+                    for col in df_tb_clean.columns:
+                        col_lower = str(col).lower()
+                        if col_lower == 'monto':
+                            col_monto_tb = col
+                            break
+                    if col_monto_tb is None:
+                        col_monto_tb = ProcesadorArchivos._buscar_columna(df_tb_clean, 'monto', 'total', 'importe')
+
+                    if col_monto_tb is None:
+                        for col in df_tb_clean.columns:
+                            col_lower = str(col).lower()
+                            if col_lower not in ['usd', '$', 'tasa', 'fecha', 'referencia', 'descripcion']:
+                                try:
+                                    df_tb_clean[col] = pd.to_numeric(df_tb_clean[col], errors='coerce')
+                                    if df_tb_clean[col].notna().sum() > 0:
+                                        col_monto_tb = col
+                                        break
+                                except:
+                                    pass
+
+                    tb_dia_map = {}
+                    for idx, row in df_tb_clean.iterrows():
+                        ref_t = str(row[col_ref_tb]).strip() if col_ref_tb in df_tb_clean.columns else ""
+                        monto_t = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_tb]) if col_monto_tb in df_tb_clean.columns else 0.0
+                        
+                        if ref_t.lower() in ['nan', 'none', ''] or not ref_t:
+                            continue
+                            
+                        if monto_t and monto_t > 0:
+                            ref_t_norm = re.sub(r'[^0-9]', '', ref_t) if ref_t else f"tb_sin_ref_{idx}"
+                            tb_dia_map[ref_t_norm] = {
+                                'monto': float(monto_t), 
+                                'fila': idx + 1, 
+                                'orig': ref_t
+                            }
+
+                    # --- 3. CRUCE COBRANZAS vs TB ---
+                    discrepancias_cob_tb = []
+                    
+                    # 🔥 A. Buscar COBRANZAS que NO están en TB (Posible Tránsito Real o Error)
+                    for ref_norm, info_cob in cobranzas_dia_map.items():
+                        if ref_norm not in tb_dia_map:
+                            # Buscar por monto como fallback
+                            encontrado_por_monto = False
+                            for ref_tb, info_tb in tb_dia_map.items():
+                                if abs(info_cob['monto'] - info_tb['monto']) < 0.01:
+                                    encontrado_por_monto = True
+                                    discrepancias_cob_tb.append({
+                                        'Tipo Falla': '💥 COINCIDENCIA POR MONTO (Referencia Diferente)',
+                                        'Monto': info_cob['monto'],
+                                        'Detalle': f"Ref Cob: {info_cob['orig']} (Fila {info_cob['fila']}) = Ref TB: {info_tb['orig']} (Fila {info_tb['fila']}) | Cliente: {info_cob['cliente']}",
+                                        'Estatus': '🟡 Verificar'
+                                    })
+                                    break
+                            if not encontrado_por_monto:
+                                discrepancias_cob_tb.append({
+                                    'Tipo Falla': '⏳ COBRANZA NO REGISTRADA EN TB',
+                                    'Monto': info_cob['monto'],
+                                    'Detalle': f"Ref {info_cob['orig']} (Fila {info_cob['fila']}) | Cliente: {info_cob['cliente']} | NO está en TB.xlsx",
+                                    'Estatus': '🟡 En Tránsito'
+                                })
+                    
+                    # 🔥 B. Buscar movimientos en TB que NO están en Cobranzas
+                    for ref_norm, info_tb in tb_dia_map.items():
+                        if ref_norm not in cobranzas_dia_map:
+                            # Verificar si coincide por monto
+                            coincide_por_monto = False
+                            for ref_cob, info_cob in cobranzas_dia_map.items():
+                                if abs(info_tb['monto'] - info_cob['monto']) < 0.01:
+                                    coincide_por_monto = True
+                                    break
+                            if not coincide_por_monto:
+                                discrepancias_cob_tb.append({
+                                    'Tipo Falla': '🔎 MOVIMIENTO EN TB SIN COBRANZA',
+                                    'Monto': info_tb['monto'],
+                                    'Detalle': f"Ref {info_tb['orig']} (Fila {info_tb['fila']}) | NO está en Cobranzas del día",
+                                    'Estatus': '🔴 Sin Cobranza'
+                                })
+                    
+                    # 🔥 C. Buscar DUPLICADOS EXACTOS por Referencia (Cobranzas vs TB)
+                    for ref_norm, info_cob in cobranzas_dia_map.items():
+                        if ref_norm in tb_dia_map:
+                            info_tb = tb_dia_map[ref_norm]
+                            diff_monto = abs(info_cob['monto'] - info_tb['monto'])
+                            if diff_monto < 0.01:
+                                discrepancias_cob_tb.append({
+                                    'Tipo Falla': '✅ CONCILIADO (Mismo Monto)',
+                                    'Monto': info_cob['monto'],
+                                    'Detalle': f"Ref {info_cob['orig']} | Cobranzas Fila {info_cob['fila']} = TB Fila {info_tb['fila']} | Cliente: {info_cob['cliente']}",
+                                    'Estatus': '✅ OK'
                                 })
                             else:
-                                cobranzas_dia_map[ref_norm] = {'monto': float(monto), 'fila': idx + 1, 'orig': ref}
-
-                    # --- 2. Extraer el Estado de Cuenta ---
-                    df_banco_clean = ProcesadorArchivos._limpiar_columnas(df_estado_cuenta)
-                    idx_banco = ProcesadorArchivos._encontrar_fila_datos(df_banco_clean, ['fecha', 'referencia', 'descrip'])
-                    if idx_banco >= 0:
-                        df_banco_clean = df_banco_clean.iloc[idx_banco:].reset_index(drop=True)
-                        df_banco_clean.columns = [str(c).strip().lower() for c in df_banco_clean.iloc[0]]
-                        df_banco_clean = df_banco_clean.iloc[1:].reset_index(drop=True)
-
-                    col_ref_ban = ProcesadorArchivos._buscar_columna(df_banco_clean, 'referencia', 'nro', 'documento')
-                    col_credito_ban = ProcesadorArchivos._buscar_columna(df_banco_clean, 'credito', 'monto', 'ingreso')
-
-                    banco_dia_map = {}
-                    for idx, row in df_banco_clean.iterrows():
-                        ref_b = str(row[col_ref_ban]).strip() if col_ref_ban in df_banco_clean.columns else ""
-                        monto_b = ProcesadorArchivos._convertir_numero_europeo(row[col_credito_ban]) if col_credito_ban in df_banco_clean.columns else 0.0
-                        
-                        if monto_b and monto_b > 0:
-                            ref_b_norm = re.sub(r'[^0-9]', '', ref_b) if ref_b else f"oculto_ban_{idx}"
-                            banco_dia_map[ref_b_norm] = {'monto': float(monto_b), 'fila': idx + 1, 'orig': ref_b}
-
-                    # --- 3. Cruce Ciego de Trazabilidad (Mismo Día) ---
-                    discrepancias_transito = []
-
-                    # A. Reportar los duplicados internos primero
-                    for dup in cobranzas_duplicadas_internas:
-                        discrepancias_transito.append({
-                            'Tipo Falla': '🔴 DUPLICADO INTERNO (Cobranzas)',
-                            'Monto': dup['Monto'],
-                            'Detalle': dup['Detalle'] + f" (Fila {dup['Fila Excel']})",
-                            'Estatus': 'Crítico'
-                        })
-
-                    # B. Cruzar Cobranzas vs Banco (Buscar diferencias de montos o faltantes)
-                    for ref_norm, info_cob in cobranzas_dia_map.items():
-                        if ref_norm in banco_dia_map:
-                            monto_banco = banco_dia_map[ref_norm]['monto']
-                            diff_monto = info_cob['monto'] - monto_banco
-                            if abs(diff_monto) > 0.01:
-                                discrepancias_transito.append({
-                                    'Tipo Falla': '💥 DIFERENCIA DE MONTO (Tránsito)',
+                                discrepancias_cob_tb.append({
+                                    'Tipo Falla': '⚠️ DIFERENCIA DE MONTO (Misma Ref)',
                                     'Monto': info_cob['monto'],
-                                    'Detalle': f"Ref {info_cob['orig']}: Registrado en Cobranzas por {formato_venezolano(info_cob['monto'])} pero ingresó al Banco por {formato_venezolano(monto_banco)} (Dif: {formato_venezolano(diff_monto)})",
-                                    'Estatus': 'Naranja'
+                                    'Detalle': f"Ref {info_cob['orig']} | Cobranzas: {formato_venezolano(info_cob['monto'])} vs TB: {formato_venezolano(info_tb['monto'])} (Dif: {diff_monto:.2f})",
+                                    'Estatus': '🟠 Revisar'
                                 })
-                        else:
-                            # Está en cobranzas pero no ha caído en el banco (Verdadero Tránsito)
-                            discrepancias_transito.append({
-                                'Tipo Falla': '⏳ TRANSFERENCIA EN TRÁNSITO',
-                                'Monto': info_cob['monto'],
-                                'Detalle': f"Ref {info_cob['orig']} (Fila {info_cob['fila']}): Reportada en Cobranzas pero NO figura en el Estado de Cuenta de hoy.",
-                                'Estatus': 'Amarilla'
-                            })
 
-                    # C. Banco vs Cobranzas (Ingresos al banco no registrados por el analista)
-                    for ref_norm, info_ban in banco_dia_map.items():
-                        if ref_norm not in cobranzas_dia_map and not ref_norm.startswith("oculto"):
-                            discrepancias_transito.append({
-                                'Tipo Falla': '🔎 INGRESO BANCO NO REGISTRADO',
-                                'Monto': info_ban['monto'],
-                                'Detalle': f"Ref {info_ban['orig']} (Fila {info_ban['fila']}): Dinero cayó en el banco por {formato_venezolano(info_ban['monto'])} pero el analista NO lo metió en Cobranzas.",
-                                'Estatus': 'Roja'
-                            })
-
-                    # Renderizar alertas del Tránsito del día
-                    if discrepancias_transito:
-                        df_transito = pd.DataFrame(discrepancias_transito)
-                        st.error(f"🚨 Se detectaron {len(discrepancias_transito)} inconsistencias en la conciliación de tránsito del día:")
-                        df_transito['Monto (Bs.)'] = df_transito['Monto'].apply(formato_venezolano)
+                    # --- 4. RENDERIZAR RESULTADOS ---
+                    if discrepancias_cob_tb:
+                        df_discrepancias = pd.DataFrame(discrepancias_cob_tb)
+                        
+                        # Separar por estado
+                        df_conciliados = df_discrepancias[df_discrepancias['Estatus'] == '✅ OK']
+                        df_advertencias = df_discrepancias[df_discrepancias['Estatus'].isin(['🟡 Verificar', '🟡 En Tránsito', '🟠 Revisar'])]
+                        df_criticos = df_discrepancias[df_discrepancias['Estatus'].isin(['🔴 Sin Cobranza', '🔎 MOVIMIENTO EN TB SIN COBRANZA'])]
+                        
+                        # Métricas
+                        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+                        with col_m1:
+                            st.metric("📊 Total Cruces", len(discrepancias_cob_tb))
+                        with col_m2:
+                            st.metric("✅ Conciliados", len(df_conciliados))
+                        with col_m3:
+                            st.metric("⚠️ Advertencias", len(df_advertencias))
+                        with col_m4:
+                            st.metric("🔴 Críticos", len(df_criticos))
+                        
+                        # Mostrar tabla completa
                         st.dataframe(
-                            df_transito[['Tipo Falla', 'Monto (Bs.)', 'Detalle', 'Estatus']],
+                            df_discrepancias.style.apply(
+                                lambda row: ['background-color: #d4edda;'] * len(row) if row['Estatus'] == '✅ OK' else
+                                           (['background-color: #fff3cd;'] * len(row) if row['Estatus'] in ['🟡 Verificar', '🟡 En Tránsito', '🟠 Revisar'] else
+                                           (['background-color: #f8d7da;'] * len(row) if row['Estatus'] in ['🔴 Sin Cobranza', '🔎 MOVIMIENTO EN TB SIN COBRANZA'] else [''] * len(row))),
+                                axis=1
+                            ),
                             use_container_width=True
                         )
+                        
+                        # 🔥 Resumen de la diferencia
+                        total_en_transito = sum([row['Monto'] for _, row in df_advertencias.iterrows() if 'En Tránsito' in str(row['Detalle'])])
+                        total_sin_cobranza = sum([row['Monto'] for _, row in df_criticos.iterrows()])
+                        total_duplicados = sum([row['Monto'] for _, row in df_advertencias.iterrows() if 'Coincidencia por Monto' in str(row['Tipo Falla'])])
+                        
+                        st.markdown("---")
+                        st.markdown("#### 📊 Resumen del Cruce Cobranzas vs TB")
+                        st.markdown(f"""
+                        | Concepto | Monto | Explicación |
+                        |----------|-------|-------------|
+                        | **Cobranzas en Tránsito** | {formato_venezolano(total_en_transito)} | Cobranzas registradas pero NO en TB |
+                        | **Movimientos TB sin Cobranza** | {formato_venezolano(total_sin_cobranza)} | Movimientos en TB sin cobranza asociada |
+                        | **Coincidencias por Monto** | {formato_venezolano(total_duplicados)} | Posibles duplicados con referencias diferentes |
+                        | **Diferencia Total** | **{formato_venezolano(diff_transito_calc)}** | Diferencia en Tránsito Calculado vs Reportado |
+                        """)
+                        
+                        if abs(diff_transito_calc) < 0.01:
+                            st.success("✅ **¡TRÁNSITO CONCILIADO!** Todas las cobranzas del día están correctamente registradas en TB.")
+                        else:
+                            st.warning(f"⚠️ **DIFERENCIA DE {formato_venezolano(abs(diff_transito_calc))} Bs.** Explicable por las discrepancias mostradas arriba.")
                     else:
-                        st.success("✅ ¡Conciliación de Tránsito perfecta! Todo lo reportado en cobranzas cuadra con los ingresos del banco.")
+                        st.success("✅ ¡Conciliación perfecta! Todas las cobranzas del día coinciden con los movimientos en TB.")
                 else:
-                    st.info("ℹ️ Carga los archivos obligatorios de **Cobranzas** y **Estado de Cuenta** para ejecutar el cruce automático de tránsito.")
+                    st.info("ℹ️ Carga los archivos de **Cobranzas** y **TB.xlsx** para ejecutar el cruce automático entre Cobranzas y Transferencias en Tránsito.")
 
         st.markdown("---")
         
