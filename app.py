@@ -5005,23 +5005,49 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
 
                     col_ref_tb = ProcesadorArchivos._buscar_columna(df_tb_clean, 'referencia', 'nro', 'documento')
                     
-                    # 🔥 FORZAR BÚSQUEDA DE MONTO: buscar 'monto' primero
+                    # 🔥 FORZAR BÚSQUEDA DE MONTO:
+                    # 1. Buscar columna 'monto' primero
+                    # 2. Si no tiene valores numéricos (fórmulas), buscar columna '$' que tiene el valor calculado
                     col_monto_tb = None
+                    
+                    # Buscar columna 'monto'
                     for col in df_tb_clean.columns:
                         col_lower = str(col).lower()
                         if col_lower == 'monto':
                             col_monto_tb = col
                             break
-                    if col_monto_tb is None:
-                        col_monto_tb = ProcesadorArchivos._buscar_columna(df_tb_clean, 'monto', 'total', 'importe')
-
+                    
+                    # Verificar si la columna 'monto' tiene valores numéricos
+                    if col_monto_tb is not None:
+                        # Intentar convertir a numérico y ver si hay valores válidos
+                        try:
+                            test_values = df_tb_clean[col_monto_tb].apply(ProcesadorArchivos._convertir_numero_europeo)
+                            if test_values.notna().sum() == 0 or test_values.sum() == 0:
+                                # La columna 'monto' no tiene valores numéricos (probablemente fórmulas)
+                                col_monto_tb = None
+                        except:
+                            col_monto_tb = None
+                    
+                    # Si no funciona, buscar columna '$' o 'usd'
                     if col_monto_tb is None:
                         for col in df_tb_clean.columns:
                             col_lower = str(col).lower()
-                            if col_lower not in ['usd', '$', 'tasa', 'fecha', 'referencia', 'descripcion']:
+                            if col_lower == '$' or col_lower == 'usd':
+                                col_monto_tb = col
+                                break
+                    
+                    # Si aún no se encuentra, buscar columna 'total' o 'importe'
+                    if col_monto_tb is None:
+                        col_monto_tb = ProcesadorArchivos._buscar_columna(df_tb_clean, 'monto', 'total', 'importe')
+
+                    # Fallback final: buscar cualquier columna numérica que no sea fecha o referencia
+                    if col_monto_tb is None:
+                        for col in df_tb_clean.columns:
+                            col_lower = str(col).lower()
+                            if col_lower not in ['fecha', 'referencia', 'descripcion', 'tasa', 'listo', 'usd', '$']:
                                 try:
-                                    df_tb_clean[col] = pd.to_numeric(df_tb_clean[col], errors='coerce')
-                                    if df_tb_clean[col].notna().sum() > 0:
+                                    test_values = pd.to_numeric(df_tb_clean[col], errors='coerce')
+                                    if test_values.notna().sum() > 0 and test_values.sum() > 0:
                                         col_monto_tb = col
                                         break
                                 except:
@@ -5036,7 +5062,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                             continue
                             
                         if monto_t and monto_t > 0:
-                            ref_t_norm = re.sub(r'[^0-9]', '', ref_t) if ref_t else f"tb_sin_ref_{idx}"
+                            ref_t_norm = re.sub(r'[^0-9]', '', ref_t)
                             tb_dia_map[ref_t_norm] = {
                                 'monto': float(monto_t), 
                                 'fila': idx + 1, 
