@@ -84,14 +84,29 @@ def descargar_excel(df, nombre_archivo, fecha):
     """
     Convierte un DataFrame a Excel y lo prepara para descarga.
     """
+    # 🔥 VALIDAR QUE df NO SEA None Y NO ESTÉ VACÍO
+    if df is None or df.empty:
+        # Crear un DataFrame vacío con un mensaje
+        df = pd.DataFrame({"Mensaje": ["No hay datos disponibles para exportar"]})
+    
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Datos')
-        # Ajustar ancho de columnas automáticamente
-        for column in df:
-            column_length = max(df[column].astype(str).map(len).max(), len(str(column)))
-            col_idx = df.columns.get_loc(column)
-            writer.sheets['Datos'].column_dimensions[chr(65 + col_idx)].width = min(column_length + 2, 50)
+        
+        # Ajustar ancho de columnas automáticamente con manejo seguro
+        for column in df.columns:
+            try:
+                # Convertir a string y obtener la longitud máxima
+                col_values = df[column].astype(str)
+                max_len = col_values.map(len).max()
+                header_len = len(str(column))
+                column_length = max(max_len if max_len else 0, header_len)
+                # Limitar el ancho máximo a 50
+                writer.sheets['Datos'].column_dimensions[column].width = min(column_length + 2, 50)
+            except Exception:
+                # Si falla, usar ancho por defecto
+                writer.sheets['Datos'].column_dimensions[column].width = 15
+                
     output.seek(0)
     return output
 
