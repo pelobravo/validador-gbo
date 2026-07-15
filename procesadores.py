@@ -363,6 +363,7 @@ class ProcesadorArchivos:
         """
         Procesa archivo de egresos iPago.
         🔥 EXCLUYE transferencias entre cuentas del mismo titular
+        Detecta: "TRANSFERENCIA ENTRE CUENTAS MISMO TITULAR" y "TRANSFERENCIA AL MISMO TITULAR"
         """
         pagos_proveedores = 0.0
         pagos_gastos = 0.0
@@ -485,19 +486,32 @@ class ProcesadorArchivos:
                 # ============================================================
                 es_transferencia_interna = False
                 
-                # 🔥 Patrón EXACTO que aparece en tu archivo
+                # 🔥 Patrón 1: TRANSFERENCIA ENTRE CUENTAS MISMO TITULAR
                 if 'TRANSFERENCIA ENTRE CUENTAS MISMO TITULAR' in tipo_pago:
                     es_transferencia_interna = True
-                    print(f"🔍 Transferencia interna detectada por TIPO DE PAGO: {tipo_pago}")
+                    print(f"🔍 Transferencia interna detectada por TIPO DE PAGO (ENTRE CUENTAS): {tipo_pago}")
                 
+                # 🔥 Patrón 2: TRANSFERENCIA AL MISMO TITULAR
+                if not es_transferencia_interna and 'TRANSFERENCIA AL MISMO TITULAR' in tipo_pago:
+                    es_transferencia_interna = True
+                    print(f"🔍 Transferencia interna detectada por TIPO DE PAGO (AL MISMO TITULAR): {tipo_pago}")
+                
+                # 🔥 Patrón 3: "MISMO TITULAR" en Tipo de Egreso
                 if not es_transferencia_interna and 'MISMO TITULAR' in tipo_egreso:
                     es_transferencia_interna = True
                     print(f"🔍 Transferencia interna detectada por TIPO DE EGRESO: {tipo_egreso}")
                 
+                # 🔥 Patrón 4: "TRANSFERENCIA ENTRE CUENTA MISMO TITULAR" en Proveedor
                 if not es_transferencia_interna and 'TRANSFERENCIA ENTRE CUENTA MISMO TITULAR' in proveedor:
                     es_transferencia_interna = True
-                    print(f"🔍 Transferencia interna detectada por PROVEEDOR: {proveedor}")
+                    print(f"🔍 Transferencia interna detectada por PROVEEDOR (ENTRE CUENTAS): {proveedor}")
                 
+                # 🔥 Patrón 5: "TRANSFERENCIA AL MISMO TITULAR" en Proveedor
+                if not es_transferencia_interna and 'TRANSFERENCIA AL MISMO TITULAR' in proveedor:
+                    es_transferencia_interna = True
+                    print(f"🔍 Transferencia interna detectada por PROVEEDOR (AL MISMO TITULAR): {proveedor}")
+                
+                # 🔥 Patrón 6: "MISMO TITULAR" en cualquier parte de Tipo de Pago
                 if not es_transferencia_interna and 'MISMO TITULAR' in tipo_pago:
                     es_transferencia_interna = True
                     print(f"🔍 Transferencia interna detectada por 'MISMO TITULAR' en TIPO DE PAGO: {tipo_pago}")
