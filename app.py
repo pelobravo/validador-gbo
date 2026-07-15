@@ -18,6 +18,7 @@
 # 📊 NUEVO: Módulo de Reportes con análisis de egresos por tipo de pago y CxP por empresa
 # 🔥 CORREGIDO: KPI de Total Egresos usa total_egresos (iPago) en lugar de total_egresos_banco
 # 📥 AGREGADO: Botones de descarga en Excel para todos los reportes y archivos del Cierre Diario
+# 🔧 CORREGIDO: Función descargar_excel para evitar errores con openpyxl
 
 import streamlit as st
 import pandas as pd
@@ -78,35 +79,73 @@ def consultar_deepseek(pregunta, contexto=""):
 # ============================================================
 
 # ============================================================
-# 🔥 FUNCIÓN PARA DESCARGAR EN EXCEL
+# 🔥 FUNCIÓN PARA DESCARGAR EN EXCEL - CORREGIDA (VERSIÓN ROBUSTA)
 # ============================================================
 def descargar_excel(df, nombre_archivo, fecha):
     """
     Convierte un DataFrame a Excel y lo prepara para descarga.
     """
     # 🔥 VALIDAR QUE df NO SEA None Y NO ESTÉ VACÍO
-    if df is None or df.empty:
-        # Crear un DataFrame vacío con un mensaje
+    if df is None:
         df = pd.DataFrame({"Mensaje": ["No hay datos disponibles para exportar"]})
+    elif df.empty:
+        df = pd.DataFrame({"Mensaje": ["El archivo está vacío"]})
     
     output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Datos')
+    
+    try:
+        # 🔥 Crear el Excel con los datos
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Datos')
         
-        # Ajustar ancho de columnas automáticamente con manejo seguro
-        for column in df.columns:
-            try:
-                # Convertir a string y obtener la longitud máxima
-                col_values = df[column].astype(str)
-                max_len = col_values.map(len).max()
-                header_len = len(str(column))
-                column_length = max(max_len if max_len else 0, header_len)
-                # Limitar el ancho máximo a 50
-                writer.sheets['Datos'].column_dimensions[column].width = min(column_length + 2, 50)
-            except Exception:
-                # Si falla, usar ancho por defecto
-                writer.sheets['Datos'].column_dimensions[column].width = 15
-                
+        # 🔥 Intentar ajustar el ancho de las columnas
+        try:
+            from openpyxl import load_workbook
+            
+            # Cargar el libro recién creado
+            output.seek(0)
+            wb = load_workbook(output)
+            ws = wb['Datos']
+            
+            # Ajustar ancho de columnas de forma segura
+            for column in ws.columns:
+                try:
+                    max_length = 0
+                    column_letter = column[0].column_letter
+                    
+                    for cell in column:
+                        try:
+                            if cell.value is not None:
+                                cell_value = str(cell.value)
+                                max_length = max(max_length, len(cell_value))
+                        except:
+                            pass
+                    
+                    # Ajustar el ancho (con límite máximo de 50)
+                    adjusted_width = min(max_length + 2, 50)
+                    if adjusted_width > 5:
+                        ws.column_dimensions[column_letter].width = adjusted_width
+                except Exception as col_error:
+                    # Si falla una columna, continuar con la siguiente
+                    print(f"Error ajustando columna: {col_error}")
+                    continue
+            
+            # Guardar los cambios
+            output.seek(0)
+            wb.save(output)
+            
+        except Exception as e:
+            # Si falla el ajuste de columnas, devolver el Excel sin ajustar
+            print(f"Error al ajustar columnas: {e}")
+            # El Excel ya está en output, no hacer nada más
+            
+    except Exception as e:
+        # 🔥 Si falla la creación del Excel, crear uno con el error
+        print(f"Error al crear Excel: {e}")
+        output = io.BytesIO()
+        df_error = pd.DataFrame({"Error": [f"Error al generar el archivo: {str(e)}"]})
+        df_error.to_excel(output, index=False, sheet_name='Error')
+    
     output.seek(0)
     return output
 
@@ -3454,7 +3493,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     # ARCHIVOS DE VERIFICACIÓN
     # ============================================================
     saldos_reportados = {}
-    archivos_cargados = {}
+    archivos_cargados = {}  # <--- Asegurar que esta variable existe
     
     if archivo_cxc_reportado:
         try:
@@ -3639,6 +3678,17 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
     activos_operativos = cx_c_cierre + inventario_cierre + bancos_cierre
     pasivos_operativos = cx_p_cierre + transito_cierre
     capital_neto = activos_operativos - pasivos_operativos
+    
+    # ============================================================
+    # ORIGEN DE ARCHIVOS PARA DETALLE
+    # ============================================================
+    origen_archivos = {
+        'CxC': archivo_cxc_reportado.name if archivo_cxc_reportado else 'NO DISPONIBLE',
+        'Inventario': archivo_inventario_reportado.name if archivo_inventario_reportado else 'NO DISPONIBLE',
+        'Bancos': archivo_estado_cuenta.name if archivo_estado_cuenta else 'NO DISPONIBLE',
+        'CxP': archivo_cxp_reportado.name if archivo_cxp_reportado else 'NO DISPONIBLE',
+        'Tránsito': archivo_tb.name if archivo_tb else 'NO DISPONIBLE'
+    }
     
     # ============================================================
     # ESTRUCTURA PRINCIPAL CON PESTAÑAS - AGREGADA PESTAÑA DE REPORTES
@@ -4510,20 +4560,27 @@ for clave in ['Inventario', 'CxC', 'Bancos', 'CxP', 'Tránsito']:
     df = df_mapeo.get(clave)
     
     if archivo and df is not None and not df.empty:
-        nombre_archivo = archivo.name if hasattr(archivo, 'name') else clave
-        with st.expander(f"📄 {nombre_archivo} ({clave})", expanded=False):
-            # Mostrar DataFrame
-            st.dataframe(df, use_container_width=True, height=250)
-            
-            # Botón de descarga
-            excel_data = descargar_excel(df, clave, fecha_procesar)
-            st.download_button(
-                label="⬇️ Descargar Excel",
-                data=excel_data,
-                file_name=f"{clave}_{fecha_procesar.strftime('%Y-%m-%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key=f"download_{clave}_minimal"
-            )
+        try:
+            nombre_archivo = archivo.name if hasattr(archivo, 'name') else clave
+            with st.expander(f"📄 {nombre_archivo} ({clave})", expanded=False):
+                try:
+                    # Mostrar DataFrame
+                    st.dataframe(df, use_container_width=True, height=250)
+                    
+                    # Botón de descarga
+                    excel_data = descargar_excel(df, clave, fecha_procesar)
+                    st.download_button(
+                        label="⬇️ Descargar Excel",
+                        data=excel_data,
+                        file_name=f"{clave}_{fecha_procesar.strftime('%Y-%m-%d')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key=f"download_{clave}_minimal"
+                    )
+                except Exception as e:
+                    st.error(f"⚠️ Error al mostrar el archivo {clave}: {str(e)[:100]}")
+        except Exception as e:
+            # No mostrar error, solo omitir el archivo
+            pass
 
 # ============================================================
 # BOTÓN PARA DESCARGAR CIERRE COMPLETO
