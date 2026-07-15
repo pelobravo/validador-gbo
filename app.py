@@ -33,6 +33,7 @@ import matplotlib.pyplot as plt
 import sqlite3
 import warnings
 from openai import OpenAI  # <--- NUEVO: Para DeepSeek API
+import time  # <--- NUEVO: Para medir el tiempo de carga
 
 # Importar módulos del sistema
 from config import USUARIOS, validar_carpetas
@@ -2625,6 +2626,59 @@ with st.container():
     st.caption("Sube los archivos obligatorios para comenzar la validación")
     
     # ============================================================
+    # 🕐 TEMPORIZADOR PARA MEDIR EL TIEMPO DE CARGA
+    # ============================================================
+    if 'tiempo_inicio_carga' not in st.session_state:
+        st.session_state.tiempo_inicio_carga = None
+    if 'tiempo_carga_total' not in st.session_state:
+        st.session_state.tiempo_carga_total = None
+    if 'archivos_cargados_tiempo' not in st.session_state:
+        st.session_state.archivos_cargados_tiempo = {}
+    
+    # Verificar si hay archivos nuevos cargados
+    archivos_actuales = {
+        'fact': archivo_facturacion,
+        'cob': archivo_cobranzas,
+        'egr': archivo_egresos,
+        'estado': archivo_estado_cuenta
+    }
+    
+    # Detectar si algún archivo se cargó recientemente
+    hay_nuevo_archivo = False
+    for key, archivo in archivos_actuales.items():
+        if archivo is not None:
+            nombre = archivo.name if hasattr(archivo, 'name') else str(archivo)
+            if key not in st.session_state.archivos_cargados_tiempo:
+                st.session_state.archivos_cargados_tiempo[key] = {
+                    'nombre': nombre,
+                    'tiempo': time.time()
+                }
+                hay_nuevo_archivo = True
+            elif st.session_state.archivos_cargados_tiempo[key]['nombre'] != nombre:
+                st.session_state.archivos_cargados_tiempo[key] = {
+                    'nombre': nombre,
+                    'tiempo': time.time()
+                }
+                hay_nuevo_archivo = True
+    
+    # Si hay nuevo archivo, iniciar o reiniciar el temporizador
+    if hay_nuevo_archivo:
+        st.session_state.tiempo_inicio_carga = time.time()
+        st.session_state.tiempo_carga_total = None
+    
+    # Si ya hay archivos cargados y no se ha calculado el tiempo total
+    archivos_validos = all(archivos_actuales.values())
+    if archivos_validos and st.session_state.tiempo_inicio_carga is not None and st.session_state.tiempo_carga_total is None:
+        st.session_state.tiempo_carga_total = time.time() - st.session_state.tiempo_inicio_carga
+    
+    # Mostrar el temporizador
+    if archivos_validos and st.session_state.tiempo_carga_total is not None:
+        st.info(f"⏱️ **Tiempo de carga de archivos:** {st.session_state.tiempo_carga_total:.2f} segundos")
+    elif st.session_state.tiempo_inicio_carga is not None:
+        tiempo_transcurrido = time.time() - st.session_state.tiempo_inicio_carga
+        st.info(f"⏳ **Cargando archivos...** {tiempo_transcurrido:.1f} segundos")
+    
+    # ============================================================
     # 1. ARCHIVOS OBLIGATORIOS
     # ============================================================
     col_u1, col_u2, col_u3, col_u4 = st.columns(4)
@@ -4327,376 +4381,233 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                     st.success("✅ Ajustes reseteados a 0")
                     st.rerun()
 
-# ============================================================
-# 📋 DETALLE DEL CIERRE DIARIO - VERSIÓN MINIMALISTA
-# ============================================================
-st.markdown("#### 📋 Detalle del Cierre Diario")
-
-# Definir los items con referencia al archivo
-cierre_items = [
-    {"Concepto": "📦 Inventario", "clave": "Inventario", "tipo": "ACTIVO", "monto": inventario_cierre},
-    {"Concepto": "💰 Cuentas por cobrar", "clave": "CxC", "tipo": "ACTIVO", "monto": cx_c_cierre},
-    {"Concepto": "🏦 Bancos", "clave": "Bancos", "tipo": "ACTIVO", "monto": bancos_cierre},
-    {"Concepto": "📌 TOTAL ACTIVOS OPERATIVOS", "clave": None, "tipo": "ACTIVO_TOTAL", "monto": activos_operativos},
-    {"Concepto": "📋 Cuentas por pagar", "clave": "CxP", "tipo": "PASIVO", "monto": cx_p_cierre},
-    {"Concepto": "🔄 Transferencias en tránsito", "clave": "Tránsito", "tipo": "PASIVO", "monto": transito_cierre},
-    {"Concepto": "📌 TOTAL PASIVOS OPERATIVOS", "clave": None, "tipo": "PASIVO_TOTAL", "monto": pasivos_operativos},
-    {"Concepto": "🏁 CAPITAL DE TRABAJO NETO", "clave": None, "tipo": "CAPITAL", "monto": capital_neto}
-]
-
-# Mapeo de claves a archivos
-archivo_mapeo = {
-    "Inventario": archivo_inventario_reportado,
-    "CxC": archivo_cxc_reportado,
-    "Bancos": archivo_estado_cuenta,
-    "CxP": archivo_cxp_reportado,
-    "Tránsito": archivo_tb
-}
-
-# Mapeo de claves a DataFrames
-df_mapeo = {
-    "Inventario": archivos_cargados.get('Inventario'),
-    "CxC": archivos_cargados.get('CxC'),
-    "Bancos": df_estado_cuenta if 'df_estado_cuenta' in locals() else None,
-    "CxP": archivos_cargados.get('CxP'),
-    "Tránsito": archivos_cargados.get('Tránsito')
-}
-
-# Inicializar estados de visualización
-for clave in df_mapeo.keys():
-    if f'ver_archivo_{clave}' not in st.session_state:
-        st.session_state[f'ver_archivo_{clave}'] = False
-
-# CSS para tabla minimalista
-st.markdown("""
-<style>
-    .cierre-minimal {
-        width: 100%;
-        border-collapse: collapse;
-        font-family: 'Inter', sans-serif;
-        font-size: 0.9rem;
-    }
-    .cierre-minimal tr {
-        border-bottom: 1px solid #f0f0f0;
-    }
-    .cierre-minimal td {
-        padding: 10px 8px;
-        vertical-align: middle;
-    }
-    .cierre-minimal .concepto {
-        font-weight: 500;
-        color: #1a3a5c;
-    }
-    .cierre-minimal .archivo {
-        color: #6a8aac;
-        font-size: 0.8rem;
-        cursor: pointer;
-    }
-    .cierre-minimal .archivo:hover {
-        color: #1a3a5c;
-        text-decoration: underline;
-    }
-    .cierre-minimal .tipo {
-        font-size: 0.7rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        padding: 2px 10px;
-        border-radius: 12px;
-        display: inline-block;
-    }
-    .cierre-minimal .tipo-activo {
-        background: #e8f5e9;
-        color: #1e7e34;
-    }
-    .cierre-minimal .tipo-pasivo {
-        background: #fff3e0;
-        color: #d97706;
-    }
-    .cierre-minimal .tipo-total {
-        background: #0a1628;
-        color: white;
-        padding: 4px 14px;
-    }
-    .cierre-minimal .tipo-capital {
-        background: #c9a84c;
-        color: #0a1628;
-        font-weight: 700;
-    }
-    .cierre-minimal .monto {
-        font-weight: 600;
-        text-align: right;
-        font-family: 'Inter', monospace;
-    }
-    .cierre-minimal .monto-total {
-        font-weight: 700;
-        font-size: 1rem;
-    }
-    .cierre-minimal .monto-capital {
-        font-weight: 800;
-        font-size: 1.1rem;
-    }
-    .cierre-minimal .monto-capital-positivo {
-        color: #1e7e34;
-    }
-    .cierre-minimal .monto-capital-negativo {
-        color: #c82333;
-    }
-    .cierre-minimal .btn-ver {
-        background: none;
-        border: none;
-        color: #3498db;
-        font-size: 0.7rem;
-        cursor: pointer;
-        padding: 2px 8px;
-        border-radius: 4px;
-    }
-    .cierre-minimal .btn-ver:hover {
-        background: #ebf5fb;
-        text-decoration: underline;
-    }
-    .cierre-minimal .btn-descargar {
-        background: #1a3a5c;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        padding: 2px 10px;
-        font-size: 0.65rem;
-        cursor: pointer;
-        margin-left: 4px;
-    }
-    .cierre-minimal .btn-descargar:hover {
-        background: #0a1628;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# Construir la tabla HTML
-html_rows = []
-for item in cierre_items:
-    concepto = item['Concepto']
-    tipo = item['tipo']
-    monto = item['monto']
-    clave = item.get('clave')
+    # ============================================================
+    # 📋 DETALLE DEL CIERRE DIARIO - VERSIÓN MINIMALISTA CON TEMPORIZADOR
+    # ============================================================
+    st.markdown("#### 📋 Detalle del Cierre Diario")
     
-    # Determinar clase del tipo
-    if tipo == 'ACTIVO':
-        tipo_clase = 'tipo-activo'
-    elif tipo == 'PASIVO':
-        tipo_clase = 'tipo-pasivo'
-    elif tipo == 'ACTIVO_TOTAL':
-        tipo_clase = 'tipo-total'
-    elif tipo == 'PASIVO_TOTAL':
-        tipo_clase = 'tipo-total'
-    elif tipo == 'CAPITAL':
-        tipo_clase = 'tipo-capital'
-    else:
-        tipo_clase = ''
+    # 📌 INICIO DEL TEMPORIZADOR PARA EL CIERRE DIARIO
+    start_time_cierre = time.time()
     
-    # Determinar clase del monto
-    if tipo in ['ACTIVO_TOTAL', 'PASIVO_TOTAL']:
-        monto_clase = 'monto monto-total'
-    elif tipo == 'CAPITAL':
-        monto_clase = 'monto monto-capital'
-        if capital_neto >= 0:
-            monto_clase += ' monto-capital-positivo'
-        else:
-            monto_clase += ' monto-capital-negativo'
-    else:
-        monto_clase = 'monto'
+    # Asegurar que los valores sean números y formatearlos correctamente
+    inventario_cierre = safe_number(inventario_cierre)
+    cx_c_cierre = safe_number(cx_c_cierre)
+    bancos_cierre = safe_number(bancos_cierre)
+    cx_p_cierre = safe_number(cx_p_cierre)
+    transito_cierre = safe_number(transito_cierre)
+    activos_operativos = safe_number(activos_operativos)
+    pasivos_operativos = safe_number(pasivos_operativos)
+    capital_neto = safe_number(capital_neto)
     
-    # Formatear monto
-    monto_str = formato_venezolano(monto)
-    
-    # Obtener nombre del archivo
-    archivo_nombre = ""
-    if clave and clave in archivo_mapeo:
-        archivo = archivo_mapeo[clave]
-        if archivo:
-            archivo_nombre = archivo.name if hasattr(archivo, 'name') else clave
-    
-    # Si es TOTAL o CAPITAL, no mostrar archivo
-    if tipo in ['ACTIVO_TOTAL', 'PASIVO_TOTAL', 'CAPITAL']:
-        archivo_nombre = "—"
-    
-    # Botón de ver archivo (solo si hay archivo)
-    btn_html = ""
-    if clave and clave in archivo_mapeo and archivo_mapeo[clave]:
-        df = df_mapeo.get(clave)
-        if df is not None and not df.empty:
-            btn_html = f"""
-            <button class="btn-ver" onclick="document.getElementById('exp_{clave}').style.display='block'">👁️ Ver</button>
-            """
-    
-    # Crear fila
-    row = f"""
-    <tr>
-        <td class="concepto">{concepto}</td>
-        <td class="archivo">{archivo_nombre}</td>
-        <td><span class="tipo {tipo_clase}">{tipo}</span></td>
-        <td class="{monto_clase}">{monto_str}</td>
-    </tr>
-    """
-    html_rows.append(row)
-
-# Tabla principal
-st.markdown(f"""
-<table class="cierre-minimal">
-    <tbody>
-        {''.join(html_rows)}
-    </tbody>
-</table>
-""", unsafe_allow_html=True)
-
-# ============================================================
-# EXPANDERS PARA VER/DESCARGAR ARCHIVOS (debajo de la tabla)
-# ============================================================
-st.markdown("---")
-st.markdown("#### 📂 Ver y Descargar Archivos")
-
-# Crear expanders para cada archivo disponible
-for clave in ['Inventario', 'CxC', 'Bancos', 'CxP', 'Tránsito']:
-    archivo = archivo_mapeo.get(clave)
-    df = df_mapeo.get(clave)
-    
-    if archivo and df is not None and not df.empty:
-        try:
-            nombre_archivo = archivo.name if hasattr(archivo, 'name') else clave
-            with st.expander(f"📄 {nombre_archivo} ({clave})", expanded=False):
-                try:
-                    # Mostrar DataFrame
-                    st.dataframe(df, use_container_width=True, height=250)
-                    
-                    # Botón de descarga
-                    excel_data = descargar_excel(df, clave, fecha_procesar)
-                    st.download_button(
-                        label="⬇️ Descargar Excel",
-                        data=excel_data,
-                        file_name=f"{clave}_{fecha_procesar.strftime('%Y-%m-%d')}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        key=f"download_{clave}_minimal"
-                    )
-                except Exception as e:
-                    st.error(f"⚠️ Error al mostrar el archivo {clave}: {str(e)[:100]}")
-        except Exception as e:
-            # No mostrar error, solo omitir el archivo
-            pass
-
-# ============================================================
-# BOTÓN PARA DESCARGAR CIERRE COMPLETO
-# ============================================================
-st.markdown("---")
-col_desc1, col_desc2, col_desc3 = st.columns([1, 2, 1])
-with col_desc2:
-    df_cierre_completo = pd.DataFrame([{
-        'Concepto': item['Concepto'],
-        'Tipo': item['tipo'],
-        'Monto (Bs.)': formato_venezolano(item['monto'])
-    } for item in cierre_items])
-    
-    # Añadir resumen
-    resumen_data = [
-        {'Concepto': 'TOTAL ACTIVOS', 'Tipo': 'RESUMEN', 'Monto (Bs.)': formato_venezolano(activos_operativos)},
-        {'Concepto': 'TOTAL PASIVOS', 'Tipo': 'RESUMEN', 'Monto (Bs.)': formato_venezolano(pasivos_operativos)},
-        {'Concepto': 'CAPITAL DE TRABAJO NETO', 'Tipo': 'RESUMEN', 'Monto (Bs.)': formato_venezolano(capital_neto)}
+    # Definir los items con referencia al archivo
+    cierre_items = [
+        {"Concepto": "📦 Inventario", "clave": "Inventario", "tipo": "ACTIVO", "monto": inventario_cierre},
+        {"Concepto": "💰 Cuentas por cobrar", "clave": "CxC", "tipo": "ACTIVO", "monto": cx_c_cierre},
+        {"Concepto": "🏦 Bancos", "clave": "Bancos", "tipo": "ACTIVO", "monto": bancos_cierre},
+        {"Concepto": "📌 TOTAL ACTIVOS OPERATIVOS", "clave": None, "tipo": "ACTIVO_TOTAL", "monto": activos_operativos},
+        {"Concepto": "📋 Cuentas por pagar", "clave": "CxP", "tipo": "PASIVO", "monto": cx_p_cierre},
+        {"Concepto": "🔄 Transferencias en tránsito", "clave": "Tránsito", "tipo": "PASIVO", "monto": transito_cierre},
+        {"Concepto": "📌 TOTAL PASIVOS OPERATIVOS", "clave": None, "tipo": "PASIVO_TOTAL", "monto": pasivos_operativos},
+        {"Concepto": "🏁 CAPITAL DE TRABAJO NETO", "clave": None, "tipo": "CAPITAL", "monto": capital_neto}
     ]
-    df_resumen = pd.DataFrame(resumen_data)
-    df_final = pd.concat([df_cierre_completo, df_resumen], ignore_index=True)
     
-    excel_data = descargar_excel(df_final, "Cierre_Diario", fecha_procesar)
-    st.download_button(
-        label="📥 DESCARGAR CIERRE DIARIO COMPLETO (EXCEL)",
-        data=excel_data,
-        file_name=f"Cierre_Diario_{fecha_procesar.strftime('%Y-%m-%d')}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        key="download_cierre_completo_minimal",
-        use_container_width=True
+    # Mapeo de claves a archivos
+    archivo_mapeo = {
+        "Inventario": archivo_inventario_reportado,
+        "CxC": archivo_cxc_reportado,
+        "Bancos": archivo_estado_cuenta,
+        "CxP": archivo_cxp_reportado,
+        "Tránsito": archivo_tb
+    }
+    
+    # Mapeo de claves a DataFrames
+    df_mapeo = {
+        "Inventario": archivos_cargados.get('Inventario'),
+        "CxC": archivos_cargados.get('CxC'),
+        "Bancos": df_estado_cuenta if 'df_estado_cuenta' in locals() else None,
+        "CxP": archivos_cargados.get('CxP'),
+        "Tránsito": archivos_cargados.get('Tránsito')
+    }
+    
+    # Usar st.dataframe para mostrar la tabla de forma limpia
+    df_cierre = pd.DataFrame([
+        {"Concepto": "📦 Inventario", "Archivo": archivo_inventario_reportado.name if archivo_inventario_reportado else "NO DISPONIBLE", "Tipo": "ACTIVO", "Monto": inventario_cierre},
+        {"Concepto": "💰 Cuentas por cobrar", "Archivo": archivo_cxc_reportado.name if archivo_cxc_reportado else "NO DISPONIBLE", "Tipo": "ACTIVO", "Monto": cx_c_cierre},
+        {"Concepto": "🏦 Bancos", "Archivo": archivo_estado_cuenta.name if archivo_estado_cuenta else "NO DISPONIBLE", "Tipo": "ACTIVO", "Monto": bancos_cierre},
+        {"Concepto": "📌 TOTAL ACTIVOS OPERATIVOS", "Archivo": "—", "Tipo": "TOTAL", "Monto": activos_operativos},
+        {"Concepto": "📋 Cuentas por pagar", "Archivo": archivo_cxp_reportado.name if archivo_cxp_reportado else "NO DISPONIBLE", "Tipo": "PASIVO", "Monto": cx_p_cierre},
+        {"Concepto": "🔄 Transferencias en tránsito", "Archivo": archivo_tb.name if archivo_tb else "NO DISPONIBLE", "Tipo": "PASIVO", "Monto": transito_cierre},
+        {"Concepto": "📌 TOTAL PASIVOS OPERATIVOS", "Archivo": "—", "Tipo": "TOTAL", "Monto": pasivos_operativos},
+        {"Concepto": "🏁 CAPITAL DE TRABAJO NETO", "Archivo": "—", "Tipo": "CAPITAL", "Monto": capital_neto}
+    ])
+    
+    # Formatear los montos
+    df_cierre['Monto'] = df_cierre['Monto'].apply(formato_venezolano)
+    
+    # Aplicar estilos a la tabla
+    def style_cierre(row):
+        if row['Tipo'] == 'TOTAL':
+            return ['background-color: #0a1628; color: white; font-weight: bold;'] * len(row)
+        elif row['Tipo'] == 'CAPITAL':
+            if capital_neto >= 0:
+                return ['background-color: #0f3d2e; color: #2ecc71; font-weight: bold;'] * len(row)
+            else:
+                return ['background-color: #3d1a1a; color: #e74c3c; font-weight: bold;'] * len(row)
+        elif row['Tipo'] == 'ACTIVO':
+            return ['background-color: #e8f5e9;'] * len(row)
+        elif row['Tipo'] == 'PASIVO':
+            return ['background-color: #fff3e0;'] * len(row)
+        return [''] * len(row)
+    
+    # Mostrar la tabla con st.dataframe
+    st.dataframe(
+        df_cierre.style.apply(style_cierre, axis=1).hide(axis='index'),
+        use_container_width=True,
+        height=350
     )
     
-    # 🔥 BOTÓN PARA DESCARGAR EL CIERRE DIARIO COMPLETO EN EXCEL
+    # 📌 FIN DEL TEMPORIZADOR Y MOSTRAR TIEMPO DE CARGA DEL CIERRE
+    end_time_cierre = time.time()
+    tiempo_cierre = end_time_cierre - start_time_cierre
+    st.caption(f"⏱️ Tiempo de generación del Cierre Diario: {tiempo_cierre:.2f} segundos")
+    
+    # ============================================================
+    # RESUMEN DEL CIERRE DIARIO - KPIS CORPORATIVOS CORREGIDOS
+    # ============================================================
+    st.markdown("---")
+    st.markdown("#### 📊 Resumen del Cierre Diario")
+    st.caption("💡 Haz clic en cada KPI para ver su composición detallada")
+    
+    # Asegurar que los valores sean números válidos
+    activos_operativos = safe_number(activos_operativos)
+    pasivos_operativos = safe_number(pasivos_operativos)
+    capital_neto = safe_number(capital_neto)
+    cx_c_cierre = safe_number(cx_c_cierre)
+    inventario_cierre = safe_number(inventario_cierre)
+    bancos_cierre = safe_number(bancos_cierre)
+    cx_p_cierre = safe_number(cx_p_cierre)
+    transito_cierre = safe_number(transito_cierre)
+    
+    col_c1, col_c2, col_c3 = st.columns(3)
+    
+    with col_c1:
+        st.metric(
+            label="📈 ACTIVOS OPERATIVOS",
+            value=formato_venezolano(activos_operativos),
+            help=f"CxC: {formato_venezolano(cx_c_cierre)} | Inventario: {formato_venezolano(inventario_cierre)} | Bancos: {formato_venezolano(bancos_cierre)}"
+        )
+    
+    with col_c2:
+        st.metric(
+            label="📉 PASIVOS OPERATIVOS",
+            value=formato_venezolano(pasivos_operativos),
+            help=f"CxP: {formato_venezolano(cx_p_cierre)} | Tránsito: {formato_venezolano(transito_cierre)}"
+        )
+    
+    with col_c3:
+        delta = f"{formato_venezolano(capital_neto)}"
+        if capital_neto >= 0:
+            st.metric(
+                label="✅ CAPITAL DE TRABAJO NETO",
+                value=formato_venezolano(capital_neto),
+                delta="POSITIVO ✅",
+                delta_color="normal"
+            )
+        else:
+            st.metric(
+                label="❌ CAPITAL DE TRABAJO NETO",
+                value=formato_venezolano(capital_neto),
+                delta="NEGATIVO ❌",
+                delta_color="inverse"
+            )
+    
+    # Expandir para ver archivos
+    with st.expander("📂 Ver origen detallado de cada archivo", expanded=False):
+        st.markdown("""
+        ### 📂 Origen de los archivos utilizados en el Cierre Diario
+        
+        | Concepto | Archivo | Estado |
+        |----------|---------|--------|
+        """)
+        
+        if archivo_cxc_reportado:
+            st.markdown(f"| 💰 Cuentas por cobrar | `{archivo_cxc_reportado.name}` | ✅ Cargado |")
+        else:
+            st.markdown("| 💰 Cuentas por cobrar | **NO CARGADO** | ❌ No disponible |")
+        
+        if archivo_inventario_reportado:
+            st.markdown(f"| 📦 Inventario | `{archivo_inventario_reportado.name}` | ✅ Cargado |")
+        else:
+            st.markdown("| 📦 Inventario | **NO CARGADO** | ❌ No disponible |")
+        
+        if archivo_cxp_reportado:
+            st.markdown(f"| 📋 Cuentas por pagar | `{archivo_cxp_reportado.name}` | ✅ Cargado |")
+        else:
+            st.markdown("| 📋 Cuentas por pagar | **NO CARGADO** | ❌ No disponible |")
+        
+        if archivo_tb:
+            st.markdown(f"| 🔄 Transferencias en tránsito | `{archivo_tb.name}` | ✅ Cargado |")
+        else:
+            st.markdown("| 🔄 Transferencias en tránsito | **NO CARGADO** | ❌ No disponible |")
+        
+        if archivo_estado_cuenta:
+            st.markdown(f"| 🏦 Bancos | `{archivo_estado_cuenta.name}` | ✅ Cargado |")
+        else:
+            st.markdown("| 🏦 Bancos | **NO CARGADO** | ❌ No disponible |")
+        
+        st.markdown("""
+        
+        ### 📌 Valores extraídos:
+        """)
+        
+        st.markdown(f"""
+        | Concepto | Valor | Origen |
+        |----------|-------|--------|
+        | Cuentas por cobrar | {formato_venezolano(cx_c_cierre)} | {origen_archivos.get('CxC', 'NO DISPONIBLE')} |
+        | Inventario | {formato_venezolano(inventario_cierre)} | {origen_archivos.get('Inventario', 'NO DISPONIBLE')} |
+        | Bancos | {formato_venezolano(bancos_cierre)} | {origen_archivos.get('Bancos', 'NO DISPONIBLE')} |
+        | Cuentas por pagar | {formato_venezolano(cx_p_cierre)} | {origen_archivos.get('CxP', 'NO DISPONIBLE')} |
+        | Transferencias en tránsito | {formato_venezolano(transito_cierre)} | {origen_archivos.get('Tránsito', 'NO DISPONIBLE')} |
+        """)
+
+        # ============================================================
+        # BOTÓN PARA DESCARGAR EL CIERRE DIARIO COMPLETO EN EXCEL
+        # ============================================================
     st.markdown("---")
     col_desc1, col_desc2, col_desc3 = st.columns([1, 2, 1])
     with col_desc2:
-        if st.button("📥 DESCARGAR CIERRE DIARIO COMPLETO (EXCEL)", use_container_width=True):
-            # Crear DataFrame con el cierre completo
-            df_cierre_completo = pd.DataFrame(cierre_items)
-            df_cierre_completo['Monto'] = df_cierre_completo['monto']
-            df_cierre_completo = df_cierre_completo[['Concepto', 'tipo', 'Monto']]
-            df_cierre_completo['Monto'] = df_cierre_completo['Monto'].apply(formato_venezolano)
-            df_cierre_completo.columns = ['Concepto', 'Tipo', 'Monto (Bs.)']
-            
-            # Añadir resumen adicional
-            resumen_data = {
-                'Concepto': ['TOTAL ACTIVOS', 'TOTAL PASIVOS', 'CAPITAL DE TRABAJO NETO'],
-                'Tipo': ['RESUMEN', 'RESUMEN', 'RESUMEN'],
-                'Monto (Bs.)': [
-                    formato_venezolano(activos_operativos),
-                    formato_venezolano(pasivos_operativos),
-                    formato_venezolano(capital_neto)
-                ]
-            }
-            df_resumen = pd.DataFrame(resumen_data)
-            df_final = pd.concat([df_cierre_completo, df_resumen], ignore_index=True)
-            
-            excel_data = descargar_excel(df_final, "Cierre_Diario", fecha_procesar)
-            st.download_button(
-                label="⬇️ Confirmar Descarga",
-                data=excel_data,
-                file_name=f"Cierre_Diario_{fecha_procesar.strftime('%Y-%m-%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="download_cierre_completo"
-            )
-
-        with st.expander("📂 Ver origen detallado de cada archivo", expanded=False):
-            st.markdown("""
-            ### 📂 Origen de los archivos utilizados en el Cierre Diario
-            
-            | Concepto | Archivo | Estado |
-            |----------|---------|--------|
-            """)
-            
-            if archivo_cxc_reportado:
-                st.markdown(f"| 💰 Cuentas por cobrar | `{archivo_cxc_reportado.name}` | ✅ Cargado |")
-            else:
-                st.markdown("| 💰 Cuentas por cobrar | **NO CARGADO** | ❌ No disponible |")
-            
-            if archivo_inventario_reportado:
-                st.markdown(f"| 📦 Inventario | `{archivo_inventario_reportado.name}` | ✅ Cargado |")
-            else:
-                st.markdown("| 📦 Inventario | **NO CARGADO** | ❌ No disponible |")
-            
-            if archivo_cxp_reportado:
-                st.markdown(f"| 📋 Cuentas por pagar | `{archivo_cxp_reportado.name}` | ✅ Cargado |")
-            else:
-                st.markdown("| 📋 Cuentas por pagar | **NO CARGADO** | ❌ No disponible |")
-            
-            if archivo_tb:
-                st.markdown(f"| 🔄 Transferencias en tránsito | `{archivo_tb.name}` | ✅ Cargado |")
-            else:
-                st.markdown("| 🔄 Transferencias en tránsito | **NO CARGADO** | ❌ No disponible |")
-            
-            if archivo_estado_cuenta:
-                st.markdown(f"| 🏦 Bancos | `{archivo_estado_cuenta.name}` | ✅ Cargado |")
-            else:
-                st.markdown("| 🏦 Bancos | **NO CARGADO** | ❌ No disponible |")
-            
-            st.markdown("""
-            
-            ### 📌 Valores extraídos:
-            """)
-            
-            st.markdown(f"""
-            | Concepto | Valor | Origen |
-            |----------|-------|--------|
-            | Cuentas por cobrar | {formato_venezolano(cx_c_cierre)} | {origen_archivos.get('CxC', 'NO DISPONIBLE')} |
-            | Inventario | {formato_venezolano(inventario_cierre)} | {origen_archivos.get('Inventario', 'NO DISPONIBLE')} |
-            | Bancos | {formato_venezolano(bancos_cierre)} | {origen_archivos.get('Bancos', 'NO DISPONIBLE')} |
-            | Cuentas por pagar | {formato_venezolano(cx_p_cierre)} | {origen_archivos.get('CxP', 'NO DISPONIBLE')} |
-            | Transferencias en tránsito | {formato_venezolano(transito_cierre)} | {origen_archivos.get('Tránsito', 'NO DISPONIBLE')} |
-            """)
+        # Crear DataFrame con el cierre completo
+        df_cierre_completo = pd.DataFrame(cierre_items)
+        df_cierre_completo['Monto'] = df_cierre_completo['monto']
+        df_cierre_completo = df_cierre_completo[['Concepto', 'tipo', 'Monto']]
+        df_cierre_completo['Monto'] = df_cierre_completo['Monto'].apply(formato_venezolano)
+        df_cierre_completo.columns = ['Concepto', 'Tipo', 'Monto (Bs.)']
+        
+        # Añadir resumen adicional
+        resumen_data = {
+            'Concepto': ['TOTAL ACTIVOS', 'TOTAL PASIVOS', 'CAPITAL DE TRABAJO NETO'],
+            'Tipo': ['RESUMEN', 'RESUMEN', 'RESUMEN'],
+            'Monto (Bs.)': [
+                formato_venezolano(activos_operativos),
+                formato_venezolano(pasivos_operativos),
+                formato_venezolano(capital_neto)
+            ]
+        }
+        df_resumen = pd.DataFrame(resumen_data)
+        df_final = pd.concat([df_cierre_completo, df_resumen], ignore_index=True)
+        
+        excel_data = descargar_excel(df_final, "Cierre_Diario", fecha_procesar)
+        st.download_button(
+            label="📥 DESCARGAR CIERRE DIARIO COMPLETO (EXCEL)",
+            data=excel_data,
+            file_name=f"Cierre_Diario_{fecha_procesar.strftime('%Y-%m-%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_cierre_completo_minimal",
+            use_container_width=True
+        )
 
         # ============================================================
-        # RESUMEN DEL CIERRE DIARIO - KPIS CORPORATIVOS
+        # RESUMEN DEL CIERRE DIARIO - KPIS CORPORATIVOS CORREGIDOS
         # ============================================================
         st.markdown("---")
         st.markdown("#### 📊 Resumen del Cierre Diario")
