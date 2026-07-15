@@ -357,8 +357,6 @@ class ProcesadorArchivos:
         return 0.0, 0, 0.0
     
     # ===================== EGRESOS - CORREGIDO CON EXCLUSIÓN DE TRANSFERENCIAS INTERNAS =====================
-
-    # ===================== EGRESOS - CORREGIDO CON EXCLUSIÓN DE TRANSFERENCIAS INTERNAS =====================
     
     @staticmethod
     def procesar_egresos(df):
@@ -538,23 +536,6 @@ class ProcesadorArchivos:
             import traceback
             traceback.print_exc()
             return 0.0, 0.0, 0.0, pd.DataFrame()
-        
-        # ============================================================
-        # 🔥 DEPURACIÓN
-        # ============================================================
-        print(f"✅ Columnas encontradas: Tipo de Pago='{col_tipo_pago}', Monto USD='{col_monto_usd}'")
-        print(f"✅ Proveedores de Mercancía: {len(df_proveedores)} registros, Total: {pagos_proveedores}")
-        print(f"✅ Otros Gastos (reales): {pagos_gastos}")
-        print(f"🔄 Transferencias Internas EXCLUIDAS: {monto_transferencias_internas}")
-        print(f"💰 Total Egresos (neto, sin transferencias internas): {total_egresos}")
-        
-        return pagos_proveedores, pagos_gastos, total_egresos, df_proveedores, monto_transferencias_internas
-        
-    except Exception as e:
-        print(f"❌ Error al procesar egresos: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return 0.0, 0.0, 0.0, pd.DataFrame(), 0.0
     
     # ===================== ESTADO DE CUENTA =====================
     
