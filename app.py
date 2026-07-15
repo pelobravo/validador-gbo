@@ -19,6 +19,7 @@
 # 🔥 CORREGIDO: KPI de Total Egresos usa total_egresos (iPago) en lugar de total_egresos_banco
 # 📥 AGREGADO: Botones de descarga en Excel para todos los reportes y archivos del Cierre Diario
 # 🔧 CORREGIDO: Función descargar_excel para evitar errores con openpyxl
+# 🔥 NUEVO: Análisis de Cuentas por Pagar (CxP) - Trazabilidad y detección de diferencias
 
 import streamlit as st
 import pandas as pd
