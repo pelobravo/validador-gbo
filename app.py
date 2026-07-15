@@ -2507,116 +2507,99 @@ if (st.session_state.get("fact_top") is not None and
 def renderizar_estado_uploader(archivo, columnas_esperadas=None, columnas_excluidas=None, nombre_archivo=None, palabras_clave_nombre=None, hoja_nombre=None):
     """
     Renderiza el estado de un uploader con colores y mensajes.
-    VALIDA POR COLUMNAS en TODO el archivo Y por nombre de archivo.
-    
-    Args:
-        archivo: El archivo subido (de st.file_uploader)
-        columnas_esperadas: Lista de columnas que DEBE tener (opcional)
-        columnas_excluidas: Lista de columnas que NO debe tener (opcional)
-        nombre_archivo: Nombre descriptivo para mensajes de error (opcional)
-        palabras_clave_nombre: Palabras clave que debe tener el nombre del archivo (opcional)
-        hoja_nombre: Nombre específico de la hoja a leer (opcional)
-    
-    Returns:
-        bool: True si el archivo es válido, False si no
+    VALIDA PRIMERO POR COLUMNAS, LUEGO POR NOMBRE
     """
     if archivo is None:
         st.warning("⏳ PENDIENTE")
         return False
     
-    # Validar por nombre de archivo
-    if palabras_clave_nombre:
+    # 🔥 PRIMERO: VALIDAR POR CONTENIDO (COLUMNAS)
+    valido_por_columnas = False
+    valido_por_nombre = False
+    
+    if columnas_esperadas or columnas_excluidas:
+        try:
+            xls = pd.ExcelFile(archivo)
+            hojas = xls.sheet_names
+            
+            if hoja_nombre and hoja_nombre in hojas:
+                hojas_a_buscar = [hoja_nombre]
+            else:
+                hojas_a_buscar = hojas
+            
+            columnas_encontradas = set()
+            columnas_excluidas_encontradas = set()
+            
+            for hoja in hojas_a_buscar:
+                try:
+                    df_raw = pd.read_excel(archivo, sheet_name=hoja, header=None)
+                    
+                    for idx, row in df_raw.iterrows():
+                        row_str = ' '.join([str(x).lower() for x in row.values if pd.notna(x)])
+                        
+                        if columnas_esperadas:
+                            for col_esp in columnas_esperadas:
+                                col_esp_lower = col_esp.lower()
+                                if col_esp_lower in row_str:
+                                    columnas_encontradas.add(col_esp)
+                        
+                        if columnas_excluidas:
+                            for col_excl in columnas_excluidas:
+                                col_excl_lower = col_excl.lower()
+                                if col_excl_lower in row_str:
+                                    columnas_excluidas_encontradas.add(col_excl)
+                        
+                        if columnas_esperadas and len(columnas_encontradas) >= len(columnas_esperadas):
+                            break
+                    
+                    if columnas_esperadas and len(columnas_encontradas) >= len(columnas_esperadas):
+                        break
+                        
+                except Exception as e:
+                    continue
+            
+            if columnas_excluidas and columnas_excluidas_encontradas:
+                st.error("❌ RECHAZADO")
+                if nombre_archivo:
+                    st.caption(f"📌 {nombre_archivo} parece ser un archivo de otro tipo")
+                return False
+            
+            if columnas_esperadas and len(columnas_encontradas) >= len(columnas_esperadas):
+                valido_por_columnas = True
+                
+        except Exception as e:
+            pass
+    
+    # 🔥 SEGUNDO: VALIDAR POR NOMBRE (SOLO SI NO PASÓ POR COLUMNAS)
+    if not valido_por_columnas and palabras_clave_nombre:
         nombre_lower = archivo.name.lower()
-        nombre_valido = False
         for palabra in palabras_clave_nombre:
             if palabra.lower() in nombre_lower:
-                nombre_valido = True
+                valido_por_nombre = True
                 break
-        
-        if not nombre_valido:
+    
+    # 🔥 DECISIÓN FINAL
+    if valido_por_columnas:
+        st.success("✅ CARGADO CORRECTO")
+        return True
+    elif valido_por_nombre:
+        st.success("✅ CARGADO CORRECTO (válido por nombre)")
+        return True
+    else:
+        # Si no cumple NINGUNO
+        if columnas_esperadas and not valido_por_columnas:
+            st.error("❌ RECHAZADO")
+            if nombre_archivo:
+                st.caption(f"📌 {nombre_archivo} debe contener: {', '.join(columnas_esperadas)}")
+            return False
+        elif palabras_clave_nombre and not valido_por_nombre:
             st.error("❌ RECHAZADO")
             if nombre_archivo:
                 st.caption(f"📌 El nombre del archivo no coincide con {nombre_archivo}")
             return False
-    
-    if not columnas_esperadas and not columnas_excluidas:
-        st.success("✅ CARGADO CORRECTO")
-        return True
-    
-    try:
-        # 🔥 LEER TODAS LAS HOJAS DEL ARCHIVO
-        xls = pd.ExcelFile(archivo)
-        hojas = xls.sheet_names
-        
-        # Si se especificó una hoja, solo buscar en esa
-        if hoja_nombre and hoja_nombre in hojas:
-            hojas_a_buscar = [hoja_nombre]
         else:
-            hojas_a_buscar = hojas
-        
-        columnas_encontradas = set()
-        columnas_excluidas_encontradas = set()
-        
-        # Buscar en cada hoja
-        for hoja in hojas_a_buscar:
-            try:
-                df_raw = pd.read_excel(archivo, sheet_name=hoja, header=None)
-                
-                # Recorrer todas las filas buscando coincidencias
-                for idx, row in df_raw.iterrows():
-                    row_str = ' '.join([str(x).lower() for x in row.values if pd.notna(x)])
-                    
-                    # Buscar columnas esperadas
-                    if columnas_esperadas:
-                        for col_esp in columnas_esperadas:
-                            col_esp_lower = col_esp.lower()
-                            if col_esp_lower in row_str:
-                                columnas_encontradas.add(col_esp)
-                    
-                    # Buscar columnas excluidas
-                    if columnas_excluidas:
-                        for col_excl in columnas_excluidas:
-                            col_excl_lower = col_excl.lower()
-                            if col_excl_lower in row_str:
-                                columnas_excluidas_encontradas.add(col_excl)
-                    
-                    # Si ya encontramos todo, salir
-                    if columnas_esperadas and len(columnas_encontradas) >= len(columnas_esperadas):
-                        break
-                
-                # Si encontramos todo en esta hoja, salir del loop de hojas
-                if columnas_esperadas and len(columnas_encontradas) >= len(columnas_esperadas):
-                    break
-                    
-            except Exception as e:
-                continue
-        
-        # Verificar columnas excluidas
-        if columnas_excluidas and columnas_excluidas_encontradas:
-            st.error("❌ RECHAZADO")
-            if nombre_archivo:
-                st.caption(f"📌 {nombre_archivo} parece ser un archivo de otro tipo")
+            st.warning("⏳ PENDIENTE")
             return False
-        
-        # Verificar columnas esperadas
-        if columnas_esperadas:
-            if len(columnas_encontradas) >= len(columnas_esperadas):
-                st.success("✅ CARGADO CORRECTO")
-                return True
-            else:
-                st.error("❌ RECHAZADO")
-                if nombre_archivo:
-                    st.caption(f"📌 {nombre_archivo} debe contener: {', '.join(columnas_esperadas)}")
-                return False
-        
-        st.success("✅ CARGADO CORRECTO")
-        return True
-        
-    except Exception as e:
-        st.error("❌ RECHAZADO")
-        st.caption(f"📌 Error al leer el archivo: {str(e)[:50]}...")
-        return False
-
 
 # ============================================================
 # 🔥 UPLOADERS EN LA PARTE SUPERIOR (CON VALIDACIÓN ROBUSTA)
