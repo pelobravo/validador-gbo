@@ -358,188 +358,186 @@ class ProcesadorArchivos:
     
     # ===================== EGRESOS - CORREGIDO CON EXCLUSIÓN DE TRANSFERENCIAS INTERNAS =====================
 
-@staticmethod
-def procesar_egresos(df):
-    """
-    Procesa archivo de egresos iPago.
-    🔥 EXCLUYE transferencias entre cuentas del mismo titular
-    """
-    pagos_proveedores = 0.0
-    pagos_gastos = 0.0
-    monto_transferencias_internas = 0.0
-    df_proveedores = pd.DataFrame()
+    # ===================== EGRESOS - CORREGIDO CON EXCLUSIÓN DE TRANSFERENCIAS INTERNAS =====================
     
-    if df is None or df.empty:
-        return pagos_proveedores, pagos_gastos, 0.0, df_proveedores
+    @staticmethod
+    def procesar_egresos(df):
+        """
+        Procesa archivo de egresos iPago.
+        🔥 EXCLUYE transferencias entre cuentas del mismo titular
+        """
+        pagos_proveedores = 0.0
+        pagos_gastos = 0.0
+        monto_transferencias_internas = 0.0
+        df_proveedores = pd.DataFrame()
+        
+        if df is None or df.empty:
+            return pagos_proveedores, pagos_gastos, 0.0, df_proveedores
 
-    df = ProcesadorArchivos._limpiar_columnas(df)
-    
-    try:
-        # ============================================================
-        # 🔥 COLUMNA D (Tipo de Pago) - índice 3
-        # ============================================================
-        col_tipo_pago = None
+        df = ProcesadorArchivos._limpiar_columnas(df)
         
-        for col in df.columns:
-            col_lower = str(col).strip().lower()
-            if col_lower == 'tipo de pago' or col_lower == 'tipo_pago' or col_lower == 'tipodepago':
-                col_tipo_pago = col
-                break
-        
-        if col_tipo_pago is None:
+        try:
+            # ============================================================
+            # 🔥 COLUMNA D (Tipo de Pago) - índice 3
+            # ============================================================
+            col_tipo_pago = None
+            
             for col in df.columns:
                 col_lower = str(col).strip().lower()
-                if 'tipo' in col_lower and 'pago' in col_lower:
+                if col_lower == 'tipo de pago' or col_lower == 'tipo_pago' or col_lower == 'tipodepago':
                     col_tipo_pago = col
                     break
-        
-        if col_tipo_pago is None and len(df.columns) >= 4:
-            col_tipo_pago = df.columns[3]
-        
-        # ============================================================
-        # 🔥 COLUMNA E (Tipo de Egreso) - índice 4
-        # ============================================================
-        col_tipo_egreso = None
-        for col in df.columns:
-            col_lower = str(col).strip().lower()
-            if col_lower == 'tipo de egreso' or col_lower == 'tipo_egreso' or col_lower == 'tipoegreso':
-                col_tipo_egreso = col
-                break
-        
-        if col_tipo_egreso is None and len(df.columns) >= 5:
-            col_tipo_egreso = df.columns[4]
-        
-        # ============================================================
-        # 🔥 COLUMNA C (Proveedor) - índice 2
-        # ============================================================
-        proveedor_col = None
-        for col in df.columns:
-            col_lower = str(col).strip().lower()
-            if col_lower == 'proveedor' or col_lower == 'beneficiario':
-                proveedor_col = col
-                break
-        
-        if proveedor_col is None and len(df.columns) >= 3:
-            proveedor_col = df.columns[2]
-        
-        # ============================================================
-        # 🔥 COLUMNA H (Monto USD) - índice 7
-        # ============================================================
-        col_monto_usd = None
-        
-        for col in df.columns:
-            col_lower = str(col).strip().lower()
-            if col_lower == 'monto usd' or col_lower == 'monto_usd' or col_lower == 'montousd':
-                col_monto_usd = col
-                break
-        
-        if col_monto_usd is None:
+            
+            if col_tipo_pago is None:
+                for col in df.columns:
+                    col_lower = str(col).strip().lower()
+                    if 'tipo' in col_lower and 'pago' in col_lower:
+                        col_tipo_pago = col
+                        break
+            
+            if col_tipo_pago is None and len(df.columns) >= 4:
+                col_tipo_pago = df.columns[3]
+            
+            # ============================================================
+            # 🔥 COLUMNA E (Tipo de Egreso) - índice 4
+            # ============================================================
+            col_tipo_egreso = None
             for col in df.columns:
                 col_lower = str(col).strip().lower()
-                if 'usd' in col_lower or 'monto' in col_lower:
+                if col_lower == 'tipo de egreso' or col_lower == 'tipo_egreso' or col_lower == 'tipoegreso':
+                    col_tipo_egreso = col
+                    break
+            
+            if col_tipo_egreso is None and len(df.columns) >= 5:
+                col_tipo_egreso = df.columns[4]
+            
+            # ============================================================
+            # 🔥 COLUMNA C (Proveedor) - índice 2
+            # ============================================================
+            proveedor_col = None
+            for col in df.columns:
+                col_lower = str(col).strip().lower()
+                if col_lower == 'proveedor' or col_lower == 'beneficiario':
+                    proveedor_col = col
+                    break
+            
+            if proveedor_col is None and len(df.columns) >= 3:
+                proveedor_col = df.columns[2]
+            
+            # ============================================================
+            # 🔥 COLUMNA H (Monto USD) - índice 7
+            # ============================================================
+            col_monto_usd = None
+            
+            for col in df.columns:
+                col_lower = str(col).strip().lower()
+                if col_lower == 'monto usd' or col_lower == 'monto_usd' or col_lower == 'montousd':
                     col_monto_usd = col
                     break
-        
-        if col_monto_usd is None and len(df.columns) >= 8:
-            col_monto_usd = df.columns[7]
-        
-        if col_tipo_pago is None or col_monto_usd is None:
-            print(f"⚠️ No se encontraron columnas")
-            return pagos_proveedores, pagos_gastos, 0.0, df_proveedores
-        
-        # ============================================================
-        # 🔥 PROCESAR CADA FILA
-        # ============================================================
-        
-        df_filtrado = df.copy()
-        df_filtrado['_tipo_pago_str'] = df_filtrado[col_tipo_pago].astype(str).str.upper().str.strip()
-        
-        mascara_proveedores = (
-            df_filtrado['_tipo_pago_str'].str.contains('PROVEEDORES DE MERCANCIA', case=False, na=False) |
-            df_filtrado['_tipo_pago_str'].str.contains('PROVEEDOR DE MERCANCIA', case=False, na=False)
-        )
-        
-        df_proveedores = df_filtrado[mascara_proveedores].copy()
-        
-        # ============================================================
-        # 🔥 RECORRER TODAS LAS FILAS
-        # ============================================================
-        
-        for idx, row in df.iterrows():
-            monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_usd])
-            if pd.isna(monto) or monto == 0:
-                continue
             
-            tipo_pago = str(row[col_tipo_pago]).upper().strip() if pd.notna(row[col_tipo_pago]) else ''
+            if col_monto_usd is None:
+                for col in df.columns:
+                    col_lower = str(col).strip().lower()
+                    if 'usd' in col_lower or 'monto' in col_lower:
+                        col_monto_usd = col
+                        break
             
-            # Obtener Tipo de Egreso
-            tipo_egreso = ''
-            if col_tipo_egreso:
-                tipo_egreso = str(row[col_tipo_egreso]).upper().strip() if pd.notna(row[col_tipo_egreso]) else ''
+            if col_monto_usd is None and len(df.columns) >= 8:
+                col_monto_usd = df.columns[7]
             
-            proveedor = ''
-            if proveedor_col:
-                proveedor = str(row[proveedor_col]).upper().strip() if pd.notna(row[proveedor_col]) else ''
+            if col_tipo_pago is None or col_monto_usd is None:
+                print(f"⚠️ No se encontraron columnas")
+                return pagos_proveedores, pagos_gastos, 0.0, df_proveedores
             
             # ============================================================
-            # 🔥 DETECTAR TRANSFERENCIAS INTERNAS - CON LOS PATRONES EXACTOS
+            # 🔥 PROCESAR CADA FILA
             # ============================================================
-            es_transferencia_interna = False
             
-            # 🔥 Patrón EXACTO que aparece en tu archivo
-            if 'TRANSFERENCIA ENTRE CUENTAS MISMO TITULAR' in tipo_pago:
-                es_transferencia_interna = True
-                print(f"🔍 Transferencia interna detectada por TIPO DE PAGO: {tipo_pago}")
+            df_filtrado = df.copy()
+            df_filtrado['_tipo_pago_str'] = df_filtrado[col_tipo_pago].astype(str).str.upper().str.strip()
             
-            # 🔥 También buscar por "MISMO TITULAR" en Tipo de Egreso
-            if not es_transferencia_interna and 'MISMO TITULAR' in tipo_egreso:
-                es_transferencia_interna = True
-                print(f"🔍 Transferencia interna detectada por TIPO DE EGRESO: {tipo_egreso}")
+            mascara_proveedores = (
+                df_filtrado['_tipo_pago_str'].str.contains('PROVEEDORES DE MERCANCIA', case=False, na=False) |
+                df_filtrado['_tipo_pago_str'].str.contains('PROVEEDOR DE MERCANCIA', case=False, na=False)
+            )
             
-            # 🔥 También buscar en el proveedor
-            if not es_transferencia_interna and 'TRANSFERENCIA ENTRE CUENTA MISMO TITULAR' in proveedor:
-                es_transferencia_interna = True
-                print(f"🔍 Transferencia interna detectada por PROVEEDOR: {proveedor}")
-            
-            # 🔥 Patrón genérico para cualquier "MISMO TITULAR"
-            if not es_transferencia_interna and 'MISMO TITULAR' in tipo_pago:
-                es_transferencia_interna = True
-                print(f"🔍 Transferencia interna detectada por 'MISMO TITULAR' en TIPO DE PAGO: {tipo_pago}")
-            
-            # Si es transferencia interna, EXCLUIR
-            if es_transferencia_interna:
-                monto_transferencias_internas += monto
-                print(f"🔄 Transferencia interna EXCLUIDA: {tipo_pago} - {monto:,.2f}")
-                continue
+            df_proveedores = df_filtrado[mascara_proveedores].copy()
             
             # ============================================================
-            # 🔥 CLASIFICAR EGRESOS NORMALES
+            # 🔥 RECORRER TODAS LAS FILAS
             # ============================================================
-            if 'PROVEEDORES DE MERCANCIA' in tipo_pago or 'PROVEEDOR DE MERCANCIA' in tipo_pago:
-                pagos_proveedores += monto
-            else:
-                pagos_gastos += monto
-        
-        total_egresos = pagos_proveedores + pagos_gastos
-        
-        if '_tipo_pago_str' in df_filtrado.columns:
-            df_filtrado.drop('_tipo_pago_str', axis=1, inplace=True)
-        
-        if '_tipo_pago_str' in df_proveedores.columns:
-            df_proveedores.drop('_tipo_pago_str', axis=1, inplace=True)
-        
-        print(f"✅ Proveedores de Mercancía: {pagos_proveedores:,.2f}")
-        print(f"✅ Otros Gastos (reales): {pagos_gastos:,.2f}")
-        print(f"🔄 Transferencias Internas EXCLUIDAS: {monto_transferencias_internas:,.2f}")
-        print(f"💰 Total Egresos (neto): {total_egresos:,.2f}")
-        
-        return pagos_proveedores, pagos_gastos, total_egresos, df_proveedores
-        
-    except Exception as e:
-        print(f"❌ Error al procesar egresos: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return 0.0, 0.0, 0.0, pd.DataFrame()
+            
+            for idx, row in df.iterrows():
+                monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto_usd])
+                if pd.isna(monto) or monto == 0:
+                    continue
+                
+                tipo_pago = str(row[col_tipo_pago]).upper().strip() if pd.notna(row[col_tipo_pago]) else ''
+                
+                tipo_egreso = ''
+                if col_tipo_egreso:
+                    tipo_egreso = str(row[col_tipo_egreso]).upper().strip() if pd.notna(row[col_tipo_egreso]) else ''
+                
+                proveedor = ''
+                if proveedor_col:
+                    proveedor = str(row[proveedor_col]).upper().strip() if pd.notna(row[proveedor_col]) else ''
+                
+                # ============================================================
+                # 🔥 DETECTAR TRANSFERENCIAS INTERNAS
+                # ============================================================
+                es_transferencia_interna = False
+                
+                # 🔥 Patrón EXACTO que aparece en tu archivo
+                if 'TRANSFERENCIA ENTRE CUENTAS MISMO TITULAR' in tipo_pago:
+                    es_transferencia_interna = True
+                    print(f"🔍 Transferencia interna detectada por TIPO DE PAGO: {tipo_pago}")
+                
+                if not es_transferencia_interna and 'MISMO TITULAR' in tipo_egreso:
+                    es_transferencia_interna = True
+                    print(f"🔍 Transferencia interna detectada por TIPO DE EGRESO: {tipo_egreso}")
+                
+                if not es_transferencia_interna and 'TRANSFERENCIA ENTRE CUENTA MISMO TITULAR' in proveedor:
+                    es_transferencia_interna = True
+                    print(f"🔍 Transferencia interna detectada por PROVEEDOR: {proveedor}")
+                
+                if not es_transferencia_interna and 'MISMO TITULAR' in tipo_pago:
+                    es_transferencia_interna = True
+                    print(f"🔍 Transferencia interna detectada por 'MISMO TITULAR' en TIPO DE PAGO: {tipo_pago}")
+                
+                # Si es transferencia interna, EXCLUIR
+                if es_transferencia_interna:
+                    monto_transferencias_internas += monto
+                    print(f"🔄 Transferencia interna EXCLUIDA: {tipo_pago} - {monto:,.2f}")
+                    continue
+                
+                # ============================================================
+                # 🔥 CLASIFICAR EGRESOS NORMALES
+                # ============================================================
+                if 'PROVEEDORES DE MERCANCIA' in tipo_pago or 'PROVEEDOR DE MERCANCIA' in tipo_pago:
+                    pagos_proveedores += monto
+                else:
+                    pagos_gastos += monto
+            
+            total_egresos = pagos_proveedores + pagos_gastos
+            
+            if '_tipo_pago_str' in df_filtrado.columns:
+                df_filtrado.drop('_tipo_pago_str', axis=1, inplace=True)
+            
+            if '_tipo_pago_str' in df_proveedores.columns:
+                df_proveedores.drop('_tipo_pago_str', axis=1, inplace=True)
+            
+            print(f"✅ Proveedores de Mercancía: {pagos_proveedores:,.2f}")
+            print(f"✅ Otros Gastos (reales): {pagos_gastos:,.2f}")
+            print(f"🔄 Transferencias Internas EXCLUIDAS: {monto_transferencias_internas:,.2f}")
+            print(f"💰 Total Egresos (neto): {total_egresos:,.2f}")
+            
+            return pagos_proveedores, pagos_gastos, total_egresos, df_proveedores
+            
+        except Exception as e:
+            print(f"❌ Error al procesar egresos: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return 0.0, 0.0, 0.0, pd.DataFrame()
         
         # ============================================================
         # 🔥 DEPURACIÓN
