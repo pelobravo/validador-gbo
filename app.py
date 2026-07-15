@@ -3629,7 +3629,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         facturacion, _, _, _ = ProcesadorArchivos.procesar_facturacion(df_facturacion)
         cobranzas, _, _ = ProcesadorArchivos.procesar_cobranzas(df_cobranzas)
         
-        pagos_proveedores, pagos_gastos, total_egresos, df_proveedores = ProcesadorArchivos.procesar_egresos(df_egresos)
+        pagos_proveedores, pagos_gastos, total_egresos, df_proveedores, monto_transferencias_internas = ProcesadorArchivos.procesar_egresos(df_egresos)
         
         df_proveedores_existe = not df_proveedores.empty
         
