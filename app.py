@@ -20,6 +20,7 @@
 # 📥 AGREGADO: Botones de descarga en Excel para todos los reportes y archivos del Cierre Diario
 # 🔧 CORREGIDO: Función descargar_excel para evitar errores con openpyxl
 # 🔥 NUEVO: Análisis de Cuentas por Pagar (CxP) - Trazabilidad y detección de diferencias
+# 🔥 NUEVO: Análisis Detallado de la Diferencia de CxP con identificación de documentos específicos
 
 import streamlit as st
 import pandas as pd
@@ -244,6 +245,410 @@ def buscar_candidatos_por_monto(df, monto_buscar, origen):
 
 # ============================================================
 # FIN FUNCIÓN BUSCAR CANDIDATOS
+# ============================================================
+
+# ============================================================
+# 🔥 NUEVA FUNCIÓN: ANÁLISIS DETALLADO DE LA DIFERENCIA DE CXP
+# ============================================================
+def mostrar_analisis_detallado_cxp(df_cxp_ayer, df_cxp_hoy, diff_cxp, fecha_ayer, fecha_hoy):
+    """
+    Analiza en detalle la diferencia de Cuentas por Pagar entre dos fechas.
+    Muestra:
+    - Documentos que estaban en el día anterior y ya no están (ELIMINADOS)
+    - Documentos que no estaban en el día anterior y ahora están (NUEVOS)
+    - Documentos que cambiaron de monto (MODIFICADOS)
+    - Diferencia total explicada
+    """
+    try:
+        import re
+        
+        # ============================================================
+        # 1. LIMPIAR Y PROCESAR AMBOS ARCHIVOS
+        # ============================================================
+        def extraer_documentos_cxp(df, nombre_fecha):
+            """Extrae todos los documentos de un archivo de CxP"""
+            if df is None or df.empty:
+                return {}
+            
+            df_clean = ProcesadorArchivos._limpiar_columnas(df)
+            
+            # Encontrar encabezados
+            idx_header = None
+            for idx, row in df_clean.iterrows():
+                row_str = ' '.join([str(x).lower() for x in row.values if pd.notna(x)])
+                if 'documento' in row_str and ('saldo' in row_str or 'pendt' in row_str):
+                    idx_header = idx
+                    break
+            
+            if idx_header is None:
+                idx_header = ProcesadorArchivos._encontrar_fila_datos(df_clean, ['proveedor', 'documento', 'saldo'])
+            
+            if idx_header is not None and idx_header >= 0 and idx_header < len(df_clean):
+                df_datos = df_clean.iloc[idx_header:].reset_index(drop=True)
+                if len(df_datos) > 0:
+                    header_row = df_datos.iloc[0]
+                    new_cols = [str(col).strip() if pd.notna(col) else f'col_{j}' for j, col in enumerate(header_row)]
+                    df_datos.columns = new_cols
+                    df_clean = df_datos.iloc[1:].reset_index(drop=True)
+            
+            # Buscar columnas
+            col_doc = ProcesadorArchivos._buscar_columna(df_clean, 'documento', 'doc', 'factura', 'nro_doc', 'referencia')
+            col_monto = None
+            if len(df_clean.columns) > 2:
+                col_monto = df_clean.columns[2]
+            else:
+                col_monto = ProcesadorArchivos._buscar_columna(df_clean, 'saldo', 'saldo pendt', 'pendiente', 'monto')
+            
+            col_proveedor = ProcesadorArchivos._buscar_columna(df_clean, 'proveedor', 'rif', 'nombre', 'razon social')
+            
+            documentos = {}
+            
+            if col_doc and col_monto:
+                for idx, row in df_clean.iterrows():
+                    doc = str(row[col_doc]).strip()
+                    monto = ProcesadorArchivos._convertir_numero_europeo(row[col_monto])
+                    
+                    if doc and doc != 'nan' and doc != 'None' and monto:
+                        # Clasificar tipo de documento
+                        doc_upper = doc.upper()
+                        if 'NE' in doc_upper:
+                            tipo = 'NE'
+                        elif 'OT' in doc_upper:
+                            tipo = 'OT'
+                        elif 'FA' in doc_upper or 'FACT' in doc_upper:
+                            tipo = 'FA'
+                        else:
+                            tipo = 'OTRO'
+                        
+                        # Obtener proveedor
+                        proveedor = 'No identificado'
+                        if col_proveedor:
+                            try:
+                                prov_val = str(row[col_proveedor]).strip()
+                                if prov_val and prov_val != 'nan' and prov_val != 'None':
+                                    proveedor = prov_val
+                            except:
+                                pass
+                        
+                        # Normalizar referencia (eliminar ceros a la izquierda para comparación)
+                        doc_norm = re.sub(r'^0+', '', re.sub(r'[^0-9]', '', doc))
+                        
+                        documentos[doc_norm] = {
+                            'original': doc,
+                            'monto': float(monto),
+                            'tipo': tipo,
+                            'proveedor': proveedor,
+                            'fila': idx + 1,
+                            'fecha': nombre_fecha
+                        }
+            
+            return documentos
+        
+        # ============================================================
+        # 2. EXTRAER DOCUMENTOS DE AMBOS DÍAS
+        # ============================================================
+        docs_ayer = extraer_documentos_cxp(df_cxp_ayer, fecha_ayer)
+        docs_hoy = extraer_documentos_cxp(df_cxp_hoy, fecha_hoy)
+        
+        # ============================================================
+        # 3. COMPARAR Y CLASIFICAR
+        # ============================================================
+        # Documentos que solo están en el día anterior (ELIMINADOS)
+        solo_ayer = {}
+        for key, info in docs_ayer.items():
+            if key not in docs_hoy:
+                solo_ayer[key] = info
+        
+        # Documentos que solo están en el día actual (NUEVOS)
+        solo_hoy = {}
+        for key, info in docs_hoy.items():
+            if key not in docs_ayer:
+                solo_hoy[key] = info
+        
+        # Documentos que están en ambos días (COMPARAR MONTOS)
+        ambos = {}
+        for key, info_ayer in docs_ayer.items():
+            if key in docs_hoy:
+                info_hoy = docs_hoy[key]
+                diff = info_ayer['monto'] - info_hoy['monto']
+                ambos[key] = {
+                    'documento': info_ayer['original'],
+                    'tipo': info_ayer['tipo'],
+                    'proveedor': info_ayer['proveedor'],
+                    'monto_ayer': info_ayer['monto'],
+                    'monto_hoy': info_hoy['monto'],
+                    'diferencia': diff,
+                    'fila_ayer': info_ayer['fila'],
+                    'fila_hoy': info_hoy['fila'],
+                    'cambio': '✅ SIN CAMBIO' if abs(diff) < 0.01 else ('📈 AUMENTÓ' if diff > 0 else '📉 DISMINUYÓ')
+                }
+        
+        # ============================================================
+        # 4. CALCULAR TOTALES
+        # ============================================================
+        total_eliminados = sum([info['monto'] for info in solo_ayer.values()])
+        total_nuevos = sum([info['monto'] for info in solo_hoy.values()])
+        
+        # Cambios en documentos existentes
+        cambios = [info for info in ambos.values() if abs(info['diferencia']) > 0.01]
+        total_cambios = sum([info['diferencia'] for info in cambios])
+        
+        # Diferencia explicada
+        diff_explicada = total_eliminados - total_nuevos + total_cambios
+        
+        # ============================================================
+        # 5. MOSTRAR RESULTADOS
+        # ============================================================
+        st.markdown("---")
+        st.markdown("### 🔴 ANÁLISIS DETALLADO DE LA DIFERENCIA DE CXP")
+        st.caption(f"Comparación entre {fecha_ayer} y {fecha_hoy}")
+        
+        # KPIs principales
+        col_d1, col_d2, col_d3, col_d4 = st.columns(4)
+        
+        with col_d1:
+            st.metric("🗑️ ELIMINADOS", len(solo_ayer), delta=f"-{formato_venezolano(total_eliminados)}")
+        with col_d2:
+            st.metric("🆕 NUEVOS", len(solo_hoy), delta=f"+{formato_venezolano(total_nuevos)}")
+        with col_d3:
+            st.metric("🔄 MODIFICADOS", len(cambios), delta=f"{formato_venezolano(total_cambios)}")
+        with col_d4:
+            diferencia_total = diff_explicada
+            if abs(diferencia_total) < 0.01:
+                st.metric("✅ DIFERENCIA", "0,00", delta="✅ CONCILIADA")
+            else:
+                st.metric("🔴 DIFERENCIA", formato_venezolano(abs(diferencia_total)), 
+                         delta=f"{'📈 EXCESO' if diferencia_total > 0 else '📉 FALTA'} {formato_venezolano(abs(diferencia_total))}",
+                         delta_color="inverse" if abs(diferencia_total) > 0.01 else "normal")
+        
+        # ============================================================
+        # 5a. DOCUMENTOS ELIMINADOS (EN ROJO)
+        # ============================================================
+        if solo_ayer:
+            st.markdown("#### 🗑️ DOCUMENTOS ELIMINADOS (Estaban en el día anterior, ya no están)")
+            st.caption("Estos documentos ya no aparecen en el CxP del día actual")
+            
+            df_eliminados = pd.DataFrame([{
+                'Documento': info['original'],
+                'Tipo': info['tipo'],
+                'Proveedor': info['proveedor'][:50],
+                'Monto (Bs.)': info['monto'],
+                'Ubicación': f"Fila {info['fila']}",
+                'Estado': '🔴 ELIMINADO'
+            } for info in solo_ayer.values()])
+            
+            df_eliminados['Monto (Bs.)'] = df_eliminados['Monto (Bs.)'].apply(formato_venezolano)
+            
+            st.dataframe(
+                df_eliminados.style.apply(lambda x: ['background-color: #ffcccc;'] * len(x), axis=1),
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            st.warning(f"💰 **Total eliminado:** {formato_venezolano(total_eliminados)} Bs.")
+        
+        # ============================================================
+        # 5b. DOCUMENTOS NUEVOS (EN VERDE)
+        # ============================================================
+        if solo_hoy:
+            st.markdown("#### 🆕 DOCUMENTOS NUEVOS (No estaban en el día anterior, ahora sí)")
+            st.caption("Estos documentos aparecen por primera vez en el CxP del día actual")
+            
+            df_nuevos = pd.DataFrame([{
+                'Documento': info['original'],
+                'Tipo': info['tipo'],
+                'Proveedor': info['proveedor'][:50],
+                'Monto (Bs.)': info['monto'],
+                'Ubicación': f"Fila {info['fila']}",
+                'Estado': '🆕 NUEVO'
+            } for info in solo_hoy.values()])
+            
+            df_nuevos['Monto (Bs.)'] = df_nuevos['Monto (Bs.)'].apply(formato_venezolano)
+            
+            st.dataframe(
+                df_nuevos.style.apply(lambda x: ['background-color: #ccffcc;'] * len(x), axis=1),
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            st.success(f"💰 **Total nuevos:** {formato_venezolano(total_nuevos)} Bs.")
+        
+        # ============================================================
+        # 5c. DOCUMENTOS MODIFICADOS
+        # ============================================================
+        if cambios:
+            st.markdown("#### 🔄 DOCUMENTOS MODIFICADOS (Cambiaron de monto)")
+            st.caption("Estos documentos están en ambos días pero con montos diferentes")
+            
+            df_cambios = pd.DataFrame([{
+                'Documento': info['documento'],
+                'Tipo': info['tipo'],
+                'Proveedor': info['proveedor'][:40],
+                'Monto Ayer (Bs.)': info['monto_ayer'],
+                'Monto Hoy (Bs.)': info['monto_hoy'],
+                'Diferencia (Bs.)': info['diferencia'],
+                'Cambio': info['cambio'],
+                'Ubicación': f"Ayer: F{info['fila_ayer']} | Hoy: F{info['fila_hoy']}"
+            } for info in cambios])
+            
+            # Formatear montos
+            df_cambios['Monto Ayer (Bs.)'] = df_cambios['Monto Ayer (Bs.)'].apply(formato_venezolano)
+            df_cambios['Monto Hoy (Bs.)'] = df_cambios['Monto Hoy (Bs.)'].apply(formato_venezolano)
+            df_cambios['Diferencia (Bs.)'] = df_cambios['Diferencia (Bs.)'].apply(formato_venezolano)
+            
+            # Colorear por tipo de cambio
+            def color_cambio(row):
+                if 'AUMENTÓ' in row['Cambio']:
+                    return ['background-color: #ccffcc;'] * len(row)
+                elif 'DISMINUYÓ' in row['Cambio']:
+                    return ['background-color: #ffcccc;'] * len(row)
+                return [''] * len(row)
+            
+            st.dataframe(
+                df_cambios.style.apply(color_cambio, axis=1),
+                use_container_width=True,
+                hide_index=True
+            )
+        
+        # ============================================================
+        # 6. RESUMEN DE LA DIFERENCIA
+        # ============================================================
+        st.markdown("---")
+        st.markdown("### 📊 RESUMEN DE LA DIFERENCIA DE CXP")
+        
+        # Crear tabla resumen
+        resumen_data = [
+            {"Concepto": "CxP Anterior", "Monto": sum([info['monto'] for info in docs_ayer.values()]), "Tipo": "base"},
+            {"Concepto": "CxP Actual", "Monto": sum([info['monto'] for info in docs_hoy.values()]), "Tipo": "base"},
+            {"Concepto": "Diferencia Total (Archivos)", "Monto": sum([info['monto'] for info in docs_hoy.values()]) - sum([info['monto'] for info in docs_ayer.values()]), "Tipo": "total"},
+            {"Concepto": "---", "Monto": 0, "Tipo": "separador"},
+            {"Concepto": "Documentos Eliminados", "Monto": -total_eliminados, "Tipo": "eliminado"},
+            {"Concepto": "Documentos Nuevos", "Monto": total_nuevos, "Tipo": "nuevo"},
+            {"Concepto": "Cambios en Documentos", "Monto": total_cambios, "Tipo": "cambio"},
+            {"Concepto": "Diferencia Explicada", "Monto": diff_explicada, "Tipo": "explicada"}
+        ]
+        
+        df_resumen = pd.DataFrame(resumen_data)
+        df_resumen['Monto'] = df_resumen['Monto'].apply(formato_venezolano)
+        
+        # Colorear filas
+        def color_resumen(row):
+            if row['Tipo'] == 'total':
+                return ['background-color: #0a1628; color: white; font-weight: bold;'] * len(row)
+            elif row['Tipo'] == 'eliminado':
+                return ['background-color: #ffcccc;'] * len(row)
+            elif row['Tipo'] == 'nuevo':
+                return ['background-color: #ccffcc;'] * len(row)
+            elif row['Tipo'] == 'cambio':
+                return ['background-color: #fff3cd;'] * len(row)
+            elif row['Tipo'] == 'explicada':
+                if abs(diff_explicada) < 0.01:
+                    return ['background-color: #d4edda; font-weight: bold;'] * len(row)
+                else:
+                    return ['background-color: #f8d7da; font-weight: bold;'] * len(row)
+            elif row['Tipo'] == 'separador':
+                return ['background-color: #e9ecef;'] * len(row)
+            return [''] * len(row)
+        
+        st.dataframe(
+            df_resumen.style.apply(color_resumen, axis=1).hide(axis='index'),
+            use_container_width=True,
+            height=350
+        )
+        
+        # ============================================================
+        # 7. DIAGNÓSTICO FINAL
+        # ============================================================
+        st.markdown("---")
+        st.markdown("### 🎯 DIAGNÓSTICO DE LA DIFERENCIA")
+        
+        if abs(diff_explicada) < 0.01:
+            st.success("✅ **¡DIFERENCIA EXPLICADA COMPLETAMENTE!**")
+            st.markdown(f"""
+            La diferencia de **{formato_venezolano(abs(diff_cxp))} Bs.** se explica por:
+            - **{len(solo_ayer)} documentos eliminados** por {formato_venezolano(total_eliminados)} Bs.
+            - **{len(solo_hoy)} documentos nuevos** por {formato_venezolano(total_nuevos)} Bs.
+            - **{len(cambios)} documentos modificados** con cambios por {formato_venezolano(abs(total_cambios))} Bs.
+            """)
+        else:
+            st.error(f"❌ **DIFERENCIA NO EXPLICADA:** {formato_venezolano(abs(diff_explicada))} Bs. no explicados")
+            st.warning("⚠️ Revisar documentos que puedan tener cambios parciales o ajustes manuales.")
+            
+            # Mostrar documentos no explicados
+            if diff_cxp != 0 and abs(diff_explicada) < abs(diff_cxp):
+                diff_faltante = abs(diff_cxp) - abs(diff_explicada)
+                st.info(f"🔍 **Faltan por explicar:** {formato_venezolano(diff_faltante)} Bs.")
+        
+        # ============================================================
+        # 8. BOTÓN DE DESCARGA
+        # ============================================================
+        col_download1, col_download2, col_download3 = st.columns([1, 2, 1])
+        with col_download2:
+            # Preparar datos para descarga
+            datos_descarga = []
+            
+            # Añadir eliminados
+            for info in solo_ayer.values():
+                datos_descarga.append({
+                    'Estado': 'ELIMINADO',
+                    'Documento': info['original'],
+                    'Tipo': info['tipo'],
+                    'Proveedor': info['proveedor'],
+                    'Monto': info['monto'],
+                    'Ubicación': f"Fila {info['fila']}"
+                })
+            
+            # Añadir nuevos
+            for info in solo_hoy.values():
+                datos_descarga.append({
+                    'Estado': 'NUEVO',
+                    'Documento': info['original'],
+                    'Tipo': info['tipo'],
+                    'Proveedor': info['proveedor'],
+                    'Monto': info['monto'],
+                    'Ubicación': f"Fila {info['fila']}"
+                })
+            
+            # Añadir cambios
+            for info in cambios:
+                datos_descarga.append({
+                    'Estado': info['cambio'],
+                    'Documento': info['documento'],
+                    'Tipo': info['tipo'],
+                    'Proveedor': info['proveedor'],
+                    'Monto': info['diferencia'],
+                    'Ubicación': f"Ayer: F{info['fila_ayer']} | Hoy: F{info['fila_hoy']}"
+                })
+            
+            if datos_descarga:
+                df_descarga = pd.DataFrame(datos_descarga)
+                df_descarga['Monto'] = df_descarga['Monto'].apply(formato_venezolano)
+                
+                # Crear Excel
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    df_descarga.to_excel(writer, index=False, sheet_name='Detalle CxP')
+                    
+                    # Resumen
+                    df_resumen.to_excel(writer, index=False, sheet_name='Resumen')
+                
+                output.seek(0)
+                
+                st.download_button(
+                    label="📥 Descargar Análisis Detallado de CxP (Excel)",
+                    data=output,
+                    file_name=f"Analisis_CxP_{fecha_hoy.replace('/', '_')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+    
+    except Exception as e:
+        st.error(f"❌ Error en el análisis detallado de CxP: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
+
+# ============================================================
+# FIN FUNCIÓN ANÁLISIS DETALLADO DE CXP
 # ============================================================
 
 # Inicializar componentes
@@ -1163,6 +1568,8 @@ if 'mostrar_transito_analisis' not in st.session_state:
     st.session_state.mostrar_transito_analisis = False
 if 'mostrar_transito_tb' not in st.session_state:
     st.session_state.mostrar_transito_tb = False
+if 'mostrar_analisis_detallado_cxp' not in st.session_state:
+    st.session_state.mostrar_analisis_detallado_cxp = False
 
 # Función para inicializar saldos y ajustes de una empresa y fecha
 def inicializar_saldos_empresa(empresa, fecha_str):
@@ -4896,6 +5303,26 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             st.success("✅ **¡CONCILIACIÓN PERFECTA!** El CxP Calculado coincide con el CxP Reportado.")
         else:
             st.error(f"⚠️ **DIFERENCIA DETECTADA:** {formato_venezolano(abs(diff_cxp_calc))} Bs. de diferencia entre Calculado y Reportado")
+            
+            # ============================================================
+            # 🔥 NUEVO: ANÁLISIS DETALLADO DE LA DIFERENCIA DE CXP
+            # ============================================================
+            # Verificar si tenemos el archivo del día anterior
+            if 'archivo_cxp_anterior' in globals() and archivo_cxp_anterior is not None:
+                try:
+                    df_cxp_ayer = pd.read_excel(archivo_cxp_anterior)
+                    # Llamar a la función de análisis detallado
+                    mostrar_analisis_detallado_cxp(
+                        df_cxp_ayer,
+                        df_cxp_rep,
+                        diff_cxp_calc,
+                        fecha_procesar.strftime('%d/%m/%Y'),
+                        (fecha_procesar - pd.Timedelta(days=1)).strftime('%d/%m/%Y')
+                    )
+                except Exception as e:
+                    st.warning(f"⚠️ No se pudo cargar el archivo del día anterior para el análisis detallado: {e}")
+            else:
+                st.info("📄 **Sube el archivo de CxP del Día Anterior** para ver el análisis detallado de documentos eliminados, nuevos y modificados.")
             
             # ============================================================
             # ANÁLISIS PROFUNDO DE DOCUMENTOS (NE / OT / FA) CON BOTONES
