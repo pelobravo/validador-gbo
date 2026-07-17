@@ -6810,22 +6810,23 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             
             # Aplicar estilos
             def style_estructura(row):
-                if row['Tipo'] == 'header':
+                tipo = df_estructura.loc[row.name, 'Tipo']
+                if tipo == 'header':
                     return ['background-color: #0a1628; color: white; font-weight: bold; text-align: center;'] * len(row)
-                elif row['Tipo'] == 'total_activo':
+                elif tipo == 'total_activo':
                     return ['background-color: #e8f5e9; color: #1e7e34; font-weight: bold;'] * len(row)
-                elif row['Tipo'] == 'total_pasivo':
+                elif tipo == 'total_pasivo':
                     return ['background-color: #fff3e0; color: #d97706; font-weight: bold;'] * len(row)
-                elif row['Tipo'] == 'capital':
+                elif tipo == 'capital':
                     if capital_neto >= 0:
                         return ['background-color: #0f3d2e; color: #2ecc71; font-weight: bold; font-size: 1.1rem;'] * len(row)
                     else:
                         return ['background-color: #3d1a1a; color: #e74c3c; font-weight: bold; font-size: 1.1rem;'] * len(row)
-                elif row['Tipo'] == 'activo':
+                elif tipo == 'activo':
                     return ['background-color: #f0f7ff;'] * len(row)
-                elif row['Tipo'] == 'pasivo':
+                elif tipo == 'pasivo':
                     return ['background-color: #fff5f5;'] * len(row)
-                elif row['Tipo'] == 'separador':
+                elif tipo == 'separador':
                     return ['background-color: transparent;'] * len(row)
                 return [''] * len(row)
             
