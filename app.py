@@ -46,6 +46,7 @@ from logger import Logger
 from procesadores import ProcesadorArchivos
 from api_bcv import obtener_tasa_bcv
 from motor_auditoria import ejecutar_auditoria_inteligente, registrar_excepcion, cargar_ultimo_cierre
+from pdf_generator import generar_pdf_reporte
 
 # ============================================================
 # 🤖 FUNCIÓN PARA CONSULTAR DEEPSEEK API (NUEVO)
@@ -7300,8 +7301,40 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 except Exception as e:
                     st.error(f"❌ Error al generar el reporte: {str(e)}")
             
-            # PDF Export (simulado)
-            st.caption("💡 El reporte en Excel contiene todas las secciones del análisis")
+            # PDF Export (real)
+            if st.button("📥 Descargar Reporte Completo (PDF)", width='stretch'):
+                try:
+                    cxp_df = df_cxp_detalle if 'df_cxp_detalle' in locals() else None
+                    egr_df = df_egresos_resumen if 'df_egresos_resumen' in locals() else None
+                    tot_egr = total_egresos_general if 'total_egresos_general' in locals() else 0.0
+                    
+                    pdf_stream = generar_pdf_reporte(
+                        fecha_procesar=fecha_procesar,
+                        empresa_activa=st.session_state.empresa_activa,
+                        capital_neto=capital_neto,
+                        activos_operativos=activos_operativos,
+                        pasivos_operativos=pasivos_operativos,
+                        bancos_cierre=bancos_cierre,
+                        cx_c_cierre=cx_c_cierre,
+                        inventario_cierre=inventario_cierre,
+                        cx_p_cierre=cx_p_cierre,
+                        transito_cierre=transito_cierre,
+                        ratio_liquidez=ratio_liquidez,
+                        prueba_acida=prueba_acida,
+                        df_cxp_detalle=cxp_df,
+                        df_egresos_resumen=egr_df,
+                        total_egresos_general=tot_egr
+                    )
+                    
+                    st.download_button(
+                        label="📥 CONFIRMAR DESCARGA (PDF)",
+                        data=pdf_stream,
+                        file_name=f"Reporte_Capital_Trabajo_{fecha_procesar.strftime('%Y-%m-%d')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    st.error(f"❌ Error al generar el PDF: {str(e)}")
 
         # ============================================================
         # PIE DE LA PESTAÑA DE REPORTES
