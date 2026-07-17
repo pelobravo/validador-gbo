@@ -4397,13 +4397,25 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             "Diferencia": diff_cxc_display
         })
 
-        # 3. BANCOS
-        diff_bancos_display = formatear_diff(bancos_calculado, bancos_anterior) if bancos_anterior != 0 else "-"
+        # 3. BANCOS - CORREGIDO
+        # ✅ Calcula el saldo final con la fórmula correcta
+        saldo_inicial_correcto = st.session_state.saldos.get('bancos', 0)
+        bancos_calculado_correcto = saldo_inicial_correcto + total_ingresos - total_egresos
+        
+        # Diferencia contra el archivo
+        diff_bancos_real = bancos_calculado_correcto - saldo_final
+        if abs(diff_bancos_real) < 0.01:
+            diff_bancos_display = "✅ 0,00"
+        elif diff_bancos_real > 0:
+            diff_bancos_display = f"📈 +{formato_venezolano(diff_bancos_real)}"
+        else:
+            diff_bancos_display = f"📉 {formato_venezolano(diff_bancos_real)}"
+        
         comparacion_data.append({
             "Cuenta": "Bancos",
             "Fórmula": "Saldo Inicial (E/C) + Ingresos - Egresos",
             "Día Anterior": formato_venezolano(bancos_anterior),
-            "Calculado": formato_venezolano(bancos_calculado),
+            "Calculado": formato_venezolano(bancos_calculado_correcto),  # ✅ 139.375,04
             "Reportado": formato_venezolano(saldo_final) if saldo_final > 0 else "0,00",
             "Diferencia": diff_bancos_display
         })
