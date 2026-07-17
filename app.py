@@ -4224,8 +4224,12 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             """, unsafe_allow_html=True)
 
         with col_res_der:
-            # ✅ CORRECCIÓN: Usa el saldo del día anterior (desde session_state)
+            # ✅ CORRECCIÓN 1: Saldo Inicial desde session_state
             saldo_inicial_correcto = st.session_state.saldos.get('bancos', 0)
+            
+            # ✅ CORRECCIÓN 2: Calcular Saldo Final con la fórmula
+            saldo_final_calculado = saldo_inicial_correcto + total_ingresos - total_egresos
+            
             st.markdown(f"""
             <div style="
                 background: linear-gradient(180deg, #ffffff 0%, #f4f7fa 100%);
@@ -4255,7 +4259,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 </div>
                 <div style="display: flex; justify-content: space-between; margin-top: 12px; padding-top: 8px; border-top: 1px dashed #cbd5e1; font-size: 0.9rem; font-weight: 700;">
                     <span style="color: #1e7e34;">🏁 Saldo Final de Banco:</span>
-                    <span style="color: #1e7e34;">{formato_venezolano(saldo_final)} Bs.</span>
+                    <span style="color: #1e7e34;">{formato_venezolano(saldo_final_calculado)} Bs.</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
