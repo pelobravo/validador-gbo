@@ -859,6 +859,76 @@ def mostrar_kpi_paso_paso(col, titulo, valor, icono, variante="blue"):
         st.markdown(html, unsafe_allow_html=True)
 
 # ============================================================
+# FUNCIÓN PARA FORMATEAR TIEMPO DE CARGAS (NUEVA)
+# ============================================================
+def formatear_tiempo_cargas(segundos):
+    """Convierte segundos en texto legible en español, ej: 5 minutos con 15 segundos."""
+    if segundos is None or segundos <= 0:
+        return "0 segundos"
+    minutos = int(segundos // 60)
+    segs = int(segundos % 60)
+    if minutos > 0:
+        if segs > 0:
+            return f"{minutos} {'minutos' if minutos != 1 else 'minuto'} con {segs} {'segundos' if segs != 1 else 'segundo'}"
+        else:
+            return f"{minutos} {'minutos' if minutos != 1 else 'minuto'}"
+    else:
+        return f"{segs} {'segundos' if segs != 1 else 'segundo'}"
+
+# ============================================================
+# FUNCIÓN PARA OBTENER ESTADO DEL KPI DE TIEMPO (NUEVA)
+# ============================================================
+def obtener_estado_kpi_tiempo(elapsed, num_cargados, total_esperados):
+    """Devuelve (subtitulo, valor_texto, variante_color) según el estado de carga del grupo."""
+    if num_cargados == 0:
+        return "Pendiente de carga", "Sin archivos", "grey"
+    tiempo_str = formatear_tiempo_cargas(elapsed)
+    if num_cargados < total_esperados:
+        return f"Cargando ({num_cargados}/{total_esperados})", tiempo_str, "orange"
+    else:
+        return "Carga completada", tiempo_str, "green"
+
+# ============================================================
+# FUNCIÓN PARA MOSTRAR KPI DE TIEMPO (NUEVA)
+# ============================================================
+def mostrar_kpi_tiempo(col, titulo, valor_texto, subtitulo, icono, variante="blue"):
+    """
+    Genera tarjetas KPI para tiempos de carga (sin sufijo Bs.).
+    Variantes: blue, green, red, orange, purple, grey
+    """
+    mapa_colores = {
+        "blue":   {"bg": "#f0f7ff", "border": "#0056b3", "text": "#0056b3"},
+        "green":  {"bg": "#f0fff4", "border": "#1e7e34", "text": "#1e7e34"},
+        "red":    {"bg": "#fff5f5", "border": "#c82333", "text": "#c82333"},
+        "orange": {"bg": "#fff9db", "border": "#d97706", "text": "#d97706"},
+        "purple": {"bg": "#fcf0ff", "border": "#85144b", "text": "#85144b"},
+        "grey":   {"bg": "#f7fafc", "border": "#a0aec0", "text": "#4a5568"}
+    }
+    cfg = mapa_colores.get(variante, mapa_colores["blue"])
+    html = f"""
+    <div style="
+        background-color: {cfg['bg']};
+        border-left: 5px solid {cfg['border']};
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        margin-bottom: 15px;
+    ">
+        <div style="font-size: 0.75rem; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: 0.5px;">
+            {icono} {titulo}
+        </div>
+        <div style="font-size: 1.15rem; font-weight: 800; color: {cfg['text']}; margin-top: 5px; font-family: 'Inter', sans-serif;">
+            {valor_texto}
+        </div>
+        <div style="font-size: 0.75rem; color: #718096; margin-top: 2px;">
+            {subtitulo}
+        </div>
+    </div>
+    """
+    with col:
+        st.markdown(html, unsafe_allow_html=True)
+
+# ============================================================
 # FUNCIÓN PARA MOSTRAR KPI DE CANTIDADES (UNIDADES) - CORREGIDO
 # ============================================================
 def mostrar_kpi_cantidades(col, titulo, valor, icono, variante="blue"):
@@ -3020,57 +3090,88 @@ with st.container():
     st.caption("Sube los archivos obligatorios para comenzar la validación")
     
     # ============================================================
-    # 🕐 TEMPORIZADOR PARA MEDIR EL TIEMPO DE CARGA
+    # 🕐 TEMPORIZADORES POR GRUPO: OBLIGATORIOS + VERIFICACIÓN
     # ============================================================
-    if 'tiempo_inicio_carga' not in st.session_state:
-        st.session_state.tiempo_inicio_carga = None
-    if 'tiempo_carga_total' not in st.session_state:
-        st.session_state.tiempo_carga_total = None
-    if 'archivos_cargados_tiempo' not in st.session_state:
-        st.session_state.archivos_cargados_tiempo = {}
-    
-    # Verificar si hay archivos nuevos cargados
-    archivos_actuales = {
-        'fact': archivo_facturacion,
-        'cob': archivo_cobranzas,
-        'egr': archivo_egresos,
-        'estado': archivo_estado_cuenta
+    if 'tiempo_cargas' not in st.session_state:
+        st.session_state.tiempo_cargas = {
+            'obligatorios': {'start_time': None, 'end_time': None, 'elapsed': 0.0, 'files': {}},
+            'verificacion':  {'start_time': None, 'end_time': None, 'elapsed': 0.0, 'files': {}}
+        }
+
+    # Claves de session_state que Streamlit crea automáticamente con el key del uploader
+    keys_obligatorios = ["fact_top", "cob_top", "egr_top", "estado_top"]
+    keys_verificacion = ["cxc_rep_top", "cxp_rep_top", "inv_rep_top", "tb_top"]
+
+    current_obligatorios = {
+        k: st.session_state[k] for k in keys_obligatorios
+        if st.session_state.get(k) is not None
     }
-    
-    # Detectar si algún archivo se cargó recientemente
-    hay_nuevo_archivo = False
-    for key, archivo in archivos_actuales.items():
-        if archivo is not None:
-            nombre = archivo.name if hasattr(archivo, 'name') else str(archivo)
-            if key not in st.session_state.archivos_cargados_tiempo:
-                st.session_state.archivos_cargados_tiempo[key] = {
-                    'nombre': nombre,
-                    'tiempo': time.time()
-                }
-                hay_nuevo_archivo = True
-            elif st.session_state.archivos_cargados_tiempo[key]['nombre'] != nombre:
-                st.session_state.archivos_cargados_tiempo[key] = {
-                    'nombre': nombre,
-                    'tiempo': time.time()
-                }
-                hay_nuevo_archivo = True
-    
-    # Si hay nuevo archivo, iniciar o reiniciar el temporizador
-    if hay_nuevo_archivo:
-        st.session_state.tiempo_inicio_carga = time.time()
-        st.session_state.tiempo_carga_total = None
-    
-    # Si ya hay archivos cargados y no se ha calculado el tiempo total
-    archivos_validos = all(archivos_actuales.values())
-    if archivos_validos and st.session_state.tiempo_inicio_carga is not None and st.session_state.tiempo_carga_total is None:
-        st.session_state.tiempo_carga_total = time.time() - st.session_state.tiempo_inicio_carga
-    
-    # Mostrar el temporizador
-    if archivos_validos and st.session_state.tiempo_carga_total is not None:
-        st.info(f"⏱️ **Tiempo de carga de archivos:** {st.session_state.tiempo_carga_total:.2f} segundos")
-    elif st.session_state.tiempo_inicio_carga is not None:
-        tiempo_transcurrido = time.time() - st.session_state.tiempo_inicio_carga
-        st.info(f"⏳ **Cargando archivos...** {tiempo_transcurrido:.1f} segundos")
+    current_verificacion = {
+        k: st.session_state[k] for k in keys_verificacion
+        if st.session_state.get(k) is not None
+    }
+
+    def _actualizar_grupo(grupo_name, current_files, total_keys):
+        """Actualiza el temporizador de un grupo de archivos en session_state."""
+        grupo = st.session_state.tiempo_cargas[grupo_name]
+        num_cargados = len(current_files)
+        total_esperados = len(total_keys)
+        current_names = {k: f.name for k, f in current_files.items()}
+
+        # Detectar cambio (nuevo archivo o cambio de nombre)
+        cambio = (set(current_names.keys()) != set(grupo['files'].keys())) or any(
+            current_names.get(k) != grupo['files'].get(k) for k in current_names
+        )
+
+        if num_cargados == 0:
+            # Sin archivos: resetear
+            grupo.update({'start_time': None, 'end_time': None, 'elapsed': 0.0, 'files': {}})
+        elif cambio:
+            # Primer archivo del grupo: iniciar el cronómetro
+            if grupo['start_time'] is None:
+                grupo['start_time'] = time.time()
+                grupo['end_time'] = None
+                grupo['elapsed'] = 0.0
+            # Si se completó el grupo: congelar
+            if num_cargados == total_esperados:
+                grupo['end_time'] = time.time()
+                grupo['elapsed'] = grupo['end_time'] - grupo['start_time']
+            else:
+                grupo['end_time'] = None
+                grupo['elapsed'] = time.time() - grupo['start_time']
+            grupo['files'] = current_names
+        else:
+            # Sin cambios: actualizar elapsed si aún no se completó
+            if grupo['start_time'] is not None and grupo['end_time'] is None:
+                grupo['elapsed'] = time.time() - grupo['start_time']
+
+    _actualizar_grupo('obligatorios', current_obligatorios, keys_obligatorios)
+    _actualizar_grupo('verificacion', current_verificacion, keys_verificacion)
+
+    elapsed_ob = st.session_state.tiempo_cargas['obligatorios']['elapsed']
+    elapsed_ve = st.session_state.tiempo_cargas['verificacion']['elapsed']
+    tiempo_total_seg = elapsed_ob + elapsed_ve
+
+    # ── Renderizar los 3 KPIs de tiempo ──────────────────────────
+    col_t1, col_t2, col_t3 = st.columns(3)
+
+    sub_ob, val_ob, var_ob = obtener_estado_kpi_tiempo(
+        elapsed_ob, len(current_obligatorios), len(keys_obligatorios))
+    mostrar_kpi_tiempo(col_t1, "Archivos Obligatorios", val_ob, sub_ob, "📊", var_ob)
+
+    sub_ve, val_ve, var_ve = obtener_estado_kpi_tiempo(
+        elapsed_ve, len(current_verificacion), len(keys_verificacion))
+    mostrar_kpi_tiempo(col_t2, "Archivos de Verificación", val_ve, sub_ve, "🔍", var_ve)
+
+    val_total = formatear_tiempo_cargas(tiempo_total_seg)
+    n_ob, n_ve = len(current_obligatorios), len(current_verificacion)
+    if n_ob == 0 and n_ve == 0:
+        sub_total, var_total = "Esperando inicio de carga", "grey"
+    elif n_ob == len(keys_obligatorios) and n_ve == len(keys_verificacion):
+        sub_total, var_total = "✅ Carga completa finalizada", "green"
+    else:
+        sub_total, var_total = "⏳ Carga parcial en proceso", "orange"
+    mostrar_kpi_tiempo(col_t3, "Tiempo Total de Carga", val_total, sub_total, "⏱️", var_total)
     
     # ============================================================
     # 1. ARCHIVOS OBLIGATORIOS
