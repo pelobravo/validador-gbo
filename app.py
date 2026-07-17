@@ -4265,14 +4265,15 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         # ============================================================
         # 🔥 SALDO DEL ESTADO DE CUENTA - CORREGIDO: total_egresos en lugar de total_egresos_banco
         # ============================================================
+        # ✅ CORRECTO - Usa el saldo guardado del día anterior
         st.markdown("#### 📊 Saldo del Estado de Cuenta")
-        st.caption("💡 Este es el saldo que viene del archivo de estado de cuenta")
-
         col_ec1, col_ec2, col_ec3, col_ec4 = st.columns(4)
 
-        mostrar_kpi_paso_paso(col_ec1, "Saldo Inicial", saldo_inicial_bancos, "🏦", "blue")
+        # ✅ TOMA EL SALDO DEL DÍA ANTERIOR DESDE SESSION STATE
+        saldo_inicial_correcto = st.session_state.saldos.get('bancos', 0)  # Esto es 135.424,73
+
+        mostrar_kpi_paso_paso(col_ec1, "Saldo Inicial", saldo_inicial_correcto, "🏦", "blue")
         mostrar_kpi_paso_paso(col_ec2, "Ingresos", total_ingresos, "📈", "green")
-        # 🔥 CORREGIDO: Ahora usa total_egresos (iPago) en lugar de total_egresos_banco
         mostrar_kpi_paso_paso(col_ec3, "Egresos iPago", total_egresos, "📉", "red")
         mostrar_kpi_paso_paso(col_ec4, "Saldo Final", saldo_final, "🏁", "orange")
 
