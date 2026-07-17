@@ -4189,7 +4189,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         # ============================================================
         # 📊 RESUMEN DE EGRESOS Y ESTADO DE CUENTA - TARJETAS EJECUTIVAS
         # ============================================================
-        st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("<br>", unsafe_allow_html=True)
 
         # Crear dos grandes columnas para separar los dos resúmenes del día
         col_res_izq, col_res_der = st.columns(2)
@@ -4224,6 +4224,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
             """, unsafe_allow_html=True)
 
         with col_res_der:
+            # ✅ CORRECCIÓN: Usa el saldo del día anterior (desde session_state)
+            saldo_inicial_correcto = st.session_state.saldos.get('bancos', 0)
             st.markdown(f"""
             <div style="
                 background: linear-gradient(180deg, #ffffff 0%, #f4f7fa 100%);
@@ -4239,8 +4241,8 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 </h5>
                 <div style="display: flex; justify-content: space-between; margin-top: 12px; font-size: 0.85rem;">
                     <span style="color: #4a5568;">💰 Saldo Inicial:</span>
-                    <span style="font-weight: 700; color: {'#c82333' if saldo_inicial_bancos < 0 else '#1e7e34'};">
-                        {formato_venezolano(saldo_inicial_bancos)} Bs.
+                    <span style="font-weight: 700; color: {'#c82333' if saldo_inicial_correcto < 0 else '#1e7e34'};">
+                        {formato_venezolano(saldo_inicial_correcto)} Bs.
                     </span>
                 </div>
                 <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.85rem;">
@@ -4249,7 +4251,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
                 </div>
                 <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.85rem;">
                     <span style="color: #4a5568;">📉 Egresos (Débitos):</span>
-                    <span style="font-weight: 700; color: #c82333;">-{formato_venezolano(total_egresos_banco)} Bs.</span>
+                    <span style="font-weight: 700; color: #c82333;">-{formato_venezolano(total_egresos)} Bs.</span>
                 </div>
                 <div style="display: flex; justify-content: space-between; margin-top: 12px; padding-top: 8px; border-top: 1px dashed #cbd5e1; font-size: 0.9rem; font-weight: 700;">
                     <span style="color: #1e7e34;">🏁 Saldo Final de Banco:</span>
