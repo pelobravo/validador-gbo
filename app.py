@@ -4189,7 +4189,7 @@ if archivo_facturacion and archivo_cobranzas and archivo_egresos and archivo_est
         # ============================================================
         # 📊 RESUMEN DE EGRESOS Y ESTADO DE CUENTA - TARJETAS EJECUTIVAS
         # ============================================================
-                st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
 
         # Crear dos grandes columnas para separar los dos resúmenes del día
         col_res_izq, col_res_der = st.columns(2)
